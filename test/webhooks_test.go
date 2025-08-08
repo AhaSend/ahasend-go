@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test webhook secret for testing (base64 encoded)
+// Test webhook secret for testing
 const testWebhookSecret = "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
 
 func TestNewWebhookVerifier(t *testing.T) {
@@ -25,16 +24,10 @@ func TestNewWebhookVerifier(t *testing.T) {
 		assert.NotNil(t, verifier)
 	})
 
-	t.Run("valid secret with whsec_ prefix", func(t *testing.T) {
-		verifier, err := ahasend.NewWebhookVerifier("whsec_" + testWebhookSecret)
+	t.Run("valid secret with aha-whsec prefix", func(t *testing.T) {
+		verifier, err := ahasend.NewWebhookVerifier("aha-whsec-" + testWebhookSecret)
 		assert.NoError(t, err)
 		assert.NotNil(t, verifier)
-	})
-
-	t.Run("invalid base64 secret", func(t *testing.T) {
-		verifier, err := ahasend.NewWebhookVerifier("not-valid-base64!")
-		assert.Error(t, err)
-		assert.Nil(t, verifier)
 	})
 }
 
@@ -459,9 +452,8 @@ func TestWebhookHelperFunctions(t *testing.T) {
 func generateSignature(t *testing.T, verifier *ahasend.WebhookVerifier, msgID, timestamp, payload string) string {
 	t.Helper()
 
-	// This would use the internal sign method - for testing we'll create a simple mock
-	// In a real scenario, you'd need to expose this or use the actual signing logic
-	secret, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(testWebhookSecret, "whsec_"))
+	// Use the secret as-is (no base64 decoding) - matches the new webhook implementation
+	secret := []byte(testWebhookSecret)
 	signedContent := fmt.Sprintf("%s.%s.%s", msgID, timestamp, payload)
 
 	h := hmac.New(sha256.New, secret)

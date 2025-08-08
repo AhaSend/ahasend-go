@@ -49,16 +49,9 @@ type WebhookVerifier struct {
 }
 
 // NewWebhookVerifier creates a new webhook verifier with the given secret
-// The secret should be the base64-encoded webhook secret from AhaSend
 func NewWebhookVerifier(secret string) (*WebhookVerifier, error) {
-	// Decode the base64 secret
-	decodedSecret, err := base64.StdEncoding.DecodeString(secret)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode webhook secret: %w", err)
-	}
-
 	return &WebhookVerifier{
-		secret:    decodedSecret,
+		secret:    []byte(secret),
 		tolerance: DefaultTolerance,
 	}, nil
 }

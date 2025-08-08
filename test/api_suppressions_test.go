@@ -10,6 +10,7 @@ package ahasend_test
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 )
 
 func Test_ahasend_SuppressionsAPIService(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping API integration tests (SKIP_INTEGRATION_TESTS=true)")
+	}
 
 	configuration := ahasend.NewConfiguration()
 	configuration.Host = "localhost:4010" // Point to Prism mock server
