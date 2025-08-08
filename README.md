@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/AhaSend/ahasend-go.svg)](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/AhaSend/ahasend-go)](https://goreportcard.com/report/github.com/AhaSend/ahasend-go)
 
-The official Go SDK for the AhaSend API v2. Send transactional emails, manage domains, webhooks, routes, API keys, and view statistics with a developer-friendly interface that includes automatic rate limiting, idempotency, and intelligent retry logic.
+The official Go SDK for the [AhaSend](https://ahasend.com) API v2. Send transactional emails, manage domains, webhooks, routes, API keys, and view statistics with a developer-friendly interface that includes automatic rate limiting, idempotency, and intelligent retry logic.
 
 ## Features
 
