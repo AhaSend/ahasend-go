@@ -27,9 +27,6 @@ const (
 
 	// SignatureVersion is the version prefix for webhook signatures
 	SignatureVersion = "v1"
-
-	// WebhookSecretPrefix is the prefix for webhook secrets
-	WebhookSecretPrefix = "whsec_"
 )
 
 var (
@@ -54,9 +51,6 @@ type WebhookVerifier struct {
 // NewWebhookVerifier creates a new webhook verifier with the given secret
 // The secret should be the base64-encoded webhook secret from AhaSend
 func NewWebhookVerifier(secret string) (*WebhookVerifier, error) {
-	// Remove the whsec_ prefix if present
-	secret = strings.TrimPrefix(secret, WebhookSecretPrefix)
-
 	// Decode the base64 secret
 	decodedSecret, err := base64.StdEncoding.DecodeString(secret)
 	if err != nil {
