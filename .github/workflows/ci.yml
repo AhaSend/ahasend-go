@@ -15,7 +15,7 @@ env:
 
 jobs:
   # Lint and format check
-  golangci:
+  lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
