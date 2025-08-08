@@ -1,0 +1,1016 @@
+openapi: 3.1.0
+info:
+  title: AhaSend Webhooks
+  description: |
+    AhaSend webhook events documentation. This specification describes all webhook events that AhaSend sends to your configured webhook URLs.
+
+    ## Overview
+
+    Webhooks are HTTP callbacks that AhaSend sends to your configured URLs when specific events occur. They provide real-time notifications about:
+
+    - **Message Events**: Email delivery status (sent, delivered, bounced, opened, etc.)
+    - **Suppression Events**: When email addresses are automatically suppressed
+    - **Domain Events**: DNS configuration issues
+    - **Route Events**: Inbound email processing
+
+    ## Standard Webhooks Compliance
+
+    AhaSend webhooks are fully compatible with the [Standard Webhooks specification](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md), ensuring consistent and secure webhook delivery.
+
+    ### Security Headers
+
+    All webhooks include these security headers for verification:
+
+    - `webhook-id`: Unique identifier for the webhook event (used as idempotency key)
+    - `webhook-timestamp`: Unix timestamp when the webhook was sent
+    - `webhook-signature`: HMAC signature of the payload using your webhook secret
+
+    ### Verification
+
+    Use the [Standard Webhooks libraries](https://github.com/standard-webhooks/standard-webhooks) to verify webhook authenticity:
+
+    ```go
+    import (
+        standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
+    )
+    wh, err := standardwebhooks.NewWebhookRaw(webhookSecret)
+    err = wh.Verify(payload, headers)
+    ```
+
+    ```javascript
+    import { Webhook } from 'standardwebhooks';
+
+    const wh = new Webhook(webhookSecret);
+    wh.verify(payload, headers);
+    ```
+
+    ```python
+    from standardwebhooks.webhooks import Webhook
+
+    wh = Webhook(webhook_secret)
+    wh.verify(payload, headers)
+    ```
+
+    See the [verification documentation](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md#verifying-webhook-authenticity) for more implementation details.
+
+    ### Retry Policy
+
+    - Failed webhooks are retried **6 times** over **16+ minutes**
+    - Only HTTP status codes **200-299** are considered successful
+    - After **100 consecutive failures**, the webhook is automatically disabled
+    - You'll receive an email notification when a webhook is disabled
+
+    ### Payload Format
+
+    All webhooks follow the Standard Webhooks payload structure:
+
+    ```json
+    {
+      "type": "event.type",
+      "timestamp": "2024-05-06T09:49:16.687031577Z",
+      "data": {
+        // Event-specific data
+      }
+    }
+    ```
+
+    ## Getting Started
+
+    1. **Configure a webhook** in your AhaSend dashboard
+    2. **Choose which events** you want to receive
+    3. **Verify webhook signatures** using Standard Webhooks libraries
+    4. **Handle the events** in your application
+
+    For more information, visit the [AhaSend webhook documentation](https://ahasend.com/help/integrations/webhooks).
+
+  version: "2.0.0"
+  contact:
+    email: support@ahasend.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://your-webhook-endpoint.com
+    description: Your webhook endpoint URL (configured in AhaSend dashboard)
+
+webhooks:
+  # Message Event Webhooks
+  message.reception:
+    post:
+      summary: Message Reception Event
+      description: |
+        &nbsp;
+
+        Triggered when an email has been received and queued.
+        This is always the first event in a message's lifecycle. The message has been accepted by AhaSend and is queued for delivery to the recipient's mail server.
+
+        **When it's sent**: Immediately after AhaSend receives and queues an email for delivery.
+        <Note>
+          This webhook is called for both inbound and outbound emails.
+        </Note>
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageReceptionWebhookPayload'
+            example:
+              type: "message.reception"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2024-05-06T09:49:16.687031577Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                event: "on_reception"
+                from: "sender@example.com"
+                recipient: "recipient@example.com"
+                subject: "Welcome to our service"
+                message_id_header: "<message-id-12345@localhost>"
+                id: "407926766d2711f09b30960002cafe7c"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.delivered:
+    post:
+      summary: Message Delivered Event
+      description: |
+        &nbsp;
+
+        Triggered when an email has been successfully delivered to the recipient's mail server.
+
+        This indicates that the recipient's mail server has accepted the email. Note that this doesn't guarantee the email reached the recipient's inbox (it could still be filtered to spam).
+
+        **When it's sent**: When the recipient's mail server confirms successful delivery.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageDeliveredWebhookPayload'
+            example:
+              type: "message.delivered"
+              timestamp: "2024-05-06T09:50:16.687031577Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                event: "on_delivered"
+                from: "sender@example.com"
+                recipient: "recipient@example.com"
+                subject: "Welcome to our service"
+                message_id_header: "<message-id-12345@localhost>"
+                id: "407926766d2711f09b30960002cafe7c"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.transient_error:
+    post:
+      summary: Message Transient Error Event
+      description: |
+        &nbsp;
+
+        Triggered when an email delivery is delayed due to a temporary issue with the receiving mail server.
+
+        This is a temporary failure (soft bounce). AhaSend will retry delivery according to its retry policy. Common causes include:
+        - Recipient's mailbox is full
+        - Temporary server issues
+        - Rate limiting by the recipient's server
+
+        **When it's sent**: When a temporary delivery failure occurs.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageTransientErrorWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.failed:
+    post:
+      summary: Message Failed Event
+      description: |
+        &nbsp;
+
+        Triggered when an email cannot be delivered due to repeated failures.
+
+        This is a permanent failure (hard bounce). No more delivery attempts will be made. Common causes include:
+        - Invalid email address
+        - Recipient's domain doesn't exist
+        - Recipient's mail server permanently rejects the email
+
+        **When it's sent**: After all retry attempts have been exhausted.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageFailedWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.bounced:
+    post:
+      summary: Message Bounced Event
+      description: |
+        &nbsp;
+
+        Triggered when a bounce notification is received from the recipient's mail server.
+
+        This can happen even for emails that were previously successfully delivered. The bounce could be delayed or the recipient's mailbox status changed after delivery.
+
+        **When it's sent**: When AhaSend receives a bounce notification from the recipient's mail server.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageBouncedWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.suppressed:
+    post:
+      summary: Message Suppressed Event
+      description: |
+        &nbsp;
+
+        Triggered when no delivery attempt was made because the recipient is suppressed.
+
+        The email was not sent because the recipient email address is on your suppression list. This prevents sending to addresses that have previously bounced or been marked as problematic.
+
+        **When it's sent**: When an email is submitted for a suppressed recipient.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSuppressedWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.opened:
+    post:
+      summary: Message Opened Event
+      description: |
+        &nbsp;
+
+        Triggered when the recipient opens your email.
+
+        **Requirements**:
+        - Open tracking must be enabled for your account or this specific email
+        - The email must contain HTML content
+        - The recipient's email client must load images
+
+        **Additional Data**: This webhook includes user agent and IP address information for analytics.
+
+        **Bot Detection**: The `is_bot` field indicates whether the open was detected as automated (email security scanners, etc.).
+
+        **When it's sent**: When the tracking pixel in the email is loaded.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageOpenedWebhookPayload'
+            example:
+              type: "message.opened"
+              timestamp: "2024-05-06T10:15:16.687031577Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                event: "on_opened"
+                from: "sender@example.com"
+                recipient: "recipient@example.com"
+                subject: "Welcome to our service"
+                message_id_header: "<message-id-12345@localhost>"
+                id: "407926766d2711f09b30960002cafe7c"
+                user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                ip: "192.168.1.100"
+                is_bot: "false"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.clicked:
+    post:
+      summary: Message Clicked Event
+      description: |
+        &nbsp;
+
+        Triggered when the recipient clicks a tracked link in your email.
+
+        **Requirements**:
+        - Click tracking must be enabled for your account or this specific email
+        - The clicked link must be processed by AhaSend's click tracking system
+
+        **Additional Data**: This webhook includes user agent and IP address information for analytics.
+
+        **When it's sent**: When a tracked link in the email is clicked.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageClickedWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  # Suppression Event Webhooks
+  suppression.created:
+    post:
+      summary: Suppression Created Event
+      description: |
+        &nbsp;
+
+        Triggered when a suppression is created for an email address.
+
+        **Why suppressions are created**:
+        - Multiple hard bounces from the same email address
+        - Repeated soft bounces over time
+        - Manual suppression through the API or dashboard
+
+        **Auto-expiration**: Suppressions automatically expire after 30 days to allow for temporary issues to be resolved.
+
+        **Impact**: Future emails to this address will be automatically suppressed until the suppression expires or is manually removed.
+
+        **When it's sent**: When a new suppression is added to your account.
+      tags:
+        - Suppression Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuppressionWebhookPayload'
+            example:
+              type: "suppression.created"
+              timestamp: "2024-05-06T12:57:06.451529527Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                recipient: "bounced@example.com"
+                created_at: "2024-05-06T12:57:06.451529617Z"
+                expires_at: "2024-06-05T12:57:06.451529617Z"
+                reason: "Too many hard bounces"
+                sending_domain: "your-domain.com"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  # Domain Event Webhooks
+  domain.dns_error:
+    post:
+      summary: Domain DNS Error Event
+      description: |
+        &nbsp;
+
+        AhaSend automatically checks your domain's DNS configuration every 15 to 30 minutes and sends this webhook if any severer issues are detected that will prevent the system from sending emails on your domain's behalf.
+
+        Triggered when DNS configuration issues are detected for any domain in your account.
+
+        **Common DNS issues**:
+        - Missing or invalid SPF record
+        - Missing or invalid DKIM record
+        - Missing or invalid DMARC record
+        - DNS propagation delays
+
+        **Impact**: After this event, email sending will be rejected until DNS configuration is fixed.
+
+        **Resolution**: Check your domain's DNS settings in the AhaSend dashboard and update your DNS records as needed.
+
+        **When it's sent**: When AhaSend's automated DNS checker detects configuration problems.
+      tags:
+        - Domain Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainWebhookPayload'
+            example:
+              type: "domain.dns_error"
+              timestamp: "2024-05-06T12:59:46.404433272Z"
+              data:
+                domain: "example.com"
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                spf_valid: false
+                dkim_valid: false
+                dmarc_valid: false
+                dns_last_checked_at: "2024-05-06T12:59:46.404433312Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  # Route Event Webhooks (Inbound Email Processing)
+  route.message:
+    post:
+      summary: Inbound Message Route Event
+      description: |
+        &nbsp;
+
+        Triggered when an inbound email is received and processed through a configured route.
+
+        **Purpose**: This webhook delivers complete inbound email data to your application for processing inbound emails (like support tickets, replies, etc.).
+
+        **Difference from message events**:
+        - **Route events**: Process *inbound* emails sent TO your domains
+        - **Message events**: Track *outbound* emails sent FROM your domains
+
+        **Route configuration**:
+        - Configure routes in your AhaSend dashboard
+        - Choose whether to include attachments and headers
+        - Set recipient filters and processing options
+
+        **Use cases**:
+        - Support ticket systems
+        - Email-to-ticket conversion
+        - Automated email processing
+        - Reply handling
+
+        **When it's sent**: When an inbound email matches a configured route.
+      tags:
+        - Route Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteWebhookPayload'
+            example:
+              type: "route.message"
+              timestamp: "2024-05-06T13:15:46.404433272Z"
+              data:
+                id: "route-msg-12345"
+                from: "customer@gmail.com"
+                reply_to: "customer@gmail.com"
+                to: "support@yourdomain.com"
+                subject: "Help with my account"
+                message_id: "<unique-message-id@gmail.com>"
+                size: 2048
+                spam_score: 0.1
+                bounce: false
+                cc: ""
+                date: "Mon, 06 May 2024 13:15:46 +0000"
+                in_reply_to: ""
+                references: ""
+                auto_submitted: ""
+                html_body: "<p>I need help with my account settings.</p>"
+                plain_body: "I need help with my account settings."
+                reply_from_plain_body: "I need help with my account settings."
+                attachments: []
+                headers:
+                  "X-Mailer": "Gmail"
+                  "X-Priority": "3"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+components:
+  schemas:
+    # Webhook payload schemas
+    MessageWebhookPayload:
+      type: object
+      required:
+        - type
+        - webhook_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum:
+            - message.reception
+            - message.delivered
+            - message.transient_error
+            - message.failed
+            - message.bounced
+            - message.suppressed
+            - message.opened
+            - message.clicked
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/MessageWebhookData'
+
+    MessageReceptionWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.reception
+    MessageDeliveredWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.delivered
+    MessageTransientErrorWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.transient_error
+    MessageFailedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.failed
+    MessageBouncedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.bounced
+    MessageSuppressedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.suppressed
+    MessageOpenedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.opened
+    MessageClickedWebhookPayload:
+      type: object
+      required:
+        - type
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum:
+            - message.clicked
+          description: The event type
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/MessageClickedWebhookData'
+
+    MessageWebhookData:
+      type: object
+      required:
+        - account_id
+        - event
+        - from
+        - recipient
+        - subject
+        - message_id_header
+        - id
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID that sent the message
+        event:
+          type: string
+          enum:
+            - on_reception
+            - on_delivered
+            - on_transient_error
+            - on_failed
+            - on_bounced
+            - on_suppressed
+            - on_opened
+            - on_clicked
+          description: The specific event that occurred
+        from:
+          type: string
+          format: email
+          description: Sender email address
+        recipient:
+          type: string
+          format: email
+          description: Recipient email address
+        subject:
+          type: string
+          description: Email subject line
+        message_id_header:
+          type: string
+          description: Message ID header (same as returned by the [Create Message API](/api-reference/messages/create-message))
+        id:
+          type: string
+          description: Internal AhaSend message ID
+        user_agent:
+          type: string
+          description: User agent (only for opened/clicked events)
+        ip:
+          type: string
+          description: IP address (only for opened/clicked events)
+        is_bot:
+          type: string
+          enum: ["true", "false"]
+          description: Whether the action was performed by a bot
+
+    MessageClickedWebhookData:
+      type: object
+      required:
+        - account_id
+        - event
+        - from
+        - recipient
+        - subject
+        - message_id_header
+        - url
+        - user_agent
+        - ip
+        - id
+        - is_bot
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID that sent the message
+        event:
+          type: string
+          description: The specific event that occurred
+        from:
+          type: string
+          format: email
+          description: Sender email address
+        recipient:
+          type: string
+          format: email
+          description: Recipient email address
+        subject:
+          type: string
+          description: Email subject line
+        message_id_header:
+          type: string
+          description: Message ID header (same as returned by the [Create Message API](/api-reference/messages/create-message))
+        url:
+          type: string
+          description: The URL that was clicked
+        user_agent:
+          type: string
+          description: User agent of the client that clicked the link
+        ip:
+          type: string
+          description: IP address of the client that clicked the link
+        id:
+          type: string
+          description: Internal AhaSend message ID
+        is_bot:
+          type: boolean
+          description: Whether the click was performed by a bot
+
+    SuppressionWebhookPayload:
+      type: object
+      required:
+        - type
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum: [suppression.created]
+          description: The event type
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/SuppressionWebhookData'
+
+    SuppressionWebhookData:
+      type: object
+      required:
+        - account_id
+        - recipient
+        - created_at
+        - expires_at
+        - reason
+        - sending_domain
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID
+        recipient:
+          type: string
+          format: email
+          description: Suppressed email address
+        created_at:
+          type: string
+          format: date-time
+          description: When the suppression was created
+        expires_at:
+          type: string
+          format: date-time
+          description: When the suppression expires (typically 30 days from creation)
+        reason:
+          type: string
+          description: Reason for suppression (e.g., "Too many hard bounces")
+        sending_domain:
+          type: string
+          description: Domain from which the failed emails were sent
+
+    DomainWebhookPayload:
+      type: object
+      required:
+        - type
+        - timestamp
+        - webhook_id
+        - data
+      properties:
+        type:
+          type: string
+          enum: [domain.dns_error]
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/DomainWebhookData'
+
+    DomainWebhookData:
+      type: object
+      required:
+        - domain
+        - account_id
+        - spf_valid
+        - dkim_valid
+        - dmarc_valid
+        - dns_last_checked_at
+      properties:
+        domain:
+          type: string
+          description: Domain name with DNS issues
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID
+        spf_valid:
+          type: boolean
+          description: Whether SPF record is valid
+        dkim_valid:
+          type: boolean
+          description: Whether DKIM record is valid
+        dmarc_valid:
+          type: boolean
+          description: Whether DMARC record is valid
+        dns_last_checked_at:
+          type: string
+          format: date-time
+          description: When DNS was last checked
+
+    RouteWebhookPayload:
+      type: object
+      required:
+        - type
+        - route_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum: [route.message]
+          description: The event type
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event occurred (ISO 8601 format)
+        route_id:
+          type: string
+          description: The route ID (the same ID as returned by the [Create Route API](/api-reference/routes/create-route))
+          format: uuid
+        data:
+          $ref: '#/components/schemas/RouteWebhookData'
+
+    RouteWebhookData:
+      type: object
+      required:
+        - id
+        - from
+        - to
+        - subject
+        - message_id
+        - size
+        - bounce
+        - html_body
+        - plain_body
+      properties:
+        id:
+          type: string
+          description: Unique route message ID
+        from:
+          type: string
+          format: email
+          description: Sender email address
+        reply_to:
+          type: string
+          format: email
+          description: Reply-to email address
+        to:
+          type: string
+          format: email
+          description: Recipient email address (your route endpoint)
+        subject:
+          type: string
+          description: Email subject line
+        message_id:
+          type: string
+          description: Original Message-ID header
+        size:
+          type: integer
+          description: Email size in bytes
+        spam_score:
+          type: number
+          format: float
+          description: Spam score (0.0 to 10.0)
+        bounce:
+          type: boolean
+          description: Whether this is a bounce message
+        cc:
+          type: string
+          description: CC recipients
+        date:
+          type: string
+          description: Date header from the email
+        in_reply_to:
+          type: string
+          description: In-Reply-To header
+        references:
+          type: string
+          description: References header
+        auto_submitted:
+          type: string
+          description: Auto-Submitted header
+        html_body:
+          type: string
+          description: HTML body content
+        plain_body:
+          type: string
+          description: Plain text body content
+        reply_from_plain_body:
+          type: string
+          description: Extracted reply content from plain body
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteAttachment'
+          description: Email attachments (if route is configured to include them)
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Email headers (if route is configured to include them)
+
+    RouteAttachment:
+      type: object
+      required:
+        - filename
+        - content_type
+        - data
+      properties:
+        filename:
+          type: string
+          description: Attachment filename
+        content_type:
+          type: string
+          description: MIME content type
+        content_id:
+          type: string
+          description: Content-ID for inline attachments
+        data:
+          type: string
+          description: Base64-encoded attachment data
+
+tags:
+  - name: Message Events
+    description: |
+      Webhooks for outbound email delivery tracking.
+
+      These events track the lifecycle of emails you send through AhaSend, from initial reception through final delivery or failure.
+  - name: Suppression Events
+    description: |
+      Webhooks for email suppression list changes.
+
+      These events notify you when email addresses are automatically added to your suppression list due to delivery issues.
+  - name: Domain Events
+    description: |
+      Webhooks for domain configuration issues.
+
+      These events alert you to DNS configuration problems that could prevent email delivery.
+  - name: Route Events
+    description: |
+      Webhooks for inbound email processing.
+
+      These events deliver inbound emails to your application for processing (e.g., support tickets, replies).
