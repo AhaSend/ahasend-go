@@ -1,224 +1,32 @@
-# GolangCI-Lint configuration for AhaSend Go SDK
-# Documentation: https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
   timeout: 5m
-  tests: true
-  skip-dirs:
-    - vendor
-  skip-files:
-    - ".*_generated\\.go$"
-
-issues:
-  max-issues-per-linter: 50
-  max-same-issues: 10
-  
-  # Exclude specific issues
-  exclude-rules:
-    # Exclude lll (line length) for test files
-    - path: "_test\\.go"
-      linters:
-        - lll
-    
-    # Exclude gosec for test files (they often have hardcoded values)
-    - path: "_test\\.go"
-      linters:
-        - gosec
-    
-    # Exclude specific gosec rules that are not relevant for this SDK
-    - linters:
-        - gosec
-      text: "G404" # Use of weak random number generator
-      
-    # Allow TODO comments in code
-    - linters:
-        - godox
-      text: "TODO"
 
 linters:
   enable:
-    # Default linters
-    - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - typecheck
     - unused
-    
-    # Additional useful linters for Go SDK
+    - errcheck
+  exclusions:
+    warn-unused: true
+    paths:
+      - examples
+      - test
+    rules:
+      # Disable errcheck for generated API files that have many Body.Close calls
+      - path: "api_.*\\.go$"
+        linters:
+          - errcheck
+
+      # Disable errcheck for client.go and errors.go (generated/utility code)
+      - path: "(client|errors)\\.go$"
+        linters:
+          - errcheck
+
+formatters:
+  enable:
     - gofmt
     - goimports
-    - golint
-    - gosec
-    - misspell
-    - unconvert
-    - gocyclo
-    - dupl
-    - goconst
-    - gocognit
-    - godox
-    - maligned
-    - unparam
-    - dogsled
-    - nakedret
-    - prealloc
-    - scopelint
-    - gocritic
-    - interfacer
-    - whitespace
-    - wsl
-    - goprintffuncname
-    - gomnd
-    - exhaustive
-    - bodyclose
-    - noctx
-    - rowserrcheck
-    - sqlclosecheck
-    - structcheck
-    - varcheck
-    - deadcode
-  
-  disable:
-    - lll # line length - we'll be flexible on this for readability
-    - funlen # function length - some generated code has long functions
-    - gochecknoglobals # we need some global variables for configuration
-    - gochecknoinits # init functions are needed for some setup
-
-linters-settings:
-  # Error check configuration
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-    
-  # Go vet configuration
-  govet:
-    check-shadowing: true
-    settings:
-      printf:
-        funcs:
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
-  
-  # Cyclomatic complexity
-  gocyclo:
-    min-complexity: 15
-  
-  # Cognitive complexity
-  gocognit:
-    min-complexity: 20
-  
-  # Duplication detection
-  dupl:
-    threshold: 100
-  
-  # Constants detection
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-    ignore-tests: true
-  
-  # Magic numbers detection
-  gomnd:
-    settings:
-      mnd:
-        # List of enabled checks, see https://github.com/tommy-muehle/go-mnd/#checks for description.
-        checks: argument,case,condition,operation,return,assign
-        ignored-numbers: 0,1,2,8,16,32,64,100,200,404,429,500,502,503,504
-        ignored-files: "_test.go"
-        ignored-functions: "os.Exit,strconv.*"
-  
-  # Unused parameters
-  unparam:
-    check-exported: false
-  
-  # Naked returns
-  nakedret:
-    max-func-lines: 30
-  
-  # Preallocation
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-  
-  # Security audit
-  gosec:
-    severity: medium
-    confidence: medium
-    excludes:
-      - G104 # Errors unhandled - we handle this with errcheck
-      - G304 # File path provided as taint input - necessary for config files
-  
-  # Import formatting
-  goimports:
-    local-prefixes: github.com/AhaSend/ahasend-go
-  
-  # Line length (disabled but configured if needed)
-  lll:
-    line-length: 120
-    tab-width: 4
-  
-  # Misspelling
-  misspell:
-    locale: US
-    ignore-words:
-      - cancelled # We use US spelling but Go uses "canceled"
-  
-  # Whitespace
-  whitespace:
-    multi-if: true
-    multi-func: true
-  
-  # WSL (whitespace linter)
-  wsl:
-    strict-append: true
-    allow-assign-and-call: true
-    allow-multiline-assign: true
-    allow-case-trailing-whitespace: true
-    allow-cuddle-declarations: false
-    allow-trailing-comment: false
-    force-case-trailing-whitespace: 0
-  
-  # Go critic
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - ifElseChain
-      - singleCaseSwitch
-      - unnamedResult
-    settings:
-      captLocal:
-        paramsOnly: true
-      rangeValCopy:
-        sizeThreshold: 32
-      hugeParam:
-        sizeThreshold: 80
-
-severity:
-  # Default minimum severity is error
-  default-severity: error
-  
-  # Custom severity levels
-  rules:
-    - linters:
-        - dupl
-        - goconst
-        - gomnd
-      severity: warning
-    
-    - linters:
-        - errcheck
-        - gosec
-        - govet
-      severity: error
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true

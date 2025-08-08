@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // DomainsAPIService DomainsAPI service
@@ -70,7 +71,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/domains"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -250,8 +251,8 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/domains/{domain}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"domain"+"}", url.PathEscape(parameterValueToString(r.domain, "domain")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{domain}", url.PathEscape(parameterValueToString(r.domain, "domain")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -412,8 +413,8 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/domains/{domain}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"domain"+"}", url.PathEscape(parameterValueToString(r.domain, "domain")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{domain}", url.PathEscape(parameterValueToString(r.domain, "domain")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -585,7 +586,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/domains"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

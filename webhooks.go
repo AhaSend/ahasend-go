@@ -270,4 +270,3 @@ func (e *baseWebhookEvent) GetType() string {
 func (e *baseWebhookEvent) GetTimestamp() time.Time {
 	return e.Timestamp
 }
-

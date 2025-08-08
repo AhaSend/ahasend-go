@@ -193,7 +193,7 @@ func parameterValueToString(obj interface{}, key string) string {
 // supporting deep object syntax
 func parameterAddToHeaderOrQuery(headerOrQueryParams interface{}, keyPrefix string, obj interface{}, style string, collectionType string) {
 	var v = reflect.ValueOf(obj)
-	var value = ""
+	var value string
 	if v == reflect.ValueOf(nil) {
 		value = "null"
 	} else {

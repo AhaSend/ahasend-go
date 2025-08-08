@@ -31,7 +31,7 @@ type _Attachment Attachment
 // will change when the set of required properties is changed
 func NewAttachment(data string, contentType string, fileName string) *Attachment {
 	this := Attachment{}
-	var base64 bool = false
+	var base64 = false
 	this.Base64 = &base64
 	this.Data = data
 	this.ContentType = contentType
@@ -44,7 +44,7 @@ func NewAttachment(data string, contentType string, fileName string) *Attachment
 // but it doesn't guarantee that properties required by API are set
 func NewAttachmentWithDefaults() *Attachment {
 	this := Attachment{}
-	var base64 bool = false
+	var base64 = false
 	this.Base64 = &base64
 	return &this
 }

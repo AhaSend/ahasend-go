@@ -470,4 +470,3 @@ func generateSignature(t *testing.T, verifier *ahasend.WebhookVerifier, msgID, t
 
 	return fmt.Sprintf("v1=%s", signature)
 }
-

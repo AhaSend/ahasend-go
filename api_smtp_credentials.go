@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // SMTPCredentialsAPIService SMTPCredentialsAPI service
@@ -70,7 +71,7 @@ func (a *SMTPCredentialsAPIService) CreateSMTPCredentialExecute(r ApiCreateSMTPC
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/smtp-credentials"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -250,8 +251,8 @@ func (a *SMTPCredentialsAPIService) DeleteSMTPCredentialExecute(r ApiDeleteSMTPC
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/smtp-credentials/{smtp_credential_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"smtp_credential_id"+"}", url.PathEscape(parameterValueToString(r.smtpCredentialId, "smtpCredentialId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{smtp_credential_id}", url.PathEscape(parameterValueToString(r.smtpCredentialId, "smtpCredentialId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -412,8 +413,8 @@ func (a *SMTPCredentialsAPIService) GetSMTPCredentialExecute(r ApiGetSMTPCredent
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/smtp-credentials/{smtp_credential_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"smtp_credential_id"+"}", url.PathEscape(parameterValueToString(r.smtpCredentialId, "smtpCredentialId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{smtp_credential_id}", url.PathEscape(parameterValueToString(r.smtpCredentialId, "smtpCredentialId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -585,7 +586,7 @@ func (a *SMTPCredentialsAPIService) GetSMTPCredentialsExecute(r ApiGetSMTPCreden
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/smtp-credentials"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

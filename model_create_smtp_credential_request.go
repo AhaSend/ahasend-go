@@ -36,7 +36,7 @@ func NewCreateSMTPCredentialRequest(name string, username string, password strin
 	this.Name = name
 	this.Username = username
 	this.Password = password
-	var sandbox bool = false
+	sandbox := false
 	this.Sandbox = &sandbox
 	this.Scope = scope
 	return &this
@@ -47,7 +47,7 @@ func NewCreateSMTPCredentialRequest(name string, username string, password strin
 // but it doesn't guarantee that properties required by API are set
 func NewCreateSMTPCredentialRequestWithDefaults() *CreateSMTPCredentialRequest {
 	this := CreateSMTPCredentialRequest{}
-	var sandbox bool = false
+	sandbox := false
 	this.Sandbox = &sandbox
 	return &this
 }

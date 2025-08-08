@@ -3,12 +3,13 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SuppressionsAPIService SuppressionsAPI service
@@ -76,7 +77,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/suppressions"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -263,7 +264,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/suppressions"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -426,8 +427,8 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/suppressions/{email}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"email"+"}", url.PathEscape(parameterValueToString(r.email, "email")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{email}", url.PathEscape(parameterValueToString(r.email, "email")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -630,7 +631,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/suppressions"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

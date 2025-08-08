@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // RoutesAPIService RoutesAPI service
@@ -70,7 +71,7 @@ func (a *RoutesAPIService) CreateRouteExecute(r ApiCreateRouteRequest) (*Route, 
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/routes"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -250,8 +251,8 @@ func (a *RoutesAPIService) DeleteRouteExecute(r ApiDeleteRouteRequest) (*Success
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/routes/{route_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"route_id"+"}", url.PathEscape(parameterValueToString(r.routeId, "routeId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{route_id}", url.PathEscape(parameterValueToString(r.routeId, "routeId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -412,8 +413,8 @@ func (a *RoutesAPIService) GetRouteExecute(r ApiGetRouteRequest) (*Route, *http.
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/routes/{route_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"route_id"+"}", url.PathEscape(parameterValueToString(r.routeId, "routeId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{route_id}", url.PathEscape(parameterValueToString(r.routeId, "routeId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -585,7 +586,7 @@ func (a *RoutesAPIService) GetRoutesExecute(r ApiGetRoutesRequest) (*PaginatedRo
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/routes"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -750,8 +751,8 @@ func (a *RoutesAPIService) UpdateRouteExecute(r ApiUpdateRouteRequest) (*Route, 
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/routes/{route_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"route_id"+"}", url.PathEscape(parameterValueToString(r.routeId, "routeId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{route_id}", url.PathEscape(parameterValueToString(r.routeId, "routeId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

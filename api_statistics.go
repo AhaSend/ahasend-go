@@ -3,12 +3,13 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // StatisticsAPIService StatisticsAPI service
@@ -108,7 +109,7 @@ func (a *StatisticsAPIService) GetBounceStatisticsExecute(r ApiGetBounceStatisti
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/statistics/transactional/bounce"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -132,7 +133,7 @@ func (a *StatisticsAPIService) GetBounceStatisticsExecute(r ApiGetBounceStatisti
 	if r.groupBy != nil {
 		parameterAddToHeaderOrQuery(params, "group_by", r.groupBy, "form", "")
 	} else {
-		var defaultValue string = "day"
+		defaultValue := "day"
 		r.groupBy = &defaultValue
 	}
 	// to determine the Content-Type header
@@ -337,7 +338,7 @@ func (a *StatisticsAPIService) GetDeliverabilityStatisticsExecute(r ApiGetDelive
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/statistics/transactional/deliverability"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -361,7 +362,7 @@ func (a *StatisticsAPIService) GetDeliverabilityStatisticsExecute(r ApiGetDelive
 	if r.groupBy != nil {
 		parameterAddToHeaderOrQuery(params, "group_by", r.groupBy, "form", "")
 	} else {
-		var defaultValue string = "day"
+		defaultValue := "day"
 		r.groupBy = &defaultValue
 	}
 	// to determine the Content-Type header
@@ -558,7 +559,7 @@ func (a *StatisticsAPIService) GetDeliveryTimeStatisticsExecute(r ApiGetDelivery
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/statistics/transactional/delivery-time"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -579,7 +580,7 @@ func (a *StatisticsAPIService) GetDeliveryTimeStatisticsExecute(r ApiGetDelivery
 	if r.groupBy != nil {
 		parameterAddToHeaderOrQuery(params, "group_by", r.groupBy, "form", "")
 	} else {
-		var defaultValue string = "day"
+		defaultValue := "day"
 		r.groupBy = &defaultValue
 	}
 	// to determine the Content-Type header

@@ -53,27 +53,27 @@ func NewCreateWebhookRequest(name string, url string) *CreateWebhookRequest {
 	this := CreateWebhookRequest{}
 	this.Name = name
 	this.Url = url
-	var enabled bool = true
+	enabled := true
 	this.Enabled = &enabled
-	var onReception bool = false
+	onReception := false
 	this.OnReception = &onReception
-	var onDelivered bool = false
+	onDelivered := false
 	this.OnDelivered = &onDelivered
-	var onTransientError bool = false
+	onTransientError := false
 	this.OnTransientError = &onTransientError
-	var onFailed bool = false
+	onFailed := false
 	this.OnFailed = &onFailed
-	var onBounced bool = false
+	onBounced := false
 	this.OnBounced = &onBounced
-	var onSuppressed bool = false
+	onSuppressed := false
 	this.OnSuppressed = &onSuppressed
-	var onOpened bool = false
+	onOpened := false
 	this.OnOpened = &onOpened
-	var onClicked bool = false
+	onClicked := false
 	this.OnClicked = &onClicked
-	var onSuppressionCreated bool = false
+	onSuppressionCreated := false
 	this.OnSuppressionCreated = &onSuppressionCreated
-	var onDnsError bool = false
+	onDnsError := false
 	this.OnDnsError = &onDnsError
 	return &this
 }
@@ -83,27 +83,27 @@ func NewCreateWebhookRequest(name string, url string) *CreateWebhookRequest {
 // but it doesn't guarantee that properties required by API are set
 func NewCreateWebhookRequestWithDefaults() *CreateWebhookRequest {
 	this := CreateWebhookRequest{}
-	var enabled bool = true
+	enabled := true
 	this.Enabled = &enabled
-	var onReception bool = false
+	onReception := false
 	this.OnReception = &onReception
-	var onDelivered bool = false
+	onDelivered := false
 	this.OnDelivered = &onDelivered
-	var onTransientError bool = false
+	onTransientError := false
 	this.OnTransientError = &onTransientError
-	var onFailed bool = false
+	onFailed := false
 	this.OnFailed = &onFailed
-	var onBounced bool = false
+	onBounced := false
 	this.OnBounced = &onBounced
-	var onSuppressed bool = false
+	onSuppressed := false
 	this.OnSuppressed = &onSuppressed
-	var onOpened bool = false
+	onOpened := false
 	this.OnOpened = &onOpened
-	var onClicked bool = false
+	onClicked := false
 	this.OnClicked = &onClicked
-	var onSuppressionCreated bool = false
+	onSuppressionCreated := false
 	this.OnSuppressionCreated = &onSuppressionCreated
-	var onDnsError bool = false
+	onDnsError := false
 	this.OnDnsError = &onDnsError
 	return &this
 }

@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // AccountsAPIService AccountsAPI service
@@ -74,7 +75,11 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/members"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -251,7 +256,11 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 	}
 
 	path := basePath + "/v2/accounts/{account_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -409,7 +418,11 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/members"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -563,8 +576,16 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/members/{user_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"user_id"+"}", url.PathEscape(parameterValueToString(r.userId, "userId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
+	path = strings.ReplaceAll(
+		path,
+		"{user_id}",
+		url.PathEscape(parameterValueToString(r.userId, "userId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -734,7 +755,11 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 	}
 
 	path := basePath + "/v2/accounts/{account_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}

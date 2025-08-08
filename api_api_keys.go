@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // APIKeysAPIService APIKeysAPI service
@@ -70,7 +71,11 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/api-keys"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(
+		path,
+		"{account_id}",
+		url.PathEscape(parameterValueToString(r.accountId, "accountId")),
+	)
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -250,8 +255,8 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/api-keys/{key_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"key_id"+"}", url.PathEscape(parameterValueToString(r.keyId, "keyId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{key_id}", url.PathEscape(parameterValueToString(r.keyId, "keyId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -412,8 +417,8 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/api-keys/{key_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"key_id"+"}", url.PathEscape(parameterValueToString(r.keyId, "keyId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{key_id}", url.PathEscape(parameterValueToString(r.keyId, "keyId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -585,7 +590,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/api-keys"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -750,8 +755,8 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/api-keys/{key_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"key_id"+"}", url.PathEscape(parameterValueToString(r.keyId, "keyId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{key_id}", url.PathEscape(parameterValueToString(r.keyId, "keyId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

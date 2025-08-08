@@ -3,11 +3,12 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // WebhooksAPIService WebhooksAPI service
@@ -70,7 +71,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/webhooks"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -250,8 +251,8 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/webhooks/{webhook_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"webhook_id"+"}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{webhook_id}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -412,8 +413,8 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/webhooks/{webhook_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"webhook_id"+"}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{webhook_id}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -668,7 +669,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/webhooks"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -868,8 +869,8 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/webhooks/{webhook_id}"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"webhook_id"+"}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{webhook_id}", url.PathEscape(parameterValueToString(r.webhookId, "webhookId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

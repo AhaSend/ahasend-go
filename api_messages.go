@@ -3,12 +3,13 @@ package ahasend
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // MessagesAPIService MessagesAPI service
@@ -60,8 +61,8 @@ func (a *MessagesAPIService) CancelMessageExecute(r ApiCancelMessageRequest) (*S
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/messages/{message_id}/cancel"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
-	path = strings.Replace(path, "{"+"message_id"+"}", url.PathEscape(parameterValueToString(r.messageId, "messageId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
+	path = strings.ReplaceAll(path, "{message_id}", url.PathEscape(parameterValueToString(r.messageId, "messageId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -240,7 +241,7 @@ func (a *MessagesAPIService) CreateMessageExecute(r ApiCreateMessageRequest) (*C
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/messages"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}
@@ -482,7 +483,7 @@ func (a *MessagesAPIService) GetMessagesExecute(r ApiGetMessagesRequest) (*Pagin
 	}
 
 	path := basePath + "/v2/accounts/{account_id}/messages"
-	path = strings.Replace(path, "{"+"account_id"+"}", url.PathEscape(parameterValueToString(r.accountId, "accountId")), -1)
+	path = strings.ReplaceAll(path, "{account_id}", url.PathEscape(parameterValueToString(r.accountId, "accountId")))
 
 	headers := make(map[string]string)
 	params := url.Values{}

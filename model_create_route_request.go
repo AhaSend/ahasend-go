@@ -39,15 +39,15 @@ func NewCreateRouteRequest(name string, url string) *CreateRouteRequest {
 	this := CreateRouteRequest{}
 	this.Name = name
 	this.Url = url
-	var includeAttachments bool = false
+	includeAttachments := false
 	this.IncludeAttachments = &includeAttachments
-	var includeHeaders bool = false
+	includeHeaders := false
 	this.IncludeHeaders = &includeHeaders
-	var groupByMessageId bool = false
+	groupByMessageId := false
 	this.GroupByMessageId = &groupByMessageId
-	var stripReplies bool = false
+	stripReplies := false
 	this.StripReplies = &stripReplies
-	var enabled bool = true
+	enabled := true
 	this.Enabled = &enabled
 	return &this
 }
@@ -57,15 +57,15 @@ func NewCreateRouteRequest(name string, url string) *CreateRouteRequest {
 // but it doesn't guarantee that properties required by API are set
 func NewCreateRouteRequestWithDefaults() *CreateRouteRequest {
 	this := CreateRouteRequest{}
-	var includeAttachments bool = false
+	includeAttachments := false
 	this.IncludeAttachments = &includeAttachments
-	var includeHeaders bool = false
+	includeHeaders := false
 	this.IncludeHeaders = &includeHeaders
-	var groupByMessageId bool = false
+	groupByMessageId := false
 	this.GroupByMessageId = &groupByMessageId
-	var stripReplies bool = false
+	stripReplies := false
 	this.StripReplies = &stripReplies
-	var enabled bool = true
+	enabled := true
 	this.Enabled = &enabled
 	return &this
 }

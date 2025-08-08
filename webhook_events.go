@@ -263,4 +263,3 @@ func GetMessageEventData(event WebhookEvent) *MessageEventData {
 	}
 	return nil
 }
-

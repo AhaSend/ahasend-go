@@ -12,8 +12,9 @@ package ahasend
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // checks if the Suppression type satisfies the MappedNullable interface at compile time

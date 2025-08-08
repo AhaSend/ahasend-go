@@ -369,4 +369,3 @@ func exampleAdvancedWebhookHandler(verifier *ahasend.WebhookVerifier) http.Handl
 		})
 	}
 }
-

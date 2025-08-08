@@ -55,7 +55,7 @@ func NewCreateMessageRequest(from SenderAddress, recipients []Recipient, subject
 	this.From = from
 	this.Recipients = recipients
 	this.Subject = subject
-	var sandbox bool = false
+	sandbox := false
 	this.Sandbox = &sandbox
 	return &this
 }
@@ -65,7 +65,7 @@ func NewCreateMessageRequest(from SenderAddress, recipients []Recipient, subject
 // but it doesn't guarantee that properties required by API are set
 func NewCreateMessageRequestWithDefaults() *CreateMessageRequest {
 	this := CreateMessageRequest{}
-	var sandbox bool = false
+	sandbox := false
 	this.Sandbox = &sandbox
 	return &this
 }
