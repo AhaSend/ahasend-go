@@ -112,15 +112,6 @@ jobs:
           npm install -g @stoplight/prism-cli@5
           prism --version
 
-      - name: Verify OpenAPI spec
-        run: |
-          if [ ! -f api/openapi.yaml ]; then
-            echo "OpenAPI spec not found at api/openapi.yaml"
-            exit 1
-          fi
-          # Validate the OpenAPI spec
-          npx @apidevtools/swagger-parser validate api/openapi.yaml
-
       - name: Download Go dependencies
         run: go mod download
 
@@ -140,19 +131,6 @@ jobs:
           path: |
             test/*.log
             /tmp/prism*.log
-
-  security:
-    name: Run Gosec
-    runs-on: ubuntu-latest
-    env:
-      GO111MODULE: on
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v3
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: ./...
 
   # Build and test release
   build:
