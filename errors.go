@@ -46,6 +46,8 @@ type APIError struct {
 	StatusCode int `json:"status_code,omitempty"`
 	// Message is the error message from the API
 	Message string `json:"message"`
+	// Code is the error code for programmatic identification
+	Code string `json:"code,omitempty"`
 	// RequestID is the request ID for tracking (if available)
 	RequestID string `json:"request_id,omitempty"`
 	// RetryAfter indicates when to retry (for rate limit errors)
@@ -56,19 +58,39 @@ type APIError struct {
 	Resource string `json:"resource,omitempty"`
 	// Action indicates what action was attempted
 	Action string `json:"action,omitempty"`
+	// Endpoint is the API endpoint that generated the error
+	Endpoint string `json:"endpoint,omitempty"`
+	// Method is the HTTP method used
+	Method string `json:"method,omitempty"`
+	// Suggestions provides actionable guidance for fixing the error
+	Suggestions []string `json:"suggestions,omitempty"`
 	// Raw contains the raw error response body
 	Raw []byte `json:"-"`
 }
 
 // Error implements the error interface
 func (e *APIError) Error() string {
+	var parts []string
+
+	// Base error message
+	baseMsg := fmt.Sprintf("%s error (HTTP %d): %s", e.Type, e.StatusCode, e.Message)
+	parts = append(parts, baseMsg)
+
+	// Add contextual information
 	if e.Field != "" {
-		return fmt.Sprintf("%s error (HTTP %d): %s (field: %s)", e.Type, e.StatusCode, e.Message, e.Field)
+		parts = append(parts, fmt.Sprintf("field: %s", e.Field))
 	}
 	if e.Resource != "" {
-		return fmt.Sprintf("%s error (HTTP %d): %s (resource: %s)", e.Type, e.StatusCode, e.Message, e.Resource)
+		parts = append(parts, fmt.Sprintf("resource: %s", e.Resource))
 	}
-	return fmt.Sprintf("%s error (HTTP %d): %s", e.Type, e.StatusCode, e.Message)
+	if e.Method != "" && e.Endpoint != "" {
+		parts = append(parts, fmt.Sprintf("%s %s", e.Method, e.Endpoint))
+	}
+	if e.Code != "" {
+		parts = append(parts, fmt.Sprintf("code: %s", e.Code))
+	}
+
+	return strings.Join(parts, " | ")
 }
 
 // IsRetryable returns true if the error is retryable
@@ -143,11 +165,66 @@ func (e *APIError) RequiresScope() (bool, string) {
 	return false, ""
 }
 
+// GetSuggestions returns actionable suggestions for fixing the error
+func (e *APIError) GetSuggestions() []string {
+	return e.Suggestions
+}
+
+// HasSuggestions returns true if the error has actionable suggestions
+func (e *APIError) HasSuggestions() bool {
+	return len(e.Suggestions) > 0
+}
+
+// GetEndpointInfo returns the endpoint and method information if available
+func (e *APIError) GetEndpointInfo() (method, endpoint string) {
+	return e.Method, e.Endpoint
+}
+
+// AddSuggestion adds a suggestion to the error
+func (e *APIError) AddSuggestion(suggestion string) {
+	if e.Suggestions == nil {
+		e.Suggestions = make([]string, 0)
+	}
+	e.Suggestions = append(e.Suggestions, suggestion)
+}
+
+// SetEndpointInfo sets the endpoint and method information
+func (e *APIError) SetEndpointInfo(method, endpoint string) {
+	e.Method = method
+	e.Endpoint = endpoint
+}
+
+// SetCode sets the error code for programmatic identification
+func (e *APIError) SetCode(code string) {
+	e.Code = code
+}
+
+// GetFormattedSuggestions returns suggestions formatted for CLI display
+func (e *APIError) GetFormattedSuggestions() string {
+	if len(e.Suggestions) == 0 {
+		return ""
+	}
+
+	var formatted strings.Builder
+	formatted.WriteString("Suggestions:\n")
+	for i, suggestion := range e.Suggestions {
+		formatted.WriteString(fmt.Sprintf("  %d. %s\n", i+1, suggestion))
+	}
+	return formatted.String()
+}
+
 // ParseAPIError creates an APIError from an HTTP response
 func ParseAPIError(resp *http.Response, body []byte) *APIError {
+	return ParseAPIErrorWithContext(resp, body, "", "")
+}
+
+// ParseAPIErrorWithContext creates an APIError from an HTTP response with additional context
+func ParseAPIErrorWithContext(resp *http.Response, body []byte, method, endpoint string) *APIError {
 	apiErr := &APIError{
 		StatusCode: resp.StatusCode,
 		Type:       determineErrorType(resp.StatusCode),
+		Method:     method,
+		Endpoint:   endpoint,
 		Raw:        body,
 	}
 
@@ -176,6 +253,8 @@ func ParseAPIError(resp *http.Response, body []byte) *APIError {
 
 		// Try to extract additional context from the message
 		apiErr.parseMessageContext()
+		// Generate helpful suggestions based on error type and context
+		apiErr.generateSuggestions()
 	} else {
 		// Fallback to HTTP status text if parsing fails
 		apiErr.Message = http.StatusText(resp.StatusCode)
@@ -226,6 +305,109 @@ func (e *APIError) parseMessageContext() {
 			e.Resource = "route"
 		} else if strings.Contains(msg, "account") {
 			e.Resource = "account"
+		}
+	}
+}
+
+// generateSuggestions creates helpful suggestions based on error type and context
+func (e *APIError) generateSuggestions() {
+	switch e.Type {
+	case ErrorTypeAuthentication:
+		e.Suggestions = []string{
+			"Check that your API key is valid and properly formatted",
+			"Ensure the API key starts with 'aha-sk-'",
+			"Verify the Authorization header is set: 'Bearer <your-api-key>'",
+		}
+
+	case ErrorTypePermission:
+		e.Suggestions = []string{
+			"Check that your API key has the required scopes for this operation",
+			"Review the API documentation for required permissions",
+		}
+		if hasScope, scope := e.RequiresScope(); hasScope && scope != "" {
+			e.AddSuggestion(fmt.Sprintf("Required scope: %s", scope))
+		}
+
+	case ErrorTypeValidation:
+		if e.Field != "" {
+			e.Suggestions = []string{
+				fmt.Sprintf("Check the '%s' field in your request", e.Field),
+				"Review the API documentation for field requirements",
+			}
+			switch e.Field {
+			case "sender", "from":
+				e.AddSuggestion("Ensure the sender email is from a domain you own")
+				e.AddSuggestion("Example: noreply@yourdomain.com")
+			case "to", "recipient":
+				e.AddSuggestion("Verify the recipient email address format")
+				e.AddSuggestion("Example: user@example.com")
+			}
+		} else {
+			e.Suggestions = []string{
+				"Review your request parameters for missing or invalid values",
+				"Check the API documentation for required fields",
+			}
+		}
+
+	case ErrorTypeNotFound:
+		if e.Resource != "" {
+			e.Suggestions = []string{
+				fmt.Sprintf("Verify the %s ID is correct", e.Resource),
+				fmt.Sprintf("Check that the %s exists and you have access to it", e.Resource),
+			}
+			if e.Resource == "domain" {
+				e.AddSuggestion("Ensure the domain is properly configured with DNS records")
+			}
+		} else {
+			e.Suggestions = []string{
+				"Double-check the resource ID or identifier",
+				"Ensure the resource exists and you have access to it",
+			}
+		}
+
+	case ErrorTypeRateLimit:
+		e.Suggestions = []string{
+			"Reduce the frequency of your API requests",
+			"Implement exponential backoff in your retry logic",
+			"Consider upgrading your plan for higher rate limits",
+		}
+		if e.RetryAfter > 0 {
+			e.AddSuggestion(fmt.Sprintf("Wait %d seconds before retrying", e.RetryAfter))
+		}
+
+	case ErrorTypeServer:
+		e.Suggestions = []string{
+			"This is a temporary server issue - try again in a few moments",
+			"If the issue persists, contact AhaSend support",
+		}
+		if e.RequestID != "" {
+			e.AddSuggestion(fmt.Sprintf("Include this request ID when contacting support: %s", e.RequestID))
+		}
+
+	case ErrorTypeConflict:
+		e.Suggestions = []string{
+			"The resource may already exist or be in a conflicting state",
+			"Try using a different identifier or check existing resources",
+		}
+
+	case ErrorTypeIdempotency:
+		e.Suggestions = []string{
+			"Use a unique idempotency key for each logical request",
+			"Don't reuse idempotency keys across different operations",
+			"Idempotency keys expire after 24 hours",
+		}
+	}
+
+	// Add endpoint-specific suggestions
+	if e.Endpoint != "" {
+		if strings.Contains(e.Endpoint, "/messages") && e.Method == "POST" {
+			if e.Type == ErrorTypeValidation {
+				e.AddSuggestion("Ensure either 'text_content' or 'html_content' is provided")
+			}
+		} else if strings.Contains(e.Endpoint, "/messages") && e.Method == "GET" {
+			if e.Type == ErrorTypeValidation {
+				e.AddSuggestion("Check your query parameters (sender, recipient, status, etc.)")
+			}
 		}
 	}
 }
