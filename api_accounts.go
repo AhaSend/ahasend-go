@@ -85,7 +85,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.addMemberRequest == nil {
-		return returnValue, nil, reportError("addMemberRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("addMemberRequest")
 	}
 
 	// to determine the Content-Type header
@@ -765,7 +765,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.updateAccountRequest == nil {
-		return returnValue, nil, reportError("updateAccountRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("updateAccountRequest")
 	}
 
 	// to determine the Content-Type header

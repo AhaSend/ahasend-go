@@ -77,7 +77,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createWebhookRequest == nil {
-		return returnValue, nil, reportError("createWebhookRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createWebhookRequest")
 	}
 
 	// to determine the Content-Type header
@@ -876,7 +876,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.updateWebhookRequest == nil {
-		return returnValue, nil, reportError("updateWebhookRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("updateWebhookRequest")
 	}
 
 	// to determine the Content-Type header

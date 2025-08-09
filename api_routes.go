@@ -77,7 +77,7 @@ func (a *RoutesAPIService) CreateRouteExecute(r ApiCreateRouteRequest) (*Route, 
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createRouteRequest == nil {
-		return returnValue, nil, reportError("createRouteRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createRouteRequest")
 	}
 
 	// to determine the Content-Type header
@@ -758,7 +758,7 @@ func (a *RoutesAPIService) UpdateRouteExecute(r ApiUpdateRouteRequest) (*Route, 
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.updateRouteRequest == nil {
-		return returnValue, nil, reportError("updateRouteRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("updateRouteRequest")
 	}
 
 	// to determine the Content-Type header

@@ -81,7 +81,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createAPIKeyRequest == nil {
-		return returnValue, nil, reportError("createAPIKeyRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createAPIKeyRequest")
 	}
 
 	// to determine the Content-Type header
@@ -762,7 +762,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.updateAPIKeyRequest == nil {
-		return returnValue, nil, reportError("updateAPIKeyRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("updateAPIKeyRequest")
 	}
 
 	// to determine the Content-Type header

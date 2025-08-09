@@ -77,7 +77,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createDomainRequest == nil {
-		return returnValue, nil, reportError("createDomainRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createDomainRequest")
 	}
 
 	// to determine the Content-Type header

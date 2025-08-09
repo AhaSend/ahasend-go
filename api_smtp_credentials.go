@@ -77,7 +77,7 @@ func (a *SMTPCredentialsAPIService) CreateSMTPCredentialExecute(r ApiCreateSMTPC
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createSMTPCredentialRequest == nil {
-		return returnValue, nil, reportError("createSMTPCredentialRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createSMTPCredentialRequest")
 	}
 
 	// to determine the Content-Type header

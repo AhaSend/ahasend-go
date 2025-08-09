@@ -83,7 +83,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createSuppressionRequest == nil {
-		return returnValue, nil, reportError("createSuppressionRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createSuppressionRequest")
 	}
 
 	// to determine the Content-Type header
