@@ -202,12 +202,13 @@ func TestIsProductionReady(t *testing.T) {
 		cfg.Debug = true
 		cfg.EnableRateLimit = false
 		cfg.MaxRetries = 0
+		cfg.RetryConfig.Enabled = false // Disable retries to trigger warning
 		cfg.Scheme = "http"
 
 		ready, issues := ahasend.IsProductionReady(cfg)
 		assert.False(t, ready)
 		assert.NotEmpty(t, issues)
-		assert.Len(t, issues, 4) // Debug, rate limit, retries, scheme
+		assert.Len(t, issues, 4) // Debug, rate limit, retries disabled, scheme
 	})
 
 	t.Run("Production config", func(t *testing.T) {

@@ -419,7 +419,7 @@ func TestErrorFormatting(t *testing.T) {
 				Message:    "invalid format",
 				Field:      "email",
 			},
-			expected: "validation error (HTTP 400): invalid format (field: email)",
+			expected: "validation error (HTTP 400): invalid format | field: email",
 		},
 		{
 			name: "Error with resource",
@@ -429,7 +429,7 @@ func TestErrorFormatting(t *testing.T) {
 				Message:    "not found",
 				Resource:   "domain",
 			},
-			expected: "not_found error (HTTP 404): not found (resource: domain)",
+			expected: "not_found error (HTTP 404): not found | resource: domain",
 		},
 		{
 			name: "Simple error",

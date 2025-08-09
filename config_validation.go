@@ -249,7 +249,10 @@ func validateClientConfig(cfg *Configuration, result *ValidationResult) {
 
 // validateRateLimitConfig validates rate limiting configuration
 func validateRateLimitConfig(cfg *Configuration, result *ValidationResult) {
-	// Validate max retries
+	// Validate retry configuration
+	validateRetryConfig(cfg, result)
+
+	// Validate max retries (deprecated field)
 	if cfg.MaxRetries < 0 {
 		result.Errors = append(result.Errors, ConfigurationValidationError{
 			Field:   "MaxRetries",
@@ -294,6 +297,67 @@ func validateRateLimitConfig(cfg *Configuration, result *ValidationResult) {
 		validateRateLimitConfigStruct(cfg.CustomerRateLimits.General, "CustomerRateLimits.General")
 		validateRateLimitConfigStruct(cfg.CustomerRateLimits.Statistics, "CustomerRateLimits.Statistics")
 		validateRateLimitConfigStruct(cfg.CustomerRateLimits.SendMessage, "CustomerRateLimits.SendMessage")
+	}
+}
+
+// validateRetryConfig validates retry configuration
+func validateRetryConfig(cfg *Configuration, result *ValidationResult) {
+	retryConfig := cfg.RetryConfig
+
+	// Validate MaxRetries
+	if retryConfig.MaxRetries < 0 {
+		result.Errors = append(result.Errors, ConfigurationValidationError{
+			Field:   "RetryConfig.MaxRetries",
+			Value:   retryConfig.MaxRetries,
+			Message: "cannot be negative",
+		})
+	} else if retryConfig.MaxRetries > 10 {
+		result.Warnings = append(result.Warnings, "RetryConfig.MaxRetries is very high (>10), this may cause long delays")
+	}
+
+	// Validate BaseDelay
+	if retryConfig.BaseDelay < 0 {
+		result.Errors = append(result.Errors, ConfigurationValidationError{
+			Field:   "RetryConfig.BaseDelay",
+			Value:   retryConfig.BaseDelay,
+			Message: "cannot be negative",
+		})
+	} else if retryConfig.BaseDelay > 60*time.Second {
+		result.Warnings = append(result.Warnings, "RetryConfig.BaseDelay is very high (>60s), this may cause long delays")
+	}
+
+	// Validate MaxDelay
+	if retryConfig.MaxDelay < 0 {
+		result.Errors = append(result.Errors, ConfigurationValidationError{
+			Field:   "RetryConfig.MaxDelay",
+			Value:   retryConfig.MaxDelay,
+			Message: "cannot be negative",
+		})
+	} else if retryConfig.MaxDelay < retryConfig.BaseDelay {
+		result.Warnings = append(result.Warnings, "RetryConfig.MaxDelay is less than BaseDelay, MaxDelay will be used as the constant delay")
+	}
+
+	// Validate BackoffStrategy
+	validStrategies := map[BackoffStrategy]bool{
+		BackoffExponential: true,
+		BackoffLinear:      true,
+		BackoffConstant:    true,
+	}
+	if !validStrategies[retryConfig.BackoffStrategy] {
+		result.Errors = append(result.Errors, ConfigurationValidationError{
+			Field:   "RetryConfig.BackoffStrategy",
+			Value:   retryConfig.BackoffStrategy,
+			Message: "must be 'exponential', 'linear', or 'constant'",
+		})
+	}
+
+	// Warn about potentially problematic configurations
+	if retryConfig.RetryClientErrors {
+		result.Warnings = append(result.Warnings, "RetryConfig.RetryClientErrors is enabled - 4xx errors will be retried, which is usually not recommended")
+	}
+
+	if retryConfig.RetryValidationErrors {
+		result.Warnings = append(result.Warnings, "RetryConfig.RetryValidationErrors is enabled - validation errors will be retried, which is usually not recommended")
 	}
 }
 
@@ -364,7 +428,17 @@ func ApplyDefaults(cfg *Configuration) {
 		cfg.DefaultHeader = make(map[string]string)
 	}
 
-	// Apply rate limiting defaults
+	// Handle migration from deprecated MaxRetries field
+	if cfg.MaxRetries != 0 && cfg.RetryConfig == (RetryConfig{}) {
+		// User has set MaxRetries but not RetryConfig - migrate
+		cfg.RetryConfig = DefaultRetryConfig()
+		cfg.RetryConfig.MaxRetries = cfg.MaxRetries
+	} else if cfg.RetryConfig == (RetryConfig{}) {
+		// No configuration set - apply defaults
+		cfg.RetryConfig = DefaultRetryConfig()
+	}
+
+	// Apply rate limiting defaults (deprecated MaxRetries field for backward compatibility)
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = defaults.DefaultMaxRetries
 	}
@@ -499,8 +573,15 @@ func IsProductionReady(cfg *Configuration) (bool, []string) {
 		issues = append(issues, "Rate limiting is disabled - should be enabled in production")
 	}
 
-	// Check retry count
-	if cfg.MaxRetries == 0 {
+	// Check retry configuration
+	if !cfg.RetryConfig.IsRetryEnabled() {
+		issues = append(issues, "Retries are disabled - should be enabled for production resilience")
+	} else if cfg.RetryConfig.MaxRetries > 5 {
+		issues = append(issues, "RetryConfig.MaxRetries is very high - may cause excessive delays in production")
+	}
+
+	// Check legacy MaxRetries field (deprecated but still used for backward compatibility)
+	if cfg.MaxRetries == 0 && cfg.RetryConfig.MaxRetries == 0 {
 		issues = append(issues, "MaxRetries is 0 - should be > 0 for production resilience")
 	} else if cfg.MaxRetries > 5 {
 		issues = append(issues, "MaxRetries is very high - may cause excessive delays in production")
@@ -529,9 +610,18 @@ func OptimizeForProduction(cfg *Configuration) {
 	cfg.Debug = false
 	cfg.EnableRateLimit = true
 
+	// Configure retry settings for production
 	if cfg.MaxRetries == 0 {
 		cfg.MaxRetries = 3
 	}
+
+	// Ensure RetryConfig has production-ready settings
+	if !cfg.RetryConfig.IsRetryEnabled() {
+		cfg.RetryConfig.Enabled = true
+		cfg.RetryConfig.MaxRetries = 3
+	}
+	cfg.RetryConfig.RetryClientErrors = false     // Never retry 4xx in production
+	cfg.RetryConfig.RetryValidationErrors = false // Never retry validation errors
 
 	// Force HTTPS in production
 	cfg.Scheme = "https"

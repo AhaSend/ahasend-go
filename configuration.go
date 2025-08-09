@@ -8,8 +8,10 @@ package ahasend
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // contextKeys are used to identify the type of value in the context.
@@ -56,6 +58,83 @@ type ServerConfiguration struct {
 // ServerConfigurations stores multiple ServerConfiguration items
 type ServerConfigurations []ServerConfiguration
 
+// BackoffStrategy defines the retry backoff strategy
+type BackoffStrategy string
+
+const (
+	// BackoffExponential uses exponential backoff with jitter
+	BackoffExponential BackoffStrategy = "exponential"
+	// BackoffLinear uses linear backoff
+	BackoffLinear BackoffStrategy = "linear"
+	// BackoffConstant uses constant delay between retries
+	BackoffConstant BackoffStrategy = "constant"
+)
+
+// RetryConfig provides comprehensive retry configuration options
+type RetryConfig struct {
+	// Enabled controls whether retries are enabled at all
+	Enabled bool `json:"enabled"`
+	// MaxRetries is the maximum number of retry attempts (0 means no retries)
+	MaxRetries int `json:"max_retries"`
+	// RetryClientErrors controls whether 4xx client errors are retried (default: false)
+	RetryClientErrors bool `json:"retry_client_errors"`
+	// RetryValidationErrors controls whether client-side validation errors are retried (default: false)
+	RetryValidationErrors bool `json:"retry_validation_errors"`
+	// BackoffStrategy determines the delay strategy between retries
+	BackoffStrategy BackoffStrategy `json:"backoff_strategy"`
+	// BaseDelay is the initial delay for the first retry (used by all strategies)
+	BaseDelay time.Duration `json:"base_delay"`
+	// MaxDelay is the maximum delay between retries (prevents exponential backoff from growing too large)
+	MaxDelay time.Duration `json:"max_delay"`
+}
+
+// DefaultRetryConfig returns sensible default retry configuration
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		Enabled:               true,
+		MaxRetries:            3,
+		RetryClientErrors:     false, // Never retry 4xx errors by default
+		RetryValidationErrors: false, // Never retry validation errors by default
+		BackoffStrategy:       BackoffExponential,
+		BaseDelay:             1 * time.Second,
+		MaxDelay:              30 * time.Second,
+	}
+}
+
+// IsRetryEnabled returns true if retries are enabled and MaxRetries > 0
+func (rc RetryConfig) IsRetryEnabled() bool {
+	return rc.Enabled && rc.MaxRetries > 0
+}
+
+// GetDelay calculates the delay for a specific retry attempt
+func (rc RetryConfig) GetDelay(attempt int) time.Duration {
+	if attempt <= 0 {
+		return rc.BaseDelay
+	}
+
+	var delay time.Duration
+	switch rc.BackoffStrategy {
+	case BackoffExponential:
+		delay = time.Duration(1<<uint(attempt-1)) * rc.BaseDelay
+		// Add jitter (±25% randomization)
+		jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+		delay = delay + jitter - delay/4
+	case BackoffLinear:
+		delay = time.Duration(attempt) * rc.BaseDelay
+	case BackoffConstant:
+		delay = rc.BaseDelay
+	default:
+		delay = rc.BaseDelay
+	}
+
+	// Cap at MaxDelay
+	if delay > rc.MaxDelay {
+		delay = rc.MaxDelay
+	}
+
+	return delay
+}
+
 // Configuration stores the configuration of the API client
 type Configuration struct {
 	Host             string            `json:"host,omitempty"`
@@ -69,8 +148,14 @@ type Configuration struct {
 
 	// Rate limiting configuration
 	EnableRateLimit    bool                     `json:"enableRateLimit,omitempty"`
-	MaxRetries         int                      `json:"maxRetries,omitempty"`
 	CustomerRateLimits *CustomerRateLimitConfig `json:"customerRateLimits,omitempty"`
+
+	// Retry configuration
+	RetryConfig RetryConfig `json:"retryConfig"`
+
+	// Deprecated: Use RetryConfig.MaxRetries instead
+	// This field is kept for backward compatibility and will be removed in a future version
+	MaxRetries int `json:"maxRetries,omitempty"`
 
 	// Default rate limits (can be overridden per customer)
 	DefaultGeneralRateLimit     *RateLimitConfig `json:"defaultGeneralRateLimit,omitempty"`
