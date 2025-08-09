@@ -97,7 +97,7 @@ func (a *UtilityAPIService) PingExecute(r ApiPingRequest) (*SuccessResponse, *ht
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -108,7 +108,7 @@ func (a *UtilityAPIService) PingExecute(r ApiPingRequest) (*SuccessResponse, *ht
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -119,7 +119,7 @@ func (a *UtilityAPIService) PingExecute(r ApiPingRequest) (*SuccessResponse, *ht
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -130,7 +130,7 @@ func (a *UtilityAPIService) PingExecute(r ApiPingRequest) (*SuccessResponse, *ht
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,

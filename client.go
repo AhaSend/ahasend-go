@@ -673,7 +673,7 @@ func (c *APIClient) prepareRequest(
 	return request, nil
 }
 
-func (c *APIClient) decode(v interface{}, b []byte, contentType string) (err error) {
+func (c *APIClient) decode(v interface{}, b []byte) (err error) {
 	if len(b) == 0 {
 		return nil
 	}
@@ -681,21 +681,19 @@ func (c *APIClient) decode(v interface{}, b []byte, contentType string) (err err
 		*s = string(b)
 		return nil
 	}
-	if JsonCheck.MatchString(contentType) {
-		if actualObj, ok := v.(interface{ GetActualInstance() interface{} }); ok { // oneOf, anyOf schemas
-			if unmarshalObj, ok := actualObj.(interface{ UnmarshalJSON([]byte) error }); ok { // make sure it has UnmarshalJSON defined
-				if err = unmarshalObj.UnmarshalJSON(b); err != nil {
-					return err
-				}
-			} else {
-				return errors.New("unknown type with GetActualInstance but no unmarshalObj.UnmarshalJSON defined")
+	// AhaSend API only supports JSON responses
+	if actualObj, ok := v.(interface{ GetActualInstance() interface{} }); ok { // oneOf, anyOf schemas
+		if unmarshalObj, ok := actualObj.(interface{ UnmarshalJSON([]byte) error }); ok { // make sure it has UnmarshalJSON defined
+			if err = unmarshalObj.UnmarshalJSON(b); err != nil {
+				return err
 			}
-		} else if err = json.Unmarshal(b, v); err != nil { // simple model
-			return err
+		} else {
+			return errors.New("unknown type with GetActualInstance but no unmarshalObj.UnmarshalJSON defined")
 		}
-		return nil
+	} else if err = json.Unmarshal(b, v); err != nil { // simple model
+		return err
 	}
-	return errors.New("undefined response type")
+	return nil
 }
 
 // Set request body from an interface{}
@@ -711,7 +709,10 @@ func setBody(body interface{}, contentType string) (bodyBuf *bytes.Buffer, err e
 	} else if s, ok := body.(*string); ok {
 		_, err = bodyBuf.WriteString(*s)
 	} else if JsonCheck.MatchString(contentType) {
-		err = json.NewEncoder(bodyBuf).Encode(body)
+		// Use json encoder with HTML escaping disabled
+		encoder := json.NewEncoder(bodyBuf)
+		encoder.SetEscapeHTML(false)
+		err = encoder.Encode(body)
 	}
 
 	if err != nil {

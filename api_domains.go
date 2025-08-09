@@ -126,7 +126,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -137,7 +137,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -148,7 +148,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -159,7 +159,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 409 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -170,7 +170,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 412 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -181,7 +181,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -192,7 +192,7 @@ func (a *DomainsAPIService) CreateDomainExecute(r ApiCreateDomainRequest) (*Doma
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -299,7 +299,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -310,7 +310,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -321,7 +321,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -332,7 +332,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -343,7 +343,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -354,7 +354,7 @@ func (a *DomainsAPIService) DeleteDomainExecute(r ApiDeleteDomainRequest) (*Succ
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -461,7 +461,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -472,7 +472,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -483,7 +483,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -494,7 +494,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -505,7 +505,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -516,7 +516,7 @@ func (a *DomainsAPIService) GetDomainExecute(r ApiGetDomainRequest) (*Domain, *h
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -642,7 +642,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -653,7 +653,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -664,7 +664,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -675,7 +675,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -686,7 +686,7 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,

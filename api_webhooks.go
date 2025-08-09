@@ -126,7 +126,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -137,7 +137,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -148,7 +148,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -159,7 +159,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 409 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -170,7 +170,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 412 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -181,7 +181,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -192,7 +192,7 @@ func (a *WebhooksAPIService) CreateWebhookExecute(r ApiCreateWebhookRequest) (*W
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -299,7 +299,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -310,7 +310,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -321,7 +321,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -332,7 +332,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -343,7 +343,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -354,7 +354,7 @@ func (a *WebhooksAPIService) DeleteWebhookExecute(r ApiDeleteWebhookRequest) (*S
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -461,7 +461,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -472,7 +472,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -483,7 +483,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -494,7 +494,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -505,7 +505,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -516,7 +516,7 @@ func (a *WebhooksAPIService) GetWebhookExecute(r ApiGetWebhookRequest) (*Webhook
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -758,7 +758,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -769,7 +769,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -780,7 +780,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -791,7 +791,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -802,7 +802,7 @@ func (a *WebhooksAPIService) GetWebhooksExecute(r ApiGetWebhooksRequest) (*Pagin
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -922,7 +922,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -933,7 +933,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -944,7 +944,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -955,7 +955,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -966,7 +966,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -977,7 +977,7 @@ func (a *WebhooksAPIService) UpdateWebhookExecute(r ApiUpdateWebhookRequest) (*W
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,

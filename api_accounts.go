@@ -134,7 +134,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -145,7 +145,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -156,7 +156,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -167,7 +167,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 409 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -178,7 +178,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 412 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -189,7 +189,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -200,7 +200,7 @@ func (a *AccountsAPIService) AddAccountMemberExecute(r ApiAddAccountMemberReques
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -307,7 +307,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -318,7 +318,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -329,7 +329,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -340,7 +340,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -351,7 +351,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -362,7 +362,7 @@ func (a *AccountsAPIService) GetAccountExecute(r ApiGetAccountRequest) (*Account
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -469,7 +469,7 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -480,7 +480,7 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -491,7 +491,7 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -502,7 +502,7 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -513,7 +513,7 @@ func (a *AccountsAPIService) GetAccountMembersExecute(r ApiGetAccountMembersRequ
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -632,7 +632,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -643,7 +643,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -654,7 +654,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -665,7 +665,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -676,7 +676,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -687,7 +687,7 @@ func (a *AccountsAPIService) RemoveAccountMemberExecute(r ApiRemoveAccountMember
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -811,7 +811,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -822,7 +822,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -833,7 +833,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -844,7 +844,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -855,7 +855,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -866,7 +866,7 @@ func (a *AccountsAPIService) UpdateAccountExecute(r ApiUpdateAccountRequest) (*A
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,

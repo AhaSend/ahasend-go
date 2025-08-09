@@ -132,7 +132,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -143,7 +143,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -154,7 +154,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -165,7 +165,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 409 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -176,7 +176,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 412 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -187,7 +187,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -198,7 +198,7 @@ func (a *SuppressionsAPIService) CreateSuppressionExecute(r ApiCreateSuppression
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -314,7 +314,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -325,7 +325,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -336,7 +336,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -347,7 +347,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -358,7 +358,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressionsExecute(r ApiDeleteAllSupp
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -478,7 +478,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -489,7 +489,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -500,7 +500,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -511,7 +511,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -522,7 +522,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -533,7 +533,7 @@ func (a *SuppressionsAPIService) DeleteSuppressionExecute(r ApiDeleteSuppression
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -696,7 +696,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -707,7 +707,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -718,7 +718,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -729,7 +729,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -740,7 +740,7 @@ func (a *SuppressionsAPIService) GetSuppressionsExecute(r ApiGetSuppressionsRequ
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,

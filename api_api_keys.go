@@ -130,7 +130,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -141,7 +141,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -152,7 +152,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -163,7 +163,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 409 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -174,7 +174,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 412 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -185,7 +185,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -196,7 +196,7 @@ func (a *APIKeysAPIService) CreateAPIKeyExecute(r ApiCreateAPIKeyRequest) (*Mode
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -303,7 +303,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -314,7 +314,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -325,7 +325,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -336,7 +336,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -347,7 +347,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -358,7 +358,7 @@ func (a *APIKeysAPIService) DeleteAPIKeyExecute(r ApiDeleteAPIKeyRequest) (*Succ
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -465,7 +465,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -476,7 +476,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -487,7 +487,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -498,7 +498,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -509,7 +509,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -520,7 +520,7 @@ func (a *APIKeysAPIService) GetAPIKeyExecute(r ApiGetAPIKeyRequest) (*ModelAPIKe
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -646,7 +646,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -657,7 +657,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -668,7 +668,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -679,7 +679,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -690,7 +690,7 @@ func (a *APIKeysAPIService) GetAPIKeysExecute(r ApiGetAPIKeysRequest) (*Paginate
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
@@ -808,7 +808,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 400 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -819,7 +819,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 401 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -830,7 +830,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 403 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -841,7 +841,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 404 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -852,7 +852,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		}
 		if response.StatusCode == 500 {
 			var v ErrorResponse
-			err = a.client.decode(&v, responseBody, response.Header.Get("Content-Type"))
+			err = a.client.decode(&v, responseBody)
 			if err != nil {
 				newErr.error = err.Error()
 				return returnValue, response, newErr
@@ -863,7 +863,7 @@ func (a *APIKeysAPIService) UpdateAPIKeyExecute(r ApiUpdateAPIKeyRequest) (*Mode
 		return returnValue, response, newErr
 	}
 
-	err = a.client.decode(&returnValue, responseBody, response.Header.Get("Content-Type"))
+	err = a.client.decode(&returnValue, responseBody)
 	if err != nil {
 		newErr := &GenericOpenAPIError{
 			body:  responseBody,
