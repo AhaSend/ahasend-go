@@ -11,7 +11,7 @@ import (
 func TestRetryConfig(t *testing.T) {
 	t.Run("DefaultRetryConfig", func(t *testing.T) {
 		config := ahasend.DefaultRetryConfig()
-		
+
 		assert.True(t, config.Enabled)
 		assert.Equal(t, 3, config.MaxRetries)
 		assert.False(t, config.RetryClientErrors)
@@ -98,7 +98,7 @@ func TestRetryConfig(t *testing.T) {
 func TestConfigurationWithRetryConfig(t *testing.T) {
 	t.Run("NewConfiguration applies RetryConfig defaults", func(t *testing.T) {
 		cfg := ahasend.NewConfiguration()
-		
+
 		assert.True(t, cfg.RetryConfig.Enabled)
 		assert.Equal(t, 3, cfg.RetryConfig.MaxRetries)
 		assert.False(t, cfg.RetryConfig.RetryClientErrors)
@@ -108,7 +108,7 @@ func TestConfigurationWithRetryConfig(t *testing.T) {
 	t.Run("RetryConfig migration from MaxRetries", func(t *testing.T) {
 		cfg := &ahasend.Configuration{MaxRetries: 5}
 		ahasend.ApplyDefaults(cfg)
-		
+
 		// Should have both the legacy field and the new RetryConfig
 		assert.Equal(t, 5, cfg.MaxRetries)
 		assert.Equal(t, 5, cfg.RetryConfig.MaxRetries)
@@ -121,7 +121,7 @@ func TestClientRetryLogicWithRetryConfig(t *testing.T) {
 		cfg := ahasend.NewConfiguration()
 		cfg.RetryConfig.RetryClientErrors = true // Enable client error retries
 		client := ahasend.NewAPIClient(cfg)
-		
+
 		// With RetryClientErrors enabled, should retry 4xx errors
 		shouldRetry := client.GetConfig().RetryConfig.RetryClientErrors
 		assert.True(t, shouldRetry)
@@ -131,7 +131,7 @@ func TestClientRetryLogicWithRetryConfig(t *testing.T) {
 		cfg := ahasend.NewConfiguration()
 		cfg.RetryConfig.Enabled = false
 		client := ahasend.NewAPIClient(cfg)
-		
+
 		assert.False(t, client.GetConfig().RetryConfig.IsRetryEnabled())
 	})
 }
