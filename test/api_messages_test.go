@@ -97,10 +97,58 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 		}
 
 		accountId := uuid.New()
+		senderEmail := "test@example.com"
 
-		resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).Execute()
+		// Test 1: Basic GetMessages with required sender parameter
+		t.Run("Basic GetMessages", func(t *testing.T) {
+			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).
+				Sender(senderEmail).
+				Execute()
 
-		validatePrismResponse(t, resp, httpRes, err)
+			validatePrismResponse(t, resp, httpRes, err)
+		})
+
+		// Test 2: GetMessages with status filter (single status)
+		t.Run("GetMessages with single status", func(t *testing.T) {
+			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).
+				Sender(senderEmail).
+				Status("Delivered").
+				Execute()
+
+			validatePrismResponse(t, resp, httpRes, err)
+		})
+
+		// Test 3: GetMessages with multiple statuses
+		t.Run("GetMessages with multiple statuses", func(t *testing.T) {
+			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).
+				Sender(senderEmail).
+				Status("Bounced,Failed").
+				Execute()
+
+			validatePrismResponse(t, resp, httpRes, err)
+		})
+
+		// Test 4: GetMessages with status and other filters
+		t.Run("GetMessages with status and recipient filter", func(t *testing.T) {
+			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).
+				Sender(senderEmail).
+				Status("Delivered").
+				Recipient("user@example.com").
+				Limit(10).
+				Execute()
+
+			validatePrismResponse(t, resp, httpRes, err)
+		})
+
+		// Test 5: GetMessages with all possible statuses
+		t.Run("GetMessages with all statuses", func(t *testing.T) {
+			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId).
+				Sender(senderEmail).
+				Status("Delivered,Bounced,Failed,Queued,Processing,Suppressed").
+				Execute()
+
+			validatePrismResponse(t, resp, httpRes, err)
+		})
 
 	})
 

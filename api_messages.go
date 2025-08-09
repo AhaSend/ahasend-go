@@ -378,6 +378,7 @@ type ApiGetMessagesRequest struct {
 	ctx             context.Context
 	ApiService      *MessagesAPIService
 	accountId       uuid.UUID
+	status          *string
 	sender          *string
 	recipient       *string
 	subject         *string
@@ -386,6 +387,12 @@ type ApiGetMessagesRequest struct {
 	toTime          *time.Time
 	limit           *int32
 	cursor          *string
+}
+
+// Filter by comma-separated list of message statuses
+func (r ApiGetMessagesRequest) Status(status string) ApiGetMessagesRequest {
+	r.status = &status
+	return r
 }
 
 // Sender email address (must be from domain in API key scopes)
@@ -446,6 +453,7 @@ GetMessages Get Messages
 Returns a list of messages for the account. Can be filtered by various parameters.
 
 **Query Parameters:**
+- `status`: Filter by comma-separated list of message statuses
 - `sender`: Filter by sender email (required, must be from domain in API key scopes)
 - `recipient`: Filter by recipient email
 - `subject`: Filter by subject text
@@ -492,6 +500,9 @@ func (a *MessagesAPIService) GetMessagesExecute(r ApiGetMessagesRequest) (*Pagin
 		return returnValue, nil, reportError("sender is required and must be specified")
 	}
 
+	if r.status != nil {
+		parameterAddToHeaderOrQuery(params, "status", r.status, "form", "")
+	}
 	parameterAddToHeaderOrQuery(params, "sender", r.sender, "form", "")
 	if r.recipient != nil {
 		parameterAddToHeaderOrQuery(params, "recipient", r.recipient, "form", "")

@@ -667,3 +667,329 @@ func TestJSONSchemaValidation(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TestGetMessagesWithStatusFilter tests the new status parameter in GetMessages
+func TestGetMessagesWithStatusFilter(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping Prism-based integration test")
+	}
+
+	client := createTestClient()
+	ctx := createAuthContext()
+
+	tests := []struct {
+		name        string
+		status      string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "Single status filter - Delivered",
+			status:      "Delivered",
+			expectError: false,
+			description: "Filter messages by single status",
+		},
+		{
+			name:        "Single status filter - Bounced",
+			status:      "Bounced",
+			expectError: false,
+			description: "Filter messages by bounced status",
+		},
+		{
+			name:        "Multiple status filter - Delivered and Bounced",
+			status:      "Delivered,Bounced",
+			expectError: false,
+			description: "Filter messages by multiple statuses",
+		},
+		{
+			name:        "Complex status filter",
+			status:      "Delivered,Bounced,Failed,Queued",
+			expectError: false,
+			description: "Filter messages by complex status combination",
+		},
+		{
+			name:        "All possible statuses",
+			status:      "Delivered,Bounced,Failed,Queued,Processing,Suppressed",
+			expectError: false,
+			description: "Filter messages by all possible statuses",
+		},
+		{
+			name:        "Status with spaces",
+			status:      "Delivered, Bounced, Failed",
+			expectError: false,
+			description: "Filter messages with spaces in status parameter",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response, httpResp, err := client.MessagesAPI.
+				GetMessages(ctx, testAccountID).
+				Sender("test@example.com").
+				Status(tt.status).
+				Execute()
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				// With Prism mock server, we might get various response codes
+				// The main goal is to test that the client can make the request properly
+				if err == nil {
+					require.NotNil(t, response)
+					assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500,
+						"Expected valid HTTP status code, got %d", httpResp.StatusCode)
+
+					// Verify the request URL contains the status parameter
+					if httpResp.Request != nil && httpResp.Request.URL != nil {
+						query := httpResp.Request.URL.Query()
+						statusParam := query.Get("status")
+						assert.Equal(t, tt.status, statusParam, "Status parameter should match")
+					}
+				} else {
+					// If there's an error, it should be a valid API error, not a client error
+					assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500,
+						"Expected 4xx error status code, got %d", httpResp.StatusCode)
+				}
+			}
+		})
+	}
+}
+
+// TestGetMessagesStatusParameterCombinations tests status parameter with other filters
+func TestGetMessagesStatusParameterCombinations(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping Prism-based integration test")
+	}
+
+	client := createTestClient()
+	ctx := createAuthContext()
+
+	t.Run("Status with recipient filter", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Status("Delivered").
+			Recipient("recipient@example.com").
+			Execute()
+
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify both parameters are in the request
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Equal(t, "Delivered", query.Get("status"))
+				assert.Equal(t, "recipient@example.com", query.Get("recipient"))
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+
+	t.Run("Status with subject filter", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Status("Bounced,Failed").
+			Subject("Test Subject").
+			Execute()
+
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify parameters are in the request
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Equal(t, "Bounced,Failed", query.Get("status"))
+				assert.Equal(t, "Test Subject", query.Get("subject"))
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+
+	t.Run("Status with pagination", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Status("Delivered").
+			Limit(10).
+			Cursor("test-cursor").
+			Execute()
+
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify all parameters are in the request
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Equal(t, "Delivered", query.Get("status"))
+				assert.Equal(t, "10", query.Get("limit"))
+				assert.Equal(t, "test-cursor", query.Get("cursor"))
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+
+	t.Run("Status with all other parameters", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Status("Delivered,Bounced").
+			Recipient("recipient@example.com").
+			Subject("Test Subject").
+			MessageIdHeader("msg-12345").
+			Limit(25).
+			Cursor("comprehensive-test-cursor").
+			Execute()
+
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify all parameters are in the request
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Equal(t, "Delivered,Bounced", query.Get("status"))
+				assert.Equal(t, "sender@example.com", query.Get("sender"))
+				assert.Equal(t, "recipient@example.com", query.Get("recipient"))
+				assert.Equal(t, "Test Subject", query.Get("subject"))
+				assert.Equal(t, "msg-12345", query.Get("message_id_header"))
+				assert.Equal(t, "25", query.Get("limit"))
+				assert.Equal(t, "comprehensive-test-cursor", query.Get("cursor"))
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+}
+
+// TestGetMessagesStatusParameterEdgeCases tests edge cases for the status parameter
+func TestGetMessagesStatusParameterEdgeCases(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping Prism-based integration test")
+	}
+
+	client := createTestClient()
+	ctx := createAuthContext()
+
+	t.Run("Empty status parameter", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Status("").
+			Execute()
+
+		// Should handle empty status parameter gracefully
+		if err == nil {
+			require.NotNil(t, response)
+		}
+		// Either way, should not panic or cause client errors
+		assert.True(t, httpResp.StatusCode >= 200)
+	})
+
+	t.Run("Status parameter method order independence", func(t *testing.T) {
+		// Test different orders of method calls
+		orders := []func() ahasend.ApiGetMessagesRequest{
+			func() ahasend.ApiGetMessagesRequest {
+				return client.MessagesAPI.
+					GetMessages(ctx, testAccountID).
+					Status("Delivered").
+					Sender("sender@example.com").
+					Limit(10)
+			},
+			func() ahasend.ApiGetMessagesRequest {
+				return client.MessagesAPI.
+					GetMessages(ctx, testAccountID).
+					Sender("sender@example.com").
+					Status("Delivered").
+					Limit(10)
+			},
+			func() ahasend.ApiGetMessagesRequest {
+				return client.MessagesAPI.
+					GetMessages(ctx, testAccountID).
+					Limit(10).
+					Status("Delivered").
+					Sender("sender@example.com")
+			},
+		}
+
+		for i, orderFunc := range orders {
+			t.Run(fmt.Sprintf("Order %d", i+1), func(t *testing.T) {
+				request := orderFunc()
+				assert.NotNil(t, request)
+
+				// Should be able to execute regardless of order
+				response, httpResp, err := request.Execute()
+				if err == nil {
+					require.NotNil(t, response)
+				}
+				// Should not cause client errors regardless of response
+				assert.True(t, httpResp.StatusCode >= 200)
+			})
+		}
+	})
+}
+
+// TestGetMessagesWithoutStatusParameter tests backward compatibility
+func TestGetMessagesWithoutStatusParameter(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping Prism-based integration test")
+	}
+
+	client := createTestClient()
+	ctx := createAuthContext()
+
+	t.Run("GetMessages without status parameter (backward compatibility)", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Execute()
+
+		// Should work exactly as before - no breaking changes
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify status parameter is not in the request when not specified
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Empty(t, query.Get("status"), "Status parameter should not be present when not specified")
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+
+	t.Run("GetMessages with other filters but no status", func(t *testing.T) {
+		response, httpResp, err := client.MessagesAPI.
+			GetMessages(ctx, testAccountID).
+			Sender("sender@example.com").
+			Recipient("recipient@example.com").
+			Subject("Test").
+			Limit(5).
+			Execute()
+
+		// Should work with all other parameters
+		if err == nil {
+			require.NotNil(t, response)
+			assert.True(t, httpResp.StatusCode >= 200 && httpResp.StatusCode < 500)
+
+			// Verify other parameters are present but status is not
+			if httpResp.Request != nil && httpResp.Request.URL != nil {
+				query := httpResp.Request.URL.Query()
+				assert.Equal(t, "sender@example.com", query.Get("sender"))
+				assert.Equal(t, "recipient@example.com", query.Get("recipient"))
+				assert.Equal(t, "Test", query.Get("subject"))
+				assert.Equal(t, "5", query.Get("limit"))
+				assert.Empty(t, query.Get("status"), "Status parameter should not be present")
+			}
+		} else {
+			assert.True(t, httpResp.StatusCode >= 400 && httpResp.StatusCode < 500)
+		}
+	})
+}

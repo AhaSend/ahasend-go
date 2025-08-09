@@ -332,7 +332,6 @@ if messageData := ahasend.GetMessageEventData(event); messageData != nil {
 verifier.SetTolerance(10 * time.Minute)
 
 // The verifier automatically handles:
-// - Base64 decoding of webhook secrets
 // - whsec_ prefix removal
 // - Multiple signatures in space-delimited format
 // - Version prefixes (v1=signature)

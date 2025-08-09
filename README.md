@@ -539,7 +539,7 @@ kind: Secret
 metadata:
   name: ahasend-secret
 data:
-  AHASEND_API_KEY: <base64-encoded-api-key>
+  AHASEND_API_KEY: <aha-sk-api-key>
 
 ---
 apiVersion: v1
