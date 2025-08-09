@@ -15,7 +15,7 @@ type Recipient struct {
 	// Display name for the recipient
 	Name *string `json:"name,omitempty"`
 	// Substitution data for the recipient. Used with jinja2 templating language for dynamic content
-	SubstitutionData     map[string]interface{} `json:"substitution_data,omitempty"`
+	Substitutions        map[string]interface{} `json:"substitutions,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -97,25 +97,25 @@ func (o *Recipient) SetName(v string) {
 
 // GetSubstitutionData returns the SubstitutionData field value if set, zero value otherwise.
 func (o *Recipient) GetSubstitutionData() map[string]interface{} {
-	if o == nil || IsNil(o.SubstitutionData) {
+	if o == nil || IsNil(o.Substitutions) {
 		var ret map[string]interface{}
 		return ret
 	}
-	return o.SubstitutionData
+	return o.Substitutions
 }
 
 // GetSubstitutionDataOk returns a tuple with the SubstitutionData field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *Recipient) GetSubstitutionDataOk() (map[string]interface{}, bool) {
-	if o == nil || IsNil(o.SubstitutionData) {
+	if o == nil || IsNil(o.Substitutions) {
 		return map[string]interface{}{}, false
 	}
-	return o.SubstitutionData, true
+	return o.Substitutions, true
 }
 
 // HasSubstitutionData returns a boolean if a field has been set.
 func (o *Recipient) HasSubstitutionData() bool {
-	if o != nil && !IsNil(o.SubstitutionData) {
+	if o != nil && !IsNil(o.Substitutions) {
 		return true
 	}
 
@@ -124,7 +124,7 @@ func (o *Recipient) HasSubstitutionData() bool {
 
 // SetSubstitutionData gets a reference to the given map[string]interface{} and assigns it to the SubstitutionData field.
 func (o *Recipient) SetSubstitutionData(v map[string]interface{}) {
-	o.SubstitutionData = v
+	o.Substitutions = v
 }
 
 func (o Recipient) MarshalJSON() ([]byte, error) {
@@ -141,8 +141,8 @@ func (o Recipient) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Name) {
 		toSerialize["name"] = o.Name
 	}
-	if !IsNil(o.SubstitutionData) {
-		toSerialize["substitution_data"] = o.SubstitutionData
+	if !IsNil(o.Substitutions) {
+		toSerialize["substitution_data"] = o.Substitutions
 	}
 
 	for key, value := range o.AdditionalProperties {

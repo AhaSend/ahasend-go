@@ -402,6 +402,7 @@ components:
           description: DNS records required for domain verification
         last_dns_check_at:
           type: string
+          nullable: string
           format: date-time
           description: When DNS records were last checked
         dns_valid:
@@ -477,14 +478,14 @@ components:
         name:
           type: string
           description: Display name for the recipient
-        substitution_data:
+        substitutions:
           type: object
           additionalProperties: true
           description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content
       example:
         email: "user@example.com"
         name: "John Doe"
-        substitution_data:
+        substitutions:
           first_name: "John"
           order_id: "12345"
 
