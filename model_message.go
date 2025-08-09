@@ -1,6 +1,7 @@
 package ahasend
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -716,7 +717,12 @@ func (o Message) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return []byte{}, err
 	}
-	return json.Marshal(toSerialize)
+
+	buf := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(toSerialize)
+	return buf.Bytes(), err
 }
 
 func (o Message) ToMap() (map[string]interface{}, error) {
