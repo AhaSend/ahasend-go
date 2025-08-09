@@ -247,7 +247,7 @@ func (a *MessagesAPIService) CreateMessageExecute(r ApiCreateMessageRequest) (*C
 	params := url.Values{}
 	formParams := url.Values{}
 	if r.createMessageRequest == nil {
-		return returnValue, nil, reportError("createMessageRequest is required and must be specified")
+		return returnValue, nil, NewRequiredFieldError("createMessageRequest")
 	}
 
 	// to determine the Content-Type header
@@ -454,7 +454,7 @@ Returns a list of messages for the account. Can be filtered by various parameter
 
 **Query Parameters:**
 - `status`: Filter by comma-separated list of message statuses
-- `sender`: Filter by sender email (required, must be from domain in API key scopes)
+- `sender`: Filter by sender email (must be from domain in API key scopes)
 - `recipient`: Filter by recipient email
 - `subject`: Filter by subject text
 - `message_id_header`: Filter by message ID header (same ID returned by CreateMessage API)
@@ -496,14 +496,13 @@ func (a *MessagesAPIService) GetMessagesExecute(r ApiGetMessagesRequest) (*Pagin
 	headers := make(map[string]string)
 	params := url.Values{}
 	formParams := url.Values{}
-	if r.sender == nil {
-		return returnValue, nil, reportError("sender is required and must be specified")
-	}
 
 	if r.status != nil {
 		parameterAddToHeaderOrQuery(params, "status", r.status, "form", "")
 	}
-	parameterAddToHeaderOrQuery(params, "sender", r.sender, "form", "")
+	if r.sender != nil {
+		parameterAddToHeaderOrQuery(params, "sender", r.sender, "form", "")
+	}
 	if r.recipient != nil {
 		parameterAddToHeaderOrQuery(params, "recipient", r.recipient, "form", "")
 	}

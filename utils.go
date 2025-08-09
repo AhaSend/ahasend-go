@@ -346,7 +346,29 @@ type MappedNullable interface {
 	ToMap() (map[string]interface{}, error)
 }
 
-// Prevent trying to import "fmt"
+// Validation error helpers
+
+// reportError is deprecated - use specific validation error functions instead
+// This is kept for backward compatibility but will be removed in a future version
 func reportError(format string, a ...interface{}) error {
 	return fmt.Errorf(format, a...)
+}
+
+// NewRequiredFieldError creates a ValidationError for a missing required field
+func NewRequiredFieldError(field string) error {
+	ve := &ValidationError{}
+	ve.AddFieldError(field, "is required and must be specified")
+	return ve
+}
+
+// NewInvalidFieldError creates a ValidationError for an invalid field value
+func NewInvalidFieldError(field, reason string) error {
+	ve := &ValidationError{}
+	ve.AddFieldError(field, fmt.Sprintf("is invalid: %s", reason))
+	return ve
+}
+
+// NewValidationError creates a ValidationError with multiple field errors
+func NewValidationError() *ValidationError {
+	return &ValidationError{}
 }
