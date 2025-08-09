@@ -337,10 +337,39 @@ verifier.SetTolerance(10 * time.Minute)
 // - Version prefixes (v1=signature)
 ```
 
+## Retry Configuration (NEW!)
+
+The SDK now includes sophisticated retry configuration with multiple backoff strategies:
+
+### RetryConfig Structure
+```go
+type RetryConfig struct {
+    Enabled               bool            // Controls whether retries are enabled
+    MaxRetries            int             // Maximum number of retry attempts
+    RetryClientErrors     bool            // Whether to retry 4xx client errors (default: false)
+    RetryValidationErrors bool            // Whether to retry validation errors (default: false)
+    BackoffStrategy       BackoffStrategy // Exponential, Linear, or Constant
+    BaseDelay             time.Duration   // Initial delay for retries
+    MaxDelay              time.Duration   // Maximum delay between retries
+}
+```
+
+### Backoff Strategies
+- **Exponential**: Exponential backoff with jitter (recommended for production)
+- **Linear**: Linear increase in delay between retries
+- **Constant**: Fixed delay between all retry attempts
+
+### Default Behavior
+- Automatically retries: Network errors, 429 rate limits, 5xx server errors
+- Never retries (by default): 4xx client errors, validation errors, authentication errors
+- Uses exponential backoff with 1-30 second delays
+- Backward compatible with legacy `MaxRetries` field
+
 ## Important Notes
 
 - **Always use Makefile commands** - They include proper setup, validation, and consistency checks
 - **Rate limiting is ON by default** - Protects users from 429 errors immediately
+- **Intelligent retry logic is ON by default** - Prevents unnecessary retries and uses smart backoff
 - **Webhook processing is Standard Webhooks compliant** - Secure verification with HMAC-SHA256
 - The OpenAPI spec at `api/openapi.yaml` provides the foundation for the API structure
 - The webhook specification at `api/webhooks.yaml` defines all webhook event schemas
@@ -349,6 +378,7 @@ verifier.SetTolerance(10 * time.Minute)
 - The API uses cursor-based pagination with `limit` and `cursor` parameters
 - Idempotency is supported via the `Idempotency-Key` header
 - Rate limits: 100 req/sec general, 1 req/sec statistics, 100 req/sec send message (all customizable)
+- Retry configuration: Exponential backoff by default, fully customizable strategies
 - Webhook events include comprehensive data for email tracking and inbound processing
 - Development tools are automatically installed via `make setup` (golangci-lint, Prism, etc.)
 - Integration tests require Prism mock server for API validation

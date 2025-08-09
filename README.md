@@ -122,9 +122,20 @@ For more control, configure the client programmatically:
 cfg := ahasend.NewConfiguration()
 cfg.Host = "api.ahasend.com"
 cfg.Debug = true
-cfg.MaxRetries = 5
+
+// Configure retry behavior (NEW!)
+cfg.RetryConfig = ahasend.RetryConfig{
+    Enabled:               true,
+    MaxRetries:            5,
+    RetryClientErrors:     false,  // Don't retry 4xx errors
+    RetryValidationErrors: false,  // Don't retry validation errors
+    BackoffStrategy:       ahasend.BackoffExponential,
+    BaseDelay:             time.Second,
+    MaxDelay:              30 * time.Second,
+}
 
 // Configure rate limiting
+client := ahasend.NewAPIClient(cfg)
 client.SetSendMessageRateLimit(500, 1000) // 500 req/s, 1000 burst
 
 // Configure idempotency
@@ -133,8 +144,6 @@ cfg.IdempotencyConfig = &ahasend.IdempotencyConfig{
     KeyPrefix:         "myapp",
     AutoGenerateForPOST: true,
 }
-
-client := ahasend.NewAPIClient(cfg)
 ```
 
 ## Core Features
@@ -176,6 +185,47 @@ response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID).
 ```
 
 📖 **See [IDEMPOTENCY.md](IDEMPOTENCY.md) for comprehensive idempotency documentation**
+
+### Intelligent Retry Logic
+
+The SDK includes configurable retry logic with multiple backoff strategies:
+
+```go
+// Configure retry behavior
+cfg := ahasend.NewConfiguration()
+cfg.RetryConfig = ahasend.RetryConfig{
+    Enabled:               true,
+    MaxRetries:            3,
+    RetryClientErrors:     false,  // Don't retry 4xx errors (default)
+    RetryValidationErrors: false,  // Don't retry validation errors (default)
+    BackoffStrategy:       ahasend.BackoffExponential,  // Exponential, Linear, or Constant
+    BaseDelay:             1 * time.Second,
+    MaxDelay:              30 * time.Second,
+}
+
+client := ahasend.NewAPIClient(cfg)
+
+// Disable retries completely
+cfg.RetryConfig.Enabled = false
+
+// Or use the legacy MaxRetries field (backward compatible)
+cfg.MaxRetries = 0  // Disables retries
+```
+
+**Backoff Strategies:**
+- `BackoffExponential`: Exponential backoff with jitter (default)
+- `BackoffLinear`: Linear increase in delay
+- `BackoffConstant`: Fixed delay between retries
+
+The SDK automatically retries:
+- Network errors (connection refused, timeout)
+- Rate limit errors (429)
+- Server errors (5xx)
+
+And never retries (by default):
+- Client errors (4xx)
+- Validation errors
+- Authentication errors
 
 ### Thread Safety
 
@@ -375,7 +425,17 @@ client := ahasend.NewAPIClient(cfg)
 // Optimized production configuration
 cfg := ahasend.NewConfiguration()
 cfg.Debug = false
-cfg.MaxRetries = 5
+
+// Production-ready retry configuration
+cfg.RetryConfig = ahasend.RetryConfig{
+    Enabled:               true,
+    MaxRetries:            5,
+    RetryClientErrors:     false,  // Never retry client errors in production
+    RetryValidationErrors: false,  // Never retry validation errors
+    BackoffStrategy:       ahasend.BackoffExponential,
+    BaseDelay:             2 * time.Second,
+    MaxDelay:              60 * time.Second,
+}
 
 // High-performance HTTP settings
 transport := &http.Transport{

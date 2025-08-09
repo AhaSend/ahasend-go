@@ -411,6 +411,8 @@ export AHASEND_TIMEOUT=30
 export AHASEND_ENABLE_RATE_LIMIT=true
 ```
 
+**Note**: For advanced retry configuration (backoff strategies, retry specific error types), use programmatic configuration with the `RetryConfig` struct. The SDK uses intelligent defaults that work well for production.
+
 ### Monitoring and Debugging
 
 1. **Log configuration issues** at startup
