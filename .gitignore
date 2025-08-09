@@ -84,3 +84,7 @@ _cgo_gotypes.go
 _cgo_export.*
 
 _testmain.go
+
+CONTEXT.md
+TODO.md
+
