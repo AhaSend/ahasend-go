@@ -48,7 +48,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -330,13 +329,67 @@ func (c *APIClient) GetConfig() *Configuration {
 	return c.cfg
 }
 
-// shouldRetryOnError determines if an error is retryable
+// shouldRetryOnError determines if an error is retryable using the configured RetryConfig
 func (c *APIClient) shouldRetryOnError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Retry on network errors (connection refused, timeout, etc.)
-	return true
+
+	// Check if retries are enabled at all
+	if !c.cfg.RetryConfig.IsRetryEnabled() {
+		// Fall back to legacy MaxRetries for backward compatibility
+		if c.cfg.MaxRetries == 0 {
+			return false
+		}
+	}
+
+	// Don't retry validation errors unless explicitly configured
+	if _, ok := err.(*ValidationError); ok {
+		return c.cfg.RetryConfig.RetryValidationErrors
+	}
+
+	// Use structured error checking for API errors
+	if apiErr, ok := IsAPIError(err); ok {
+		// Check if we should retry client errors (4xx)
+		if apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 {
+			return c.cfg.RetryConfig.RetryClientErrors
+		}
+		return apiErr.IsRetryable()
+	}
+
+	// Use structured error checking for network errors
+	if netErr, ok := IsNetworkError(err); ok {
+		return netErr.IsRetryable()
+	}
+
+	// For other errors, only retry actual network-related errors
+	return isNetworkError(err)
+}
+
+// getMaxRetries returns the effective maximum retry count, preferring RetryConfig over legacy MaxRetries
+func (c *APIClient) getMaxRetries() int {
+	if c.cfg.RetryConfig.IsRetryEnabled() {
+		return c.cfg.RetryConfig.MaxRetries
+	}
+	// Fall back to legacy MaxRetries for backward compatibility
+	return c.cfg.MaxRetries
+}
+
+// isNetworkError checks if an error is a network-related error by examining the error message
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "timeout") ||
+		strings.Contains(errMsg, "dns") ||
+		strings.Contains(errMsg, "network") ||
+		strings.Contains(errMsg, "dial") ||
+		strings.Contains(errMsg, "broken pipe") ||
+		strings.Contains(errMsg, "connection reset") ||
+		strings.Contains(errMsg, "no route to host")
 }
 
 // shouldRetryOnStatus determines if an HTTP status code is retryable
@@ -352,15 +405,19 @@ func (c *APIClient) shouldRetryOnStatus(statusCode int) bool {
 	}
 }
 
-// handleRetryableError handles network errors with exponential backoff retry logic
+// handleRetryableError handles network errors with configurable backoff retry logic
 func (c *APIClient) handleRetryableError(request *http.Request, originalErr error) (*http.Response, error) {
+	// Check if retries are enabled
+	maxRetries := c.getMaxRetries()
+	if maxRetries == 0 {
+		return nil, originalErr
+	}
+
 	ctx := request.Context()
 
-	for attempt := 0; attempt < c.cfg.MaxRetries; attempt++ {
-		// Exponential backoff with jitter
-		backoffTime := time.Duration(1<<uint(attempt)) * time.Second
-		jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
-		totalWait := backoffTime + jitter
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Use configured backoff strategy
+		totalWait := c.cfg.RetryConfig.GetDelay(attempt + 1)
 
 		// Wait with context cancellation support
 		select {
@@ -391,17 +448,21 @@ func (c *APIClient) handleRetryableError(request *http.Request, originalErr erro
 	return nil, originalErr
 }
 
-// handleRetryableResponse handles retryable HTTP responses with exponential backoff
+// handleRetryableResponse handles retryable HTTP responses with configurable backoff
 func (c *APIClient) handleRetryableResponse(request *http.Request, originalResp *http.Response) (*http.Response, error) {
+	// Check if retries are enabled
+	maxRetries := c.getMaxRetries()
+	if maxRetries == 0 {
+		return originalResp, nil
+	}
+
 	ctx := request.Context()
 	originalStatus := originalResp.StatusCode
 	originalResp.Body.Close() // Close the original response body
 
-	for attempt := 0; attempt < c.cfg.MaxRetries; attempt++ {
-		// Exponential backoff with jitter
-		backoffTime := time.Duration(1<<uint(attempt)) * time.Second
-		jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
-		totalWait := backoffTime + jitter
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Use configured backoff strategy
+		totalWait := c.cfg.RetryConfig.GetDelay(attempt + 1)
 
 		// Wait with context cancellation support
 		select {
@@ -436,7 +497,7 @@ func (c *APIClient) handleRetryableResponse(request *http.Request, originalResp 
 		StatusCode: originalStatus,
 		Status:     http.StatusText(originalStatus),
 		Header:     make(http.Header),
-		Body:       io.NopCloser(strings.NewReader(fmt.Sprintf("Request failed after %d retries", c.cfg.MaxRetries))),
+		Body:       io.NopCloser(strings.NewReader(fmt.Sprintf("Request failed after %d retries", maxRetries))),
 	}, nil
 }
 
@@ -751,8 +812,13 @@ func formatErrorMessage(status string, v interface{}) string {
 
 // NewGenericOpenAPIError creates a new GenericOpenAPIError with structured error information
 func NewGenericOpenAPIError(response *http.Response, body []byte, model interface{}) *GenericOpenAPIError {
-	// Parse the structured API error
-	apiErr := ParseAPIError(response, body)
+	return NewGenericOpenAPIErrorWithContext(response, body, model, "", "")
+}
+
+// NewGenericOpenAPIErrorWithContext creates a new GenericOpenAPIError with method and endpoint context
+func NewGenericOpenAPIErrorWithContext(response *http.Response, body []byte, model interface{}, method, endpoint string) *GenericOpenAPIError {
+	// Parse the structured API error with context
+	apiErr := ParseAPIErrorWithContext(response, body, method, endpoint)
 
 	// Create the generic error for backward compatibility
 	genErr := &GenericOpenAPIError{
