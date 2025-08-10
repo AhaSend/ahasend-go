@@ -6,7 +6,7 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **Email** | **string** | Recipient email address | 
 **Name** | Pointer to **string** | Display name for the recipient | [optional] 
-**SubstitutionData** | Pointer to **map[string]interface{}** | Substitution data for the recipient. Used with jinja2 templating language for dynamic content | [optional] 
+**Substitutions** | Pointer to **map[string]interface{}** | Substitution data for the recipient. Used with jinja2 templating language for dynamic content | [optional] 
 
 ## Methods
 
@@ -72,30 +72,30 @@ SetName sets Name field to given value.
 
 HasName returns a boolean if a field has been set.
 
-### GetSubstitutionData
+### GetSubstitutions
 
-`func (o *Recipient) GetSubstitutionData() map[string]interface{}`
+`func (o *Recipient) GetSubstitutions() map[string]interface{}`
 
-GetSubstitutionData returns the SubstitutionData field if non-nil, zero value otherwise.
+GetSubstitutions returns the Substitutions field if non-nil, zero value otherwise.
 
-### GetSubstitutionDataOk
+### GetSubstitutionsOk
 
-`func (o *Recipient) GetSubstitutionDataOk() (*map[string]interface{}, bool)`
+`func (o *Recipient) GetSubstitutionsOk() (*map[string]interface{}, bool)`
 
-GetSubstitutionDataOk returns a tuple with the SubstitutionData field if it's non-nil, zero value otherwise
+GetSubstitutionsOk returns a tuple with the Substitutions field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetSubstitutionData
+### SetSubstitutions
 
-`func (o *Recipient) SetSubstitutionData(v map[string]interface{})`
+`func (o *Recipient) SetSubstitutions(v map[string]interface{})`
 
-SetSubstitutionData sets SubstitutionData field to given value.
+SetSubstitutions sets Substitutions field to given value.
 
-### HasSubstitutionData
+### HasSubstitutions
 
-`func (o *Recipient) HasSubstitutionData() bool`
+`func (o *Recipient) HasSubstitutions() bool`
 
-HasSubstitutionData returns a boolean if a field has been set.
+HasSubstitutions returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

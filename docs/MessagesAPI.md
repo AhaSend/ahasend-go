@@ -159,7 +159,7 @@ Name | Type | Description  | Notes
 
 ## GetMessages
 
-> PaginatedMessagesResponse GetMessages(ctx, accountId).Sender(sender).Recipient(recipient).Subject(subject).MessageIdHeader(messageIdHeader).FromTime(fromTime).ToTime(toTime).Limit(limit).Cursor(cursor).Execute()
+> PaginatedMessagesResponse GetMessages(ctx, accountId).Status(status).Sender(sender).Recipient(recipient).Subject(subject).MessageIdHeader(messageIdHeader).FromTime(fromTime).ToTime(toTime).Limit(limit).Cursor(cursor).Execute()
 
 Get Messages
 
@@ -180,7 +180,8 @@ import (
 
 func main() {
 	accountId := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // uuid.UUID | Account ID
-	sender := "sender_example" // string | Sender email address (must be from domain in API key scopes)
+	status := "Bounced,Failed" // string | Filter by comma-separated list of message statuses (optional)
+	sender := "sender_example" // string | Sender email address (must be from domain in API key scopes) (optional)
 	recipient := "recipient_example" // string | Recipient email address (optional)
 	subject := "subject_example" // string | Filter by subject text (optional)
 	messageIdHeader := "messageIdHeader_example" // string | Filter by message ID header (same ID returned by CreateMessage API) (optional)
@@ -191,7 +192,7 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.MessagesAPI.GetMessages(context.Background(), accountId).Sender(sender).Recipient(recipient).Subject(subject).MessageIdHeader(messageIdHeader).FromTime(fromTime).ToTime(toTime).Limit(limit).Cursor(cursor).Execute()
+	resp, r, err := apiClient.MessagesAPI.GetMessages(context.Background(), accountId).Status(status).Sender(sender).Recipient(recipient).Subject(subject).MessageIdHeader(messageIdHeader).FromTime(fromTime).ToTime(toTime).Limit(limit).Cursor(cursor).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `MessagesAPI.GetMessages``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -217,6 +218,7 @@ Other parameters are passed through a pointer to a apiGetMessagesRequest struct 
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
+ **status** | **string** | Filter by comma-separated list of message statuses | 
  **sender** | **string** | Sender email address (must be from domain in API key scopes) | 
  **recipient** | **string** | Recipient email address | 
  **subject** | **string** | Filter by subject text | 
