@@ -1,6 +1,7 @@
 package ahasend
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -117,7 +118,12 @@ func (o PaginatedMessagesResponse) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return []byte{}, err
 	}
-	return json.Marshal(toSerialize)
+
+	buf := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(toSerialize)
+	return buf.Bytes(), err
 }
 
 func (o PaginatedMessagesResponse) ToMap() (map[string]interface{}, error) {
@@ -207,7 +213,11 @@ func NewNullablePaginatedMessagesResponse(val *PaginatedMessagesResponse) *Nulla
 }
 
 func (v NullablePaginatedMessagesResponse) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.value)
+	buf := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(v.value)
+	return buf.Bytes(), err
 }
 
 func (v *NullablePaginatedMessagesResponse) UnmarshalJSON(src []byte) error {
