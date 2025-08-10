@@ -879,7 +879,11 @@ func NewNullableMessage(val *Message) *NullableMessage {
 }
 
 func (v NullableMessage) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.value)
+	buf := bytes.NewBuffer([]byte{})
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(v.value)
+	return buf.Bytes(), err
 }
 
 func (v *NullableMessage) UnmarshalJSON(src []byte) error {
