@@ -129,8 +129,24 @@ func (o PaginatedMessagesResponse) MarshalJSON() ([]byte, error) {
 func (o PaginatedMessagesResponse) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["object"] = o.Object
-	toSerialize["data"] = o.Data
-	toSerialize["pagination"] = o.Pagination
+
+	// Convert each Message to a map to ensure proper JSON marshaling
+	dataArray := make([]map[string]interface{}, len(o.Data))
+	for i, msg := range o.Data {
+		msgMap, err := msg.ToMap()
+		if err != nil {
+			return nil, err
+		}
+		dataArray[i] = msgMap
+	}
+	toSerialize["data"] = dataArray
+
+	// Convert PaginationInfo to a map as well
+	paginationMap, err := o.Pagination.ToMap()
+	if err != nil {
+		return nil, err
+	}
+	toSerialize["pagination"] = paginationMap
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
