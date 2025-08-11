@@ -240,6 +240,25 @@ func (o *DNSRecord) UnmarshalJSON(data []byte) (err error) {
 	return err
 }
 
+func (o *DNSRecord) String() string {
+	statusInfo := ""
+	if o.Required {
+		if o.Propagated {
+			statusInfo = " ✓ (required, propagated)"
+		} else {
+			statusInfo = " ✗ (not propagated)"
+		}
+	} else {
+		if o.Propagated {
+			statusInfo = " ✓ (optional, propagated)"
+		} else {
+			statusInfo = " ✗ (optional, not propagated)"
+		}
+	}
+
+	return fmt.Sprintf("\n    %s %s%s\n        %s", o.Type, o.Host, statusInfo, o.Content)
+}
+
 type NullableDNSRecord struct {
 	value *DNSRecord
 	isSet bool
