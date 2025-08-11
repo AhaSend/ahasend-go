@@ -246,7 +246,7 @@ func (o *DNSRecord) String() string {
 		if o.Propagated {
 			statusInfo = " ✓ (required, propagated)"
 		} else {
-			statusInfo = " ✗ (not propagated)"
+			statusInfo = " ✗ (required, not propagated)"
 		}
 	} else {
 		if o.Propagated {
