@@ -11,8 +11,10 @@ var _ MappedNullable = &DeliverabilityStatistics{}
 
 // DeliverabilityStatistics struct for DeliverabilityStatistics
 type DeliverabilityStatistics struct {
-	// Time bucket for the statistics
-	TimeBucket time.Time `json:"time_bucket"`
+	// Start time of the statistics bucket
+	FromTimestamp time.Time `json:"from_timestamp"`
+	// End time of the statistics bucket
+	ToTimestamp time.Time `json:"to_timestamp"`
 	// Message direction
 	Direction string `json:"direction"`
 	// Number of messages sent
@@ -34,9 +36,10 @@ type _DeliverabilityStatistics DeliverabilityStatistics
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewDeliverabilityStatistics(timeBucket time.Time, direction string) *DeliverabilityStatistics {
+func NewDeliverabilityStatistics(fromTimestamp time.Time, toTimestamp time.Time, direction string) *DeliverabilityStatistics {
 	this := DeliverabilityStatistics{}
-	this.TimeBucket = timeBucket
+	this.FromTimestamp = fromTimestamp
+	this.ToTimestamp = toTimestamp
 	this.Direction = direction
 	return &this
 }
@@ -49,28 +52,52 @@ func NewDeliverabilityStatisticsWithDefaults() *DeliverabilityStatistics {
 	return &this
 }
 
-// GetTimeBucket returns the TimeBucket field value
-func (o *DeliverabilityStatistics) GetTimeBucket() time.Time {
+// GetFromTimestamp returns the FromTimestamp field value
+func (o *DeliverabilityStatistics) GetFromTimestamp() time.Time {
 	if o == nil {
 		var ret time.Time
 		return ret
 	}
 
-	return o.TimeBucket
+	return o.FromTimestamp
 }
 
-// GetTimeBucketOk returns a tuple with the TimeBucket field value
+// GetFromTimestampOk returns a tuple with the FromTimestamp field value
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetTimeBucketOk() (*time.Time, bool) {
+func (o *DeliverabilityStatistics) GetFromTimestampOk() (*time.Time, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.TimeBucket, true
+	return &o.FromTimestamp, true
 }
 
-// SetTimeBucket sets field value
-func (o *DeliverabilityStatistics) SetTimeBucket(v time.Time) {
-	o.TimeBucket = v
+// SetFromTimestamp sets field value
+func (o *DeliverabilityStatistics) SetFromTimestamp(v time.Time) {
+	o.FromTimestamp = v
+}
+
+// GetToTimestamp returns the ToTimestamp field value
+func (o *DeliverabilityStatistics) GetToTimestamp() time.Time {
+	if o == nil {
+		var ret time.Time
+		return ret
+	}
+
+	return o.ToTimestamp
+}
+
+// GetToTimestampOk returns a tuple with the ToTimestamp field value
+// and a boolean to check if the value has been set.
+func (o *DeliverabilityStatistics) GetToTimestampOk() (*time.Time, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ToTimestamp, true
+}
+
+// SetToTimestamp sets field value
+func (o *DeliverabilityStatistics) SetToTimestamp(v time.Time) {
+	o.ToTimestamp = v
 }
 
 // GetDirection returns the Direction field value
@@ -267,7 +294,8 @@ func (o DeliverabilityStatistics) MarshalJSON() ([]byte, error) {
 
 func (o DeliverabilityStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["time_bucket"] = o.TimeBucket
+	toSerialize["from_timestamp"] = o.FromTimestamp
+	toSerialize["to_timestamp"] = o.ToTimestamp
 	toSerialize["direction"] = o.Direction
 	if !IsNil(o.Sent) {
 		toSerialize["sent"] = o.Sent
@@ -297,7 +325,8 @@ func (o *DeliverabilityStatistics) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"time_bucket",
+		"from_timestamp",
+		"to_timestamp",
 		"direction",
 	}
 
@@ -328,7 +357,8 @@ func (o *DeliverabilityStatistics) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "time_bucket")
+		delete(additionalProperties, "from_timestamp")
+		delete(additionalProperties, "to_timestamp")
 		delete(additionalProperties, "direction")
 		delete(additionalProperties, "sent")
 		delete(additionalProperties, "delivered")

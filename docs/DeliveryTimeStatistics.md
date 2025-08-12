@@ -4,7 +4,8 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**TimeBucket** | **time.Time** | Time bucket for the statistics | 
+**FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
+**ToTimestamp** | **time.Time** | End time of the statistics bucket | 
 **RecipientDomain** | Pointer to **string** | Recipient domain | [optional] 
 **AvgDeliveryTime** | **float32** | Average delivery time in seconds | 
 **MedianDeliveryTime** | Pointer to **float32** | Median delivery time in seconds | [optional] 
@@ -14,7 +15,7 @@ Name | Type | Description | Notes
 
 ### NewDeliveryTimeStatistics
 
-`func NewDeliveryTimeStatistics(timeBucket time.Time, avgDeliveryTime float32, count int32, ) *DeliveryTimeStatistics`
+`func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float32, count int32, ) *DeliveryTimeStatistics`
 
 NewDeliveryTimeStatistics instantiates a new DeliveryTimeStatistics object
 This constructor will assign default values to properties that have it defined,
@@ -29,24 +30,44 @@ NewDeliveryTimeStatisticsWithDefaults instantiates a new DeliveryTimeStatistics 
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
-### GetTimeBucket
+### GetFromTimestamp
 
-`func (o *DeliveryTimeStatistics) GetTimeBucket() time.Time`
+`func (o *DeliveryTimeStatistics) GetFromTimestamp() time.Time`
 
-GetTimeBucket returns the TimeBucket field if non-nil, zero value otherwise.
+GetFromTimestamp returns the FromTimestamp field if non-nil, zero value otherwise.
 
-### GetTimeBucketOk
+### GetFromTimestampOk
 
-`func (o *DeliveryTimeStatistics) GetTimeBucketOk() (*time.Time, bool)`
+`func (o *DeliveryTimeStatistics) GetFromTimestampOk() (*time.Time, bool)`
 
-GetTimeBucketOk returns a tuple with the TimeBucket field if it's non-nil, zero value otherwise
+GetFromTimestampOk returns a tuple with the FromTimestamp field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetTimeBucket
+### SetFromTimestamp
 
-`func (o *DeliveryTimeStatistics) SetTimeBucket(v time.Time)`
+`func (o *DeliveryTimeStatistics) SetFromTimestamp(v time.Time)`
 
-SetTimeBucket sets TimeBucket field to given value.
+SetFromTimestamp sets FromTimestamp field to given value.
+
+
+### GetToTimestamp
+
+`func (o *DeliveryTimeStatistics) GetToTimestamp() time.Time`
+
+GetToTimestamp returns the ToTimestamp field if non-nil, zero value otherwise.
+
+### GetToTimestampOk
+
+`func (o *DeliveryTimeStatistics) GetToTimestampOk() (*time.Time, bool)`
+
+GetToTimestampOk returns a tuple with the ToTimestamp field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetToTimestamp
+
+`func (o *DeliveryTimeStatistics) SetToTimestamp(v time.Time)`
+
+SetToTimestamp sets ToTimestamp field to given value.
 
 
 ### GetRecipientDomain

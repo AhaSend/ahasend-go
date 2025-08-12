@@ -4,7 +4,8 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**TimeBucket** | **time.Time** | Time bucket for the statistics | 
+**FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
+**ToTimestamp** | **time.Time** | End time of the statistics bucket | 
 **Classification** | **string** | Bounce classification | 
 **Count** | **int32** | Number of bounces | 
 
@@ -12,7 +13,7 @@ Name | Type | Description | Notes
 
 ### NewBounceStatistics
 
-`func NewBounceStatistics(timeBucket time.Time, classification string, count int32, ) *BounceStatistics`
+`func NewBounceStatistics(fromTimestamp time.Time, toTimestamp time.Time, classification string, count int32, ) *BounceStatistics`
 
 NewBounceStatistics instantiates a new BounceStatistics object
 This constructor will assign default values to properties that have it defined,
@@ -27,24 +28,44 @@ NewBounceStatisticsWithDefaults instantiates a new BounceStatistics object
 This constructor will only assign default values to properties that have it defined,
 but it doesn't guarantee that properties required by API are set
 
-### GetTimeBucket
+### GetFromTimestamp
 
-`func (o *BounceStatistics) GetTimeBucket() time.Time`
+`func (o *BounceStatistics) GetFromTimestamp() time.Time`
 
-GetTimeBucket returns the TimeBucket field if non-nil, zero value otherwise.
+GetFromTimestamp returns the FromTimestamp field if non-nil, zero value otherwise.
 
-### GetTimeBucketOk
+### GetFromTimestampOk
 
-`func (o *BounceStatistics) GetTimeBucketOk() (*time.Time, bool)`
+`func (o *BounceStatistics) GetFromTimestampOk() (*time.Time, bool)`
 
-GetTimeBucketOk returns a tuple with the TimeBucket field if it's non-nil, zero value otherwise
+GetFromTimestampOk returns a tuple with the FromTimestamp field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetTimeBucket
+### SetFromTimestamp
 
-`func (o *BounceStatistics) SetTimeBucket(v time.Time)`
+`func (o *BounceStatistics) SetFromTimestamp(v time.Time)`
 
-SetTimeBucket sets TimeBucket field to given value.
+SetFromTimestamp sets FromTimestamp field to given value.
+
+
+### GetToTimestamp
+
+`func (o *BounceStatistics) GetToTimestamp() time.Time`
+
+GetToTimestamp returns the ToTimestamp field if non-nil, zero value otherwise.
+
+### GetToTimestampOk
+
+`func (o *BounceStatistics) GetToTimestampOk() (*time.Time, bool)`
+
+GetToTimestampOk returns a tuple with the ToTimestamp field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetToTimestamp
+
+`func (o *BounceStatistics) SetToTimestamp(v time.Time)`
+
+SetToTimestamp sets ToTimestamp field to given value.
 
 
 ### GetClassification

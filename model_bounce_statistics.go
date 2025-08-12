@@ -11,8 +11,10 @@ var _ MappedNullable = &BounceStatistics{}
 
 // BounceStatistics struct for BounceStatistics
 type BounceStatistics struct {
-	// Time bucket for the statistics
-	TimeBucket time.Time `json:"time_bucket"`
+	// Start time of the statistics bucket
+	FromTimestamp time.Time `json:"from_timestamp"`
+	// End time of the statistics bucket
+	ToTimestamp time.Time `json:"to_timestamp"`
 	// Bounce classification
 	Classification string `json:"classification"`
 	// Number of bounces
@@ -26,9 +28,10 @@ type _BounceStatistics BounceStatistics
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewBounceStatistics(timeBucket time.Time, classification string, count int32) *BounceStatistics {
+func NewBounceStatistics(fromTimestamp time.Time, toTimestamp time.Time, classification string, count int32) *BounceStatistics {
 	this := BounceStatistics{}
-	this.TimeBucket = timeBucket
+	this.FromTimestamp = fromTimestamp
+	this.ToTimestamp = toTimestamp
 	this.Classification = classification
 	this.Count = count
 	return &this
@@ -42,28 +45,52 @@ func NewBounceStatisticsWithDefaults() *BounceStatistics {
 	return &this
 }
 
-// GetTimeBucket returns the TimeBucket field value
-func (o *BounceStatistics) GetTimeBucket() time.Time {
+// GetFromTimestamp returns the FromTimestamp field value
+func (o *BounceStatistics) GetFromTimestamp() time.Time {
 	if o == nil {
 		var ret time.Time
 		return ret
 	}
 
-	return o.TimeBucket
+	return o.FromTimestamp
 }
 
-// GetTimeBucketOk returns a tuple with the TimeBucket field value
+// GetFromTimestampOk returns a tuple with the FromTimestamp field value
 // and a boolean to check if the value has been set.
-func (o *BounceStatistics) GetTimeBucketOk() (*time.Time, bool) {
+func (o *BounceStatistics) GetFromTimestampOk() (*time.Time, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.TimeBucket, true
+	return &o.FromTimestamp, true
 }
 
-// SetTimeBucket sets field value
-func (o *BounceStatistics) SetTimeBucket(v time.Time) {
-	o.TimeBucket = v
+// SetFromTimestamp sets field value
+func (o *BounceStatistics) SetFromTimestamp(v time.Time) {
+	o.FromTimestamp = v
+}
+
+// GetToTimestamp returns the ToTimestamp field value
+func (o *BounceStatistics) GetToTimestamp() time.Time {
+	if o == nil {
+		var ret time.Time
+		return ret
+	}
+
+	return o.ToTimestamp
+}
+
+// GetToTimestampOk returns a tuple with the ToTimestamp field value
+// and a boolean to check if the value has been set.
+func (o *BounceStatistics) GetToTimestampOk() (*time.Time, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ToTimestamp, true
+}
+
+// SetToTimestamp sets field value
+func (o *BounceStatistics) SetToTimestamp(v time.Time) {
+	o.ToTimestamp = v
 }
 
 // GetClassification returns the Classification field value
@@ -124,7 +151,8 @@ func (o BounceStatistics) MarshalJSON() ([]byte, error) {
 
 func (o BounceStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["time_bucket"] = o.TimeBucket
+	toSerialize["from_timestamp"] = o.FromTimestamp
+	toSerialize["to_timestamp"] = o.ToTimestamp
 	toSerialize["classification"] = o.Classification
 	toSerialize["count"] = o.Count
 
@@ -140,7 +168,8 @@ func (o *BounceStatistics) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"time_bucket",
+		"from_timestamp",
+		"to_timestamp",
 		"classification",
 		"count",
 	}
@@ -172,7 +201,8 @@ func (o *BounceStatistics) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "time_bucket")
+		delete(additionalProperties, "from_timestamp")
+		delete(additionalProperties, "to_timestamp")
 		delete(additionalProperties, "classification")
 		delete(additionalProperties, "count")
 		o.AdditionalProperties = additionalProperties

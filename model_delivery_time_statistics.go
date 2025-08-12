@@ -11,8 +11,10 @@ var _ MappedNullable = &DeliveryTimeStatistics{}
 
 // DeliveryTimeStatistics struct for DeliveryTimeStatistics
 type DeliveryTimeStatistics struct {
-	// Time bucket for the statistics
-	TimeBucket time.Time `json:"time_bucket"`
+	// Start time of the statistics bucket
+	FromTimestamp time.Time `json:"from_timestamp"`
+	// End time of the statistics bucket
+	ToTimestamp time.Time `json:"to_timestamp"`
 	// Recipient domain
 	RecipientDomain *string `json:"recipient_domain,omitempty"`
 	// Average delivery time in seconds
@@ -30,9 +32,10 @@ type _DeliveryTimeStatistics DeliveryTimeStatistics
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewDeliveryTimeStatistics(timeBucket time.Time, avgDeliveryTime float32, count int32) *DeliveryTimeStatistics {
+func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float32, count int32) *DeliveryTimeStatistics {
 	this := DeliveryTimeStatistics{}
-	this.TimeBucket = timeBucket
+	this.FromTimestamp = fromTimestamp
+	this.ToTimestamp = toTimestamp
 	this.AvgDeliveryTime = avgDeliveryTime
 	this.Count = count
 	return &this
@@ -46,28 +49,52 @@ func NewDeliveryTimeStatisticsWithDefaults() *DeliveryTimeStatistics {
 	return &this
 }
 
-// GetTimeBucket returns the TimeBucket field value
-func (o *DeliveryTimeStatistics) GetTimeBucket() time.Time {
+// GetFromTimestamp returns the FromTimestamp field value
+func (o *DeliveryTimeStatistics) GetFromTimestamp() time.Time {
 	if o == nil {
 		var ret time.Time
 		return ret
 	}
 
-	return o.TimeBucket
+	return o.FromTimestamp
 }
 
-// GetTimeBucketOk returns a tuple with the TimeBucket field value
+// GetFromTimestampOk returns a tuple with the FromTimestamp field value
 // and a boolean to check if the value has been set.
-func (o *DeliveryTimeStatistics) GetTimeBucketOk() (*time.Time, bool) {
+func (o *DeliveryTimeStatistics) GetFromTimestampOk() (*time.Time, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.TimeBucket, true
+	return &o.FromTimestamp, true
 }
 
-// SetTimeBucket sets field value
-func (o *DeliveryTimeStatistics) SetTimeBucket(v time.Time) {
-	o.TimeBucket = v
+// SetFromTimestamp sets field value
+func (o *DeliveryTimeStatistics) SetFromTimestamp(v time.Time) {
+	o.FromTimestamp = v
+}
+
+// GetToTimestamp returns the ToTimestamp field value
+func (o *DeliveryTimeStatistics) GetToTimestamp() time.Time {
+	if o == nil {
+		var ret time.Time
+		return ret
+	}
+
+	return o.ToTimestamp
+}
+
+// GetToTimestampOk returns a tuple with the ToTimestamp field value
+// and a boolean to check if the value has been set.
+func (o *DeliveryTimeStatistics) GetToTimestampOk() (*time.Time, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ToTimestamp, true
+}
+
+// SetToTimestamp sets field value
+func (o *DeliveryTimeStatistics) SetToTimestamp(v time.Time) {
+	o.ToTimestamp = v
 }
 
 // GetRecipientDomain returns the RecipientDomain field value if set, zero value otherwise.
@@ -192,7 +219,8 @@ func (o DeliveryTimeStatistics) MarshalJSON() ([]byte, error) {
 
 func (o DeliveryTimeStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["time_bucket"] = o.TimeBucket
+	toSerialize["from_timestamp"] = o.FromTimestamp
+	toSerialize["to_timestamp"] = o.ToTimestamp
 	if !IsNil(o.RecipientDomain) {
 		toSerialize["recipient_domain"] = o.RecipientDomain
 	}
@@ -214,7 +242,8 @@ func (o *DeliveryTimeStatistics) UnmarshalJSON(data []byte) (err error) {
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"time_bucket",
+		"from_timestamp",
+		"to_timestamp",
 		"avg_delivery_time",
 		"count",
 	}
@@ -246,7 +275,8 @@ func (o *DeliveryTimeStatistics) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "time_bucket")
+		delete(additionalProperties, "from_timestamp")
+		delete(additionalProperties, "to_timestamp")
 		delete(additionalProperties, "recipient_domain")
 		delete(additionalProperties, "avg_delivery_time")
 		delete(additionalProperties, "median_delivery_time")
