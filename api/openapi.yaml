@@ -4147,7 +4147,7 @@ paths:
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
         - `sender_domain`: Filter by sender domain
-        - `recipient_domain`: Filter by recipient domain
+        - `recipient_domains`: Filter by recipient domain
         - `tags`: Filter by tags (comma-separated)
         - `group_by`: Group by time period (hour, day, week, month)
       operationId: getDeliverabilityStatistics
@@ -4178,11 +4178,12 @@ paths:
           description: Filter by sender domain
           schema:
             type: string
-        - name: recipient_domain
+        - name: recipient_domains
           in: query
-          description: Filter by recipient domain
+          description: Filter by a comma separated list of recipient domains
           schema:
             type: string
+          example: gmail.com,googlemail.com
         - name: tags
           in: query
           description: Filter by tags (comma-separated)
@@ -4245,7 +4246,7 @@ paths:
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
         - `sender_domain`: Filter by sender domain
-        - `recipient_domain`: Filter by recipient domain
+        - `recipient_domains`: Filter by recipient domain
         - `tags`: Filter by tags (comma-separated)
         - `group_by`: Group by time period (hour, day, week, month)
       operationId: getBounceStatistics
@@ -4276,11 +4277,12 @@ paths:
           description: Filter by sender domain
           schema:
             type: string
-        - name: recipient_domain
+        - name: recipient_domains
           in: query
-          description: Filter by recipient domain
+          description: Filter by a comma separated list of recipient domains
           schema:
             type: string
+          example: gmail.com,googlemail.com
         - name: tags
           in: query
           description: Filter by tags (comma-separated)
@@ -4343,6 +4345,7 @@ paths:
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
         - `sender_domain`: Filter by sender domain
+        - `recipient_domains`: Filter by recipient domains
         - `tags`: Filter by tags (comma-separated)
         - `group_by`: Group by time period (hour, day, week, month)
       operationId: getDeliveryTimeStatistics
@@ -4373,6 +4376,12 @@ paths:
           description: Filter by sender domain
           schema:
             type: string
+        - name: recipient_domains
+          in: query
+          description: Filter by a comma separated list of recipient domains
+          schema:
+            type: string
+          example: gmail.com,googlemail.com
         - name: tags
           in: query
           description: Filter by tags (comma-separated)

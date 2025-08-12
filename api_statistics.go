@@ -16,15 +16,15 @@ import (
 type StatisticsAPIService service
 
 type ApiGetBounceStatisticsRequest struct {
-	ctx             context.Context
-	ApiService      *StatisticsAPIService
-	accountId       uuid.UUID
-	fromTime        *time.Time
-	toTime          *time.Time
-	senderDomain    *string
-	recipientDomain *string
-	tags            *string
-	groupBy         *string
+	ctx              context.Context
+	ApiService       *StatisticsAPIService
+	accountId        uuid.UUID
+	fromTime         *time.Time
+	toTime           *time.Time
+	senderDomain     *string
+	recipientDomains *string
+	tags             *string
+	groupBy          *string
 }
 
 // Filter statistics after this datetime (RFC3339 format)
@@ -45,9 +45,9 @@ func (r ApiGetBounceStatisticsRequest) SenderDomain(senderDomain string) ApiGetB
 	return r
 }
 
-// Filter by recipient domain
-func (r ApiGetBounceStatisticsRequest) RecipientDomain(recipientDomain string) ApiGetBounceStatisticsRequest {
-	r.recipientDomain = &recipientDomain
+// Filter by a comma separated list of recipient domains
+func (r ApiGetBounceStatisticsRequest) RecipientDomains(recipientDomains string) ApiGetBounceStatisticsRequest {
+	r.recipientDomains = &recipientDomains
 	return r
 }
 
@@ -76,7 +76,7 @@ GetBounceStatistics Get Bounce Statistics
 - `from_time`: Filter statistics after this datetime (RFC3339 format)
 - `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
-- `recipient_domain`: Filter by recipient domain
+- `recipient_domains`: Filter by a comma separated list of recipient domains
 - `tags`: Filter by tags (comma-separated)
 - `group_by`: Group by time period (hour, day, week, month)
 
@@ -124,8 +124,8 @@ func (a *StatisticsAPIService) GetBounceStatisticsExecute(r ApiGetBounceStatisti
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")
 	}
-	if r.recipientDomain != nil {
-		parameterAddToHeaderOrQuery(params, "recipient_domain", r.recipientDomain, "form", "")
+	if r.recipientDomains != nil {
+		parameterAddToHeaderOrQuery(params, "recipient_domains", r.recipientDomains, "form", "")
 	}
 	if r.tags != nil {
 		parameterAddToHeaderOrQuery(params, "tags", r.tags, "form", "")
@@ -245,15 +245,15 @@ func (a *StatisticsAPIService) GetBounceStatisticsExecute(r ApiGetBounceStatisti
 }
 
 type ApiGetDeliverabilityStatisticsRequest struct {
-	ctx             context.Context
-	ApiService      *StatisticsAPIService
-	accountId       uuid.UUID
-	fromTime        *time.Time
-	toTime          *time.Time
-	senderDomain    *string
-	recipientDomain *string
-	tags            *string
-	groupBy         *string
+	ctx              context.Context
+	ApiService       *StatisticsAPIService
+	accountId        uuid.UUID
+	fromTime         *time.Time
+	toTime           *time.Time
+	senderDomain     *string
+	recipientDomains *string
+	tags             *string
+	groupBy          *string
 }
 
 // Filter statistics after this datetime (RFC3339 format)
@@ -274,9 +274,9 @@ func (r ApiGetDeliverabilityStatisticsRequest) SenderDomain(senderDomain string)
 	return r
 }
 
-// Filter by recipient domain
-func (r ApiGetDeliverabilityStatisticsRequest) RecipientDomain(recipientDomain string) ApiGetDeliverabilityStatisticsRequest {
-	r.recipientDomain = &recipientDomain
+// Filter by a comma separated list of recipient domains
+func (r ApiGetDeliverabilityStatisticsRequest) RecipientDomains(recipientDomains string) ApiGetDeliverabilityStatisticsRequest {
+	r.recipientDomains = &recipientDomains
 	return r
 }
 
@@ -305,7 +305,7 @@ GetDeliverabilityStatistics Get Deliverability Statistics
 - `from_time`: Filter statistics after this datetime (RFC3339 format)
 - `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
-- `recipient_domain`: Filter by recipient domain
+- `recipient_domains`: Filter by a comma separated list of recipient domains
 - `tags`: Filter by tags (comma-separated)
 - `group_by`: Group by time period (hour, day, week, month)
 
@@ -353,8 +353,8 @@ func (a *StatisticsAPIService) GetDeliverabilityStatisticsExecute(r ApiGetDelive
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")
 	}
-	if r.recipientDomain != nil {
-		parameterAddToHeaderOrQuery(params, "recipient_domain", r.recipientDomain, "form", "")
+	if r.recipientDomains != nil {
+		parameterAddToHeaderOrQuery(params, "recipient_domains", r.recipientDomains, "form", "")
 	}
 	if r.tags != nil {
 		parameterAddToHeaderOrQuery(params, "tags", r.tags, "form", "")
@@ -474,14 +474,15 @@ func (a *StatisticsAPIService) GetDeliverabilityStatisticsExecute(r ApiGetDelive
 }
 
 type ApiGetDeliveryTimeStatisticsRequest struct {
-	ctx          context.Context
-	ApiService   *StatisticsAPIService
-	accountId    uuid.UUID
-	fromTime     *time.Time
-	toTime       *time.Time
-	senderDomain *string
-	tags         *string
-	groupBy      *string
+	ctx              context.Context
+	ApiService       *StatisticsAPIService
+	accountId        uuid.UUID
+	fromTime         *time.Time
+	toTime           *time.Time
+	senderDomain     *string
+	recipientDomains *string
+	tags             *string
+	groupBy          *string
 }
 
 // Filter statistics after this datetime (RFC3339 format)
@@ -499,6 +500,12 @@ func (r ApiGetDeliveryTimeStatisticsRequest) ToTime(toTime time.Time) ApiGetDeli
 // Filter by sender domain
 func (r ApiGetDeliveryTimeStatisticsRequest) SenderDomain(senderDomain string) ApiGetDeliveryTimeStatisticsRequest {
 	r.senderDomain = &senderDomain
+	return r
+}
+
+// Filter by a comma separated list of recipient domains
+func (r ApiGetDeliveryTimeStatisticsRequest) RecipientDomains(recipientDomains string) ApiGetDeliveryTimeStatisticsRequest {
+	r.recipientDomains = &recipientDomains
 	return r
 }
 
@@ -527,6 +534,7 @@ GetDeliveryTimeStatistics Get Delivery Time Statistics
 - `from_time`: Filter statistics after this datetime (RFC3339 format)
 - `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
+- `recipient_domains`: Filter by a comma separated list of recipient domains
 - `tags`: Filter by tags (comma-separated)
 - `group_by`: Group by time period (hour, day, week, month)
 
@@ -573,6 +581,9 @@ func (a *StatisticsAPIService) GetDeliveryTimeStatisticsExecute(r ApiGetDelivery
 	}
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")
+	}
+	if r.recipientDomains != nil {
+		parameterAddToHeaderOrQuery(params, "recipient_domains", r.recipientDomains, "form", "")
 	}
 	if r.tags != nil {
 		parameterAddToHeaderOrQuery(params, "tags", r.tags, "form", "")
