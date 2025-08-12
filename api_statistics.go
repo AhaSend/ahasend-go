@@ -19,23 +19,23 @@ type ApiGetBounceStatisticsRequest struct {
 	ctx             context.Context
 	ApiService      *StatisticsAPIService
 	accountId       uuid.UUID
-	fromDate        *time.Time
-	toDate          *time.Time
+	fromTime        *time.Time
+	toTime          *time.Time
 	senderDomain    *string
 	recipientDomain *string
 	tags            *string
 	groupBy         *string
 }
 
-// Filter statistics after this date (RFC3339 format)
-func (r ApiGetBounceStatisticsRequest) FromDate(fromDate time.Time) ApiGetBounceStatisticsRequest {
-	r.fromDate = &fromDate
+// Filter statistics after this datetime (RFC3339 format)
+func (r ApiGetBounceStatisticsRequest) FromTime(fromTime time.Time) ApiGetBounceStatisticsRequest {
+	r.fromTime = &fromTime
 	return r
 }
 
-// Filter statistics before this date (RFC3339 format)
-func (r ApiGetBounceStatisticsRequest) ToDate(toDate time.Time) ApiGetBounceStatisticsRequest {
-	r.toDate = &toDate
+// Filter statistics before this datetime (RFC3339 format)
+func (r ApiGetBounceStatisticsRequest) ToTime(toTime time.Time) ApiGetBounceStatisticsRequest {
+	r.toTime = &toTime
 	return r
 }
 
@@ -73,8 +73,8 @@ GetBounceStatistics Get Bounce Statistics
 # Returns transactional bounce statistics grouped by classification
 
 **Query Parameters:**
-- `from_date`: Filter statistics after this date (RFC3339 format)
-- `to_date`: Filter statistics before this date (RFC3339 format)
+- `from_time`: Filter statistics after this datetime (RFC3339 format)
+- `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
 - `recipient_domain`: Filter by recipient domain
 - `tags`: Filter by tags (comma-separated)
@@ -115,11 +115,11 @@ func (a *StatisticsAPIService) GetBounceStatisticsExecute(r ApiGetBounceStatisti
 	params := url.Values{}
 	formParams := url.Values{}
 
-	if r.fromDate != nil {
-		parameterAddToHeaderOrQuery(params, "from_date", r.fromDate, "form", "")
+	if r.fromTime != nil {
+		parameterAddToHeaderOrQuery(params, "from_time", r.fromTime, "form", "")
 	}
-	if r.toDate != nil {
-		parameterAddToHeaderOrQuery(params, "to_date", r.toDate, "form", "")
+	if r.toTime != nil {
+		parameterAddToHeaderOrQuery(params, "to_time", r.toTime, "form", "")
 	}
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")
@@ -248,23 +248,23 @@ type ApiGetDeliverabilityStatisticsRequest struct {
 	ctx             context.Context
 	ApiService      *StatisticsAPIService
 	accountId       uuid.UUID
-	fromDate        *time.Time
-	toDate          *time.Time
+	fromTime        *time.Time
+	toTime          *time.Time
 	senderDomain    *string
 	recipientDomain *string
 	tags            *string
 	groupBy         *string
 }
 
-// Filter statistics after this date (RFC3339 format)
-func (r ApiGetDeliverabilityStatisticsRequest) FromDate(fromDate time.Time) ApiGetDeliverabilityStatisticsRequest {
-	r.fromDate = &fromDate
+// Filter statistics after this datetime (RFC3339 format)
+func (r ApiGetDeliverabilityStatisticsRequest) FromTime(fromTime time.Time) ApiGetDeliverabilityStatisticsRequest {
+	r.fromTime = &fromTime
 	return r
 }
 
-// Filter statistics before this date (RFC3339 format)
-func (r ApiGetDeliverabilityStatisticsRequest) ToDate(toDate time.Time) ApiGetDeliverabilityStatisticsRequest {
-	r.toDate = &toDate
+// Filter statistics before this datetime (RFC3339 format)
+func (r ApiGetDeliverabilityStatisticsRequest) ToTime(toTime time.Time) ApiGetDeliverabilityStatisticsRequest {
+	r.toTime = &toTime
 	return r
 }
 
@@ -302,8 +302,8 @@ GetDeliverabilityStatistics Get Deliverability Statistics
 # Returns transactional deliverability statistics grouped by status
 
 **Query Parameters:**
-- `from_date`: Filter statistics after this date (RFC3339 format)
-- `to_date`: Filter statistics before this date (RFC3339 format)
+- `from_time`: Filter statistics after this datetime (RFC3339 format)
+- `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
 - `recipient_domain`: Filter by recipient domain
 - `tags`: Filter by tags (comma-separated)
@@ -344,11 +344,11 @@ func (a *StatisticsAPIService) GetDeliverabilityStatisticsExecute(r ApiGetDelive
 	params := url.Values{}
 	formParams := url.Values{}
 
-	if r.fromDate != nil {
-		parameterAddToHeaderOrQuery(params, "from_date", r.fromDate, "form", "")
+	if r.fromTime != nil {
+		parameterAddToHeaderOrQuery(params, "from_time", r.fromTime, "form", "")
 	}
-	if r.toDate != nil {
-		parameterAddToHeaderOrQuery(params, "to_date", r.toDate, "form", "")
+	if r.toTime != nil {
+		parameterAddToHeaderOrQuery(params, "to_time", r.toTime, "form", "")
 	}
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")
@@ -477,22 +477,22 @@ type ApiGetDeliveryTimeStatisticsRequest struct {
 	ctx          context.Context
 	ApiService   *StatisticsAPIService
 	accountId    uuid.UUID
-	fromDate     *time.Time
-	toDate       *time.Time
+	fromTime     *time.Time
+	toTime       *time.Time
 	senderDomain *string
 	tags         *string
 	groupBy      *string
 }
 
-// Filter statistics after this date (RFC3339 format)
-func (r ApiGetDeliveryTimeStatisticsRequest) FromDate(fromDate time.Time) ApiGetDeliveryTimeStatisticsRequest {
-	r.fromDate = &fromDate
+// Filter statistics after this datetime (RFC3339 format)
+func (r ApiGetDeliveryTimeStatisticsRequest) FromTime(fromTime time.Time) ApiGetDeliveryTimeStatisticsRequest {
+	r.fromTime = &fromTime
 	return r
 }
 
-// Filter statistics before this date (RFC3339 format)
-func (r ApiGetDeliveryTimeStatisticsRequest) ToDate(toDate time.Time) ApiGetDeliveryTimeStatisticsRequest {
-	r.toDate = &toDate
+// Filter statistics before this datetime (RFC3339 format)
+func (r ApiGetDeliveryTimeStatisticsRequest) ToTime(toTime time.Time) ApiGetDeliveryTimeStatisticsRequest {
+	r.toTime = &toTime
 	return r
 }
 
@@ -524,8 +524,8 @@ GetDeliveryTimeStatistics Get Delivery Time Statistics
 # Returns transactional delivery time statistics grouped by recipient domain
 
 **Query Parameters:**
-- `from_date`: Filter statistics after this date (RFC3339 format)
-- `to_date`: Filter statistics before this date (RFC3339 format)
+- `from_time`: Filter statistics after this datetime (RFC3339 format)
+- `to_time`: Filter statistics before this datetime (RFC3339 format)
 - `sender_domain`: Filter by sender domain
 - `tags`: Filter by tags (comma-separated)
 - `group_by`: Group by time period (hour, day, week, month)
@@ -565,11 +565,11 @@ func (a *StatisticsAPIService) GetDeliveryTimeStatisticsExecute(r ApiGetDelivery
 	params := url.Values{}
 	formParams := url.Values{}
 
-	if r.fromDate != nil {
-		parameterAddToHeaderOrQuery(params, "from_date", r.fromDate, "form", "")
+	if r.fromTime != nil {
+		parameterAddToHeaderOrQuery(params, "from_time", r.fromTime, "form", "")
 	}
-	if r.toDate != nil {
-		parameterAddToHeaderOrQuery(params, "to_date", r.toDate, "form", "")
+	if r.toTime != nil {
+		parameterAddToHeaderOrQuery(params, "to_time", r.toTime, "form", "")
 	}
 	if r.senderDomain != nil {
 		parameterAddToHeaderOrQuery(params, "sender_domain", r.senderDomain, "form", "")

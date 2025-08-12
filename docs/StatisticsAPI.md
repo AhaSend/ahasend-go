@@ -12,7 +12,7 @@ Method | HTTP request | Description
 
 ## GetBounceStatistics
 
-> BounceStatisticsResponse GetBounceStatistics(ctx, accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
+> BounceStatisticsResponse GetBounceStatistics(ctx, accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
 
 Get Bounce Statistics
 
@@ -33,8 +33,8 @@ import (
 
 func main() {
 	accountId := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // uuid.UUID | Account ID
-	fromDate := time.Now() // time.Time | Filter statistics after this date (RFC3339 format) (optional)
-	toDate := time.Now() // time.Time | Filter statistics before this date (RFC3339 format) (optional)
+	fromTime := time.Now() // time.Time | Filter statistics after this datetime (RFC3339 format) (optional)
+	toTime := time.Now() // time.Time | Filter statistics before this datetime (RFC3339 format) (optional)
 	senderDomain := "senderDomain_example" // string | Filter by sender domain (optional)
 	recipientDomain := "recipientDomain_example" // string | Filter by recipient domain (optional)
 	tags := "tags_example" // string | Filter by tags (comma-separated) (optional)
@@ -42,7 +42,7 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.StatisticsAPI.GetBounceStatistics(context.Background(), accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
+	resp, r, err := apiClient.StatisticsAPI.GetBounceStatistics(context.Background(), accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `StatisticsAPI.GetBounceStatistics``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -68,8 +68,8 @@ Other parameters are passed through a pointer to a apiGetBounceStatisticsRequest
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **fromDate** | **time.Time** | Filter statistics after this date (RFC3339 format) | 
- **toDate** | **time.Time** | Filter statistics before this date (RFC3339 format) | 
+ **fromTime** | **time.Time** | Filter statistics after this datetime (RFC3339 format) | 
+ **toTime** | **time.Time** | Filter statistics before this datetime (RFC3339 format) | 
  **senderDomain** | **string** | Filter by sender domain | 
  **recipientDomain** | **string** | Filter by recipient domain | 
  **tags** | **string** | Filter by tags (comma-separated) | 
@@ -95,7 +95,7 @@ Name | Type | Description  | Notes
 
 ## GetDeliverabilityStatistics
 
-> DeliverabilityStatisticsResponse GetDeliverabilityStatistics(ctx, accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
+> DeliverabilityStatisticsResponse GetDeliverabilityStatistics(ctx, accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
 
 Get Deliverability Statistics
 
@@ -116,8 +116,8 @@ import (
 
 func main() {
 	accountId := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // uuid.UUID | Account ID
-	fromDate := time.Now() // time.Time | Filter statistics after this date (RFC3339 format) (optional)
-	toDate := time.Now() // time.Time | Filter statistics before this date (RFC3339 format) (optional)
+	fromTime := time.Now() // time.Time | Filter statistics after this datetime (RFC3339 format) (optional)
+	toTime := time.Now() // time.Time | Filter statistics before this datetime (RFC3339 format) (optional)
 	senderDomain := "senderDomain_example" // string | Filter by sender domain (optional)
 	recipientDomain := "recipientDomain_example" // string | Filter by recipient domain (optional)
 	tags := "tags_example" // string | Filter by tags (comma-separated) (optional)
@@ -125,7 +125,7 @@ func main() {
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.StatisticsAPI.GetDeliverabilityStatistics(context.Background(), accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
+	resp, r, err := apiClient.StatisticsAPI.GetDeliverabilityStatistics(context.Background(), accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).RecipientDomain(recipientDomain).Tags(tags).GroupBy(groupBy).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `StatisticsAPI.GetDeliverabilityStatistics``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -151,8 +151,8 @@ Other parameters are passed through a pointer to a apiGetDeliverabilityStatistic
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **fromDate** | **time.Time** | Filter statistics after this date (RFC3339 format) | 
- **toDate** | **time.Time** | Filter statistics before this date (RFC3339 format) | 
+ **fromTime** | **time.Time** | Filter statistics after this datetime (RFC3339 format) | 
+ **toTime** | **time.Time** | Filter statistics before this datetime (RFC3339 format) | 
  **senderDomain** | **string** | Filter by sender domain | 
  **recipientDomain** | **string** | Filter by recipient domain | 
  **tags** | **string** | Filter by tags (comma-separated) | 
@@ -178,7 +178,7 @@ Name | Type | Description  | Notes
 
 ## GetDeliveryTimeStatistics
 
-> DeliveryTimeStatisticsResponse GetDeliveryTimeStatistics(ctx, accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).Tags(tags).GroupBy(groupBy).Execute()
+> DeliveryTimeStatisticsResponse GetDeliveryTimeStatistics(ctx, accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).Tags(tags).GroupBy(groupBy).Execute()
 
 Get Delivery Time Statistics
 
@@ -199,15 +199,15 @@ import (
 
 func main() {
 	accountId := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // uuid.UUID | Account ID
-	fromDate := time.Now() // time.Time | Filter statistics after this date (RFC3339 format) (optional)
-	toDate := time.Now() // time.Time | Filter statistics before this date (RFC3339 format) (optional)
+	fromTime := time.Now() // time.Time | Filter statistics after this datetime (RFC3339 format) (optional)
+	toTime := time.Now() // time.Time | Filter statistics before this datetime (RFC3339 format) (optional)
 	senderDomain := "senderDomain_example" // string | Filter by sender domain (optional)
 	tags := "tags_example" // string | Filter by tags (comma-separated) (optional)
 	groupBy := "groupBy_example" // string | Group by time period (optional) (default to "day")
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.StatisticsAPI.GetDeliveryTimeStatistics(context.Background(), accountId).FromDate(fromDate).ToDate(toDate).SenderDomain(senderDomain).Tags(tags).GroupBy(groupBy).Execute()
+	resp, r, err := apiClient.StatisticsAPI.GetDeliveryTimeStatistics(context.Background(), accountId).FromTime(fromTime).ToTime(toTime).SenderDomain(senderDomain).Tags(tags).GroupBy(groupBy).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `StatisticsAPI.GetDeliveryTimeStatistics``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -233,8 +233,8 @@ Other parameters are passed through a pointer to a apiGetDeliveryTimeStatisticsR
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
- **fromDate** | **time.Time** | Filter statistics after this date (RFC3339 format) | 
- **toDate** | **time.Time** | Filter statistics before this date (RFC3339 format) | 
+ **fromTime** | **time.Time** | Filter statistics after this datetime (RFC3339 format) | 
+ **toTime** | **time.Time** | Filter statistics before this datetime (RFC3339 format) | 
  **senderDomain** | **string** | Filter by sender domain | 
  **tags** | **string** | Filter by tags (comma-separated) | 
  **groupBy** | **string** | Group by time period | [default to &quot;day&quot;]
