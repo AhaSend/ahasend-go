@@ -233,7 +233,7 @@ Name | Type | Description  | Notes
 
 ## GetDomains
 
-> PaginatedDomainsResponse GetDomains(ctx, accountId).Limit(limit).Cursor(cursor).Execute()
+> PaginatedDomainsResponse GetDomains(ctx, accountId).DnsValid(dnsValid).Limit(limit).Cursor(cursor).Execute()
 
 Get Domains
 
@@ -253,12 +253,13 @@ import (
 
 func main() {
 	accountId := "38400000-8cf0-11bd-b23e-10b96e4ef00d" // uuid.UUID | Account ID
+	dnsValid := true // bool | Filter results by DNS validation status (optional)
 	limit := int32(56) // int32 | Maximum number of items to return (1-100) (optional) (default to 100)
 	cursor := "cursor_example" // string | Pagination cursor for the next page (optional)
 
 	configuration := openapiclient.NewConfiguration()
 	apiClient := openapiclient.NewAPIClient(configuration)
-	resp, r, err := apiClient.DomainsAPI.GetDomains(context.Background(), accountId).Limit(limit).Cursor(cursor).Execute()
+	resp, r, err := apiClient.DomainsAPI.GetDomains(context.Background(), accountId).DnsValid(dnsValid).Limit(limit).Cursor(cursor).Execute()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `DomainsAPI.GetDomains``: %v\n", err)
 		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -284,6 +285,7 @@ Other parameters are passed through a pointer to a apiGetDomainsRequest struct v
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
+ **dnsValid** | **bool** | Filter results by DNS validation status | 
  **limit** | **int32** | Maximum number of items to return (1-100) | [default to 100]
  **cursor** | **string** | Pagination cursor for the next page | 
 

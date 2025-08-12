@@ -532,8 +532,15 @@ type ApiGetDomainsRequest struct {
 	ctx        context.Context
 	ApiService *DomainsAPIService
 	accountId  uuid.UUID
+	dnsValid   *bool
 	limit      *int32
 	cursor     *string
+}
+
+// Filter results by DNS validation status
+func (r ApiGetDomainsRequest) DnsValid(dnsValid bool) ApiGetDomainsRequest {
+	r.dnsValid = &dnsValid
+	return r
 }
 
 // Maximum number of items to return (1-100)
@@ -592,6 +599,9 @@ func (a *DomainsAPIService) GetDomainsExecute(r ApiGetDomainsRequest) (*Paginate
 	params := url.Values{}
 	formParams := url.Values{}
 
+	if r.dnsValid != nil {
+		parameterAddToHeaderOrQuery(params, "dns_valid", r.dnsValid, "form", "")
+	}
 	if r.limit != nil {
 		parameterAddToHeaderOrQuery(params, "limit", r.limit, "form", "")
 	} else {
