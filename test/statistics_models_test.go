@@ -38,13 +38,15 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 	})
 
 	t.Run("BounceStatistics uses from_timestamp and to_timestamp", func(t *testing.T) {
-		stats := ahasend.NewBounceStatistics(fromTime, toTime, "hard", 10)
+		bounces := []ahasend.Bounce{*ahasend.NewBounce("hard", 10)}
+		stats := ahasend.NewBounceStatistics(fromTime, toTime, bounces)
 
 		// Test getters
 		assert.Equal(t, fromTime, stats.GetFromTimestamp())
 		assert.Equal(t, toTime, stats.GetToTimestamp())
-		assert.Equal(t, "hard", stats.GetClassification())
-		assert.Equal(t, int32(10), stats.GetCount())
+		assert.Equal(t, bounces, stats.GetBounces())
+		assert.Equal(t, "hard", stats.GetBounces()[0].GetClassification())
+		assert.Equal(t, int32(10), stats.GetBounces()[0].GetCount())
 
 		// Test JSON serialization contains correct fields
 		jsonBytes, err := json.Marshal(stats)
@@ -56,6 +58,7 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 
 		assert.Contains(t, jsonMap, "from_timestamp")
 		assert.Contains(t, jsonMap, "to_timestamp")
+		assert.Contains(t, jsonMap, "bounces")
 		assert.NotContains(t, jsonMap, "time_bucket", "Should not contain old time_bucket field")
 	})
 
@@ -110,16 +113,22 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 		jsonData := `{
 			"from_timestamp": "2024-01-01T12:00:00Z",
 			"to_timestamp": "2024-01-01T13:00:00Z",
-			"classification": "hard",
-			"count": 10
+			"bounces": [
+				{"classification": "hard", "count": 10},
+				{"classification": "soft", "count": 5}
+			]
 		}`
 
 		var stats ahasend.BounceStatistics
 		err := json.Unmarshal([]byte(jsonData), &stats)
 		require.NoError(t, err)
 
-		assert.Equal(t, "hard", stats.GetClassification())
-		assert.Equal(t, int32(10), stats.GetCount())
+		bounces := stats.GetBounces()
+		assert.Len(t, bounces, 2)
+		assert.Equal(t, "hard", bounces[0].GetClassification())
+		assert.Equal(t, int32(10), bounces[0].GetCount())
+		assert.Equal(t, "soft", bounces[1].GetClassification())
+		assert.Equal(t, int32(5), bounces[1].GetCount())
 	})
 
 	t.Run("DeliveryTimeStatistics JSON deserialization", func(t *testing.T) {

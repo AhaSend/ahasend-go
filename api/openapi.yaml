@@ -1631,6 +1631,18 @@ components:
             $ref: '#/components/schemas/DeliverabilityStatistics'
           description: Array of deliverability statistics
 
+    Bounce:
+      type: object
+      properties:
+        classification:
+          type: string
+          description: Bounce classification
+        count:
+          type: integer
+          description: Number of bounces
+      required:
+        - classification
+        - count
     BounceStatistics:
       type: object
       properties:
@@ -1642,17 +1654,15 @@ components:
           type: string
           format: date-time
           description: End time of the statistics bucket
-        classification:
-          type: string
-          description: Bounce classification
-        count:
-          type: integer
-          description: Number of bounces
+        bounces:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bounce'
+          description: Bounce count per bounce classification
       required:
         - from_timestamp
         - to_timestamp
-        - classification
-        - count
+        - bounces
 
     BounceStatisticsResponse:
       type: object

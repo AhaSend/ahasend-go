@@ -14,118 +14,90 @@ package ahasend
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 )
 
-// checks if the BounceStatistics type satisfies the MappedNullable interface at compile time
-var _ MappedNullable = &BounceStatistics{}
+// checks if the Bounce type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &Bounce{}
 
-// BounceStatistics struct for BounceStatistics
-type BounceStatistics struct {
-	// Start time of the statistics bucket
-	FromTimestamp time.Time `json:"from_timestamp"`
-	// End time of the statistics bucket
-	ToTimestamp time.Time `json:"to_timestamp"`
-	// Bounce count per bounce classification
-	Bounces              []Bounce `json:"bounces"`
+// Bounce struct for Bounce
+type Bounce struct {
+	// Bounce classification
+	Classification string `json:"classification"`
+	// Number of bounces
+	Count                int32 `json:"count"`
 	AdditionalProperties map[string]interface{}
 }
 
-type _BounceStatistics BounceStatistics
+type _Bounce Bounce
 
-// NewBounceStatistics instantiates a new BounceStatistics object
+// NewBounce instantiates a new Bounce object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewBounceStatistics(fromTimestamp time.Time, toTimestamp time.Time, bounces []Bounce) *BounceStatistics {
-	this := BounceStatistics{}
-	this.FromTimestamp = fromTimestamp
-	this.ToTimestamp = toTimestamp
-	this.Bounces = bounces
+func NewBounce(classification string, count int32) *Bounce {
+	this := Bounce{}
+	this.Classification = classification
+	this.Count = count
 	return &this
 }
 
-// NewBounceStatisticsWithDefaults instantiates a new BounceStatistics object
+// NewBounceWithDefaults instantiates a new Bounce object
 // This constructor will only assign default values to properties that have it defined,
 // but it doesn't guarantee that properties required by API are set
-func NewBounceStatisticsWithDefaults() *BounceStatistics {
-	this := BounceStatistics{}
+func NewBounceWithDefaults() *Bounce {
+	this := Bounce{}
 	return &this
 }
 
-// GetFromTimestamp returns the FromTimestamp field value
-func (o *BounceStatistics) GetFromTimestamp() time.Time {
+// GetClassification returns the Classification field value
+func (o *Bounce) GetClassification() string {
 	if o == nil {
-		var ret time.Time
+		var ret string
 		return ret
 	}
 
-	return o.FromTimestamp
+	return o.Classification
 }
 
-// GetFromTimestampOk returns a tuple with the FromTimestamp field value
+// GetClassificationOk returns a tuple with the Classification field value
 // and a boolean to check if the value has been set.
-func (o *BounceStatistics) GetFromTimestampOk() (*time.Time, bool) {
+func (o *Bounce) GetClassificationOk() (*string, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.FromTimestamp, true
+	return &o.Classification, true
 }
 
-// SetFromTimestamp sets field value
-func (o *BounceStatistics) SetFromTimestamp(v time.Time) {
-	o.FromTimestamp = v
+// SetClassification sets field value
+func (o *Bounce) SetClassification(v string) {
+	o.Classification = v
 }
 
-// GetToTimestamp returns the ToTimestamp field value
-func (o *BounceStatistics) GetToTimestamp() time.Time {
+// GetCount returns the Count field value
+func (o *Bounce) GetCount() int32 {
 	if o == nil {
-		var ret time.Time
+		var ret int32
 		return ret
 	}
 
-	return o.ToTimestamp
+	return o.Count
 }
 
-// GetToTimestampOk returns a tuple with the ToTimestamp field value
+// GetCountOk returns a tuple with the Count field value
 // and a boolean to check if the value has been set.
-func (o *BounceStatistics) GetToTimestampOk() (*time.Time, bool) {
+func (o *Bounce) GetCountOk() (*int32, bool) {
 	if o == nil {
 		return nil, false
 	}
-	return &o.ToTimestamp, true
+	return &o.Count, true
 }
 
-// SetToTimestamp sets field value
-func (o *BounceStatistics) SetToTimestamp(v time.Time) {
-	o.ToTimestamp = v
+// SetCount sets field value
+func (o *Bounce) SetCount(v int32) {
+	o.Count = v
 }
 
-// GetBounces returns the Bounces field value
-func (o *BounceStatistics) GetBounces() []Bounce {
-	if o == nil {
-		var ret []Bounce
-		return ret
-	}
-
-	return o.Bounces
-}
-
-// GetBouncesOk returns a tuple with the Bounces field value
-// and a boolean to check if the value has been set.
-func (o *BounceStatistics) GetBouncesOk() ([]Bounce, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return o.Bounces, true
-}
-
-// SetBounces sets field value
-func (o *BounceStatistics) SetBounces(v []Bounce) {
-	o.Bounces = v
-}
-
-func (o BounceStatistics) MarshalJSON() ([]byte, error) {
+func (o Bounce) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
 		return []byte{}, err
@@ -133,11 +105,10 @@ func (o BounceStatistics) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toSerialize)
 }
 
-func (o BounceStatistics) ToMap() (map[string]interface{}, error) {
+func (o Bounce) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
-	toSerialize["from_timestamp"] = o.FromTimestamp
-	toSerialize["to_timestamp"] = o.ToTimestamp
-	toSerialize["bounces"] = o.Bounces
+	toSerialize["classification"] = o.Classification
+	toSerialize["count"] = o.Count
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
@@ -146,14 +117,13 @@ func (o BounceStatistics) ToMap() (map[string]interface{}, error) {
 	return toSerialize, nil
 }
 
-func (o *BounceStatistics) UnmarshalJSON(data []byte) (err error) {
+func (o *Bounce) UnmarshalJSON(data []byte) (err error) {
 	// This validates that all required properties are included in the JSON object
 	// by unmarshalling the object into a generic map with string keys and checking
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
-		"from_timestamp",
-		"to_timestamp",
-		"bounces",
+		"classification",
+		"count",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -170,60 +140,59 @@ func (o *BounceStatistics) UnmarshalJSON(data []byte) (err error) {
 		}
 	}
 
-	varBounceStatistics := _BounceStatistics{}
+	varBounce := _Bounce{}
 
-	err = json.Unmarshal(data, &varBounceStatistics)
+	err = json.Unmarshal(data, &varBounce)
 
 	if err != nil {
 		return err
 	}
 
-	*o = BounceStatistics(varBounceStatistics)
+	*o = Bounce(varBounce)
 
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
-		delete(additionalProperties, "from_timestamp")
-		delete(additionalProperties, "to_timestamp")
-		delete(additionalProperties, "bounces")
+		delete(additionalProperties, "classification")
+		delete(additionalProperties, "count")
 		o.AdditionalProperties = additionalProperties
 	}
 
 	return err
 }
 
-type NullableBounceStatistics struct {
-	value *BounceStatistics
+type NullableBounce struct {
+	value *Bounce
 	isSet bool
 }
 
-func (v NullableBounceStatistics) Get() *BounceStatistics {
+func (v NullableBounce) Get() *Bounce {
 	return v.value
 }
 
-func (v *NullableBounceStatistics) Set(val *BounceStatistics) {
+func (v *NullableBounce) Set(val *Bounce) {
 	v.value = val
 	v.isSet = true
 }
 
-func (v NullableBounceStatistics) IsSet() bool {
+func (v NullableBounce) IsSet() bool {
 	return v.isSet
 }
 
-func (v *NullableBounceStatistics) Unset() {
+func (v *NullableBounce) Unset() {
 	v.value = nil
 	v.isSet = false
 }
 
-func NewNullableBounceStatistics(val *BounceStatistics) *NullableBounceStatistics {
-	return &NullableBounceStatistics{value: val, isSet: true}
+func NewNullableBounce(val *Bounce) *NullableBounce {
+	return &NullableBounce{value: val, isSet: true}
 }
 
-func (v NullableBounceStatistics) MarshalJSON() ([]byte, error) {
+func (v NullableBounce) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value)
 }
 
-func (v *NullableBounceStatistics) UnmarshalJSON(src []byte) error {
+func (v *NullableBounce) UnmarshalJSON(src []byte) error {
 	v.isSet = true
 	return json.Unmarshal(src, &v.value)
 }

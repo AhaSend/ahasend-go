@@ -6,14 +6,13 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
 **ToTimestamp** | **time.Time** | End time of the statistics bucket | 
-**Classification** | **string** | Bounce classification | 
-**Count** | **int32** | Number of bounces | 
+**Bounces** | [**[]Bounce**](Bounce.md) | Bounce count per bounce classification | 
 
 ## Methods
 
 ### NewBounceStatistics
 
-`func NewBounceStatistics(fromTimestamp time.Time, toTimestamp time.Time, classification string, count int32, ) *BounceStatistics`
+`func NewBounceStatistics(fromTimestamp time.Time, toTimestamp time.Time, bounces []Bounce, ) *BounceStatistics`
 
 NewBounceStatistics instantiates a new BounceStatistics object
 This constructor will assign default values to properties that have it defined,
@@ -68,44 +67,24 @@ and a boolean to check if the value has been set.
 SetToTimestamp sets ToTimestamp field to given value.
 
 
-### GetClassification
+### GetBounces
 
-`func (o *BounceStatistics) GetClassification() string`
+`func (o *BounceStatistics) GetBounces() []Bounce`
 
-GetClassification returns the Classification field if non-nil, zero value otherwise.
+GetBounces returns the Bounces field if non-nil, zero value otherwise.
 
-### GetClassificationOk
+### GetBouncesOk
 
-`func (o *BounceStatistics) GetClassificationOk() (*string, bool)`
+`func (o *BounceStatistics) GetBouncesOk() (*[]Bounce, bool)`
 
-GetClassificationOk returns a tuple with the Classification field if it's non-nil, zero value otherwise
+GetBouncesOk returns a tuple with the Bounces field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetClassification
+### SetBounces
 
-`func (o *BounceStatistics) SetClassification(v string)`
+`func (o *BounceStatistics) SetBounces(v []Bounce)`
 
-SetClassification sets Classification field to given value.
-
-
-### GetCount
-
-`func (o *BounceStatistics) GetCount() int32`
-
-GetCount returns the Count field if non-nil, zero value otherwise.
-
-### GetCountOk
-
-`func (o *BounceStatistics) GetCountOk() (*int32, bool)`
-
-GetCountOk returns a tuple with the Count field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetCount
-
-`func (o *BounceStatistics) SetCount(v int32)`
-
-SetCount sets Count field to given value.
+SetBounces sets Bounces field to given value.
 
 
 
