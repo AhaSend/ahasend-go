@@ -99,8 +99,8 @@ info:
   contact:
     email: support@ahasend.com
   license:
-    name: Proprietary
-
+    name: MIT
+    identifier: MIT
 servers:
   - url: https://api.ahasend.com
     description: Production server
@@ -1588,10 +1588,14 @@ components:
     DeliverabilityStatistics:
       type: object
       properties:
-        time_bucket:
+        from_timestamp:
           type: string
           format: date-time
-          description: Time bucket for the statistics
+          description: Start time of the statistics bucket
+        to_timestamp:
+          type: string
+          format: date-time
+          description: End time of the statistics bucket
         direction:
           type: string
           enum: [inbound, outbound]
@@ -1612,7 +1616,8 @@ components:
           type: integer
           description: Number of messages suppressed
       required:
-        - time_bucket
+        - from_timestamp
+        - to_timestamp
         - direction
 
     DeliverabilityStatisticsResponse:
@@ -1634,10 +1639,14 @@ components:
     BounceStatistics:
       type: object
       properties:
-        time_bucket:
+        from_timestamp:
           type: string
           format: date-time
-          description: Time bucket for the statistics
+          description: Start time of the statistics bucket
+        to_timestamp:
+          type: string
+          format: date-time
+          description: End time of the statistics bucket
         classification:
           type: string
           description: Bounce classification
@@ -1645,7 +1654,8 @@ components:
           type: integer
           description: Number of bounces
       required:
-        - time_bucket
+        - from_timestamp
+        - to_timestamp
         - classification
         - count
 
@@ -1668,10 +1678,14 @@ components:
     DeliveryTimeStatistics:
       type: object
       properties:
-        time_bucket:
+        from_timestamp:
           type: string
           format: date-time
-          description: Time bucket for the statistics
+          description: Start time of the statistics bucket
+        to_timestamp:
+          type: string
+          format: date-time
+          description: End time of the statistics bucket
         recipient_domain:
           type: string
           description: Recipient domain
@@ -1685,7 +1699,8 @@ components:
           type: integer
           description: Number of messages
       required:
-        - time_bucket
+        - from_timestamp
+        - to_timestamp
         - avg_delivery_time
         - count
 
@@ -2075,6 +2090,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: dns_valid
+          in: query
+          description: Filter results by DNS validation status
+          schema:
+            type: boolean
+            nullable: true
         - name: limit
           in: query
           description: Maximum number of items to return (1-100)
