@@ -15,14 +15,11 @@ type DeliveryTimeStatistics struct {
 	FromTimestamp time.Time `json:"from_timestamp"`
 	// End time of the statistics bucket
 	ToTimestamp time.Time `json:"to_timestamp"`
-	// Recipient domain
-	RecipientDomain *string `json:"recipient_domain,omitempty"`
 	// Average delivery time in seconds
-	AvgDeliveryTime float32 `json:"avg_delivery_time"`
-	// Median delivery time in seconds
-	MedianDeliveryTime *float32 `json:"median_delivery_time,omitempty"`
+	AvgDeliveryTime float64 `json:"avg_delivery_time"`
 	// Number of messages
-	Count                int32 `json:"count"`
+	DeliveredCount       int32          `json:"delivered_count"`
+	DeliveryTimes        []DeliveryTime `json:"delivery_times,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -32,12 +29,12 @@ type _DeliveryTimeStatistics DeliveryTimeStatistics
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float32, count int32) *DeliveryTimeStatistics {
+func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float64, deliveredCount int32) *DeliveryTimeStatistics {
 	this := DeliveryTimeStatistics{}
 	this.FromTimestamp = fromTimestamp
 	this.ToTimestamp = toTimestamp
 	this.AvgDeliveryTime = avgDeliveryTime
-	this.Count = count
+	this.DeliveredCount = deliveredCount
 	return &this
 }
 
@@ -97,42 +94,10 @@ func (o *DeliveryTimeStatistics) SetToTimestamp(v time.Time) {
 	o.ToTimestamp = v
 }
 
-// GetRecipientDomain returns the RecipientDomain field value if set, zero value otherwise.
-func (o *DeliveryTimeStatistics) GetRecipientDomain() string {
-	if o == nil || IsNil(o.RecipientDomain) {
-		var ret string
-		return ret
-	}
-	return *o.RecipientDomain
-}
-
-// GetRecipientDomainOk returns a tuple with the RecipientDomain field value if set, nil otherwise
-// and a boolean to check if the value has been set.
-func (o *DeliveryTimeStatistics) GetRecipientDomainOk() (*string, bool) {
-	if o == nil || IsNil(o.RecipientDomain) {
-		return nil, false
-	}
-	return o.RecipientDomain, true
-}
-
-// HasRecipientDomain returns a boolean if a field has been set.
-func (o *DeliveryTimeStatistics) HasRecipientDomain() bool {
-	if o != nil && !IsNil(o.RecipientDomain) {
-		return true
-	}
-
-	return false
-}
-
-// SetRecipientDomain gets a reference to the given string and assigns it to the RecipientDomain field.
-func (o *DeliveryTimeStatistics) SetRecipientDomain(v string) {
-	o.RecipientDomain = &v
-}
-
 // GetAvgDeliveryTime returns the AvgDeliveryTime field value
-func (o *DeliveryTimeStatistics) GetAvgDeliveryTime() float32 {
+func (o *DeliveryTimeStatistics) GetAvgDeliveryTime() float64 {
 	if o == nil {
-		var ret float32
+		var ret float64
 		return ret
 	}
 
@@ -141,7 +106,7 @@ func (o *DeliveryTimeStatistics) GetAvgDeliveryTime() float32 {
 
 // GetAvgDeliveryTimeOk returns a tuple with the AvgDeliveryTime field value
 // and a boolean to check if the value has been set.
-func (o *DeliveryTimeStatistics) GetAvgDeliveryTimeOk() (*float32, bool) {
+func (o *DeliveryTimeStatistics) GetAvgDeliveryTimeOk() (*float64, bool) {
 	if o == nil {
 		return nil, false
 	}
@@ -149,64 +114,64 @@ func (o *DeliveryTimeStatistics) GetAvgDeliveryTimeOk() (*float32, bool) {
 }
 
 // SetAvgDeliveryTime sets field value
-func (o *DeliveryTimeStatistics) SetAvgDeliveryTime(v float32) {
+func (o *DeliveryTimeStatistics) SetAvgDeliveryTime(v float64) {
 	o.AvgDeliveryTime = v
 }
 
-// GetMedianDeliveryTime returns the MedianDeliveryTime field value if set, zero value otherwise.
-func (o *DeliveryTimeStatistics) GetMedianDeliveryTime() float32 {
-	if o == nil || IsNil(o.MedianDeliveryTime) {
-		var ret float32
+// GetDeliveredCount returns the DeliveredCount field value
+func (o *DeliveryTimeStatistics) GetDeliveredCount() int32 {
+	if o == nil {
+		var ret int32
 		return ret
 	}
-	return *o.MedianDeliveryTime
+
+	return o.DeliveredCount
 }
 
-// GetMedianDeliveryTimeOk returns a tuple with the MedianDeliveryTime field value if set, nil otherwise
+// GetDeliveredCountOk returns a tuple with the DeliveredCount field value
 // and a boolean to check if the value has been set.
-func (o *DeliveryTimeStatistics) GetMedianDeliveryTimeOk() (*float32, bool) {
-	if o == nil || IsNil(o.MedianDeliveryTime) {
+func (o *DeliveryTimeStatistics) GetDeliveredCountOk() (*int32, bool) {
+	if o == nil {
 		return nil, false
 	}
-	return o.MedianDeliveryTime, true
+	return &o.DeliveredCount, true
 }
 
-// HasMedianDeliveryTime returns a boolean if a field has been set.
-func (o *DeliveryTimeStatistics) HasMedianDeliveryTime() bool {
-	if o != nil && !IsNil(o.MedianDeliveryTime) {
+// SetDeliveredCount sets field value
+func (o *DeliveryTimeStatistics) SetDeliveredCount(v int32) {
+	o.DeliveredCount = v
+}
+
+// GetDeliveryTimes returns the DeliveryTimes field value if set, zero value otherwise.
+func (o *DeliveryTimeStatistics) GetDeliveryTimes() []DeliveryTime {
+	if o == nil || IsNil(o.DeliveryTimes) {
+		var ret []DeliveryTime
+		return ret
+	}
+	return o.DeliveryTimes
+}
+
+// GetDeliveryTimesOk returns a tuple with the DeliveryTimes field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DeliveryTimeStatistics) GetDeliveryTimesOk() ([]DeliveryTime, bool) {
+	if o == nil || IsNil(o.DeliveryTimes) {
+		return nil, false
+	}
+	return o.DeliveryTimes, true
+}
+
+// HasDeliveryTimes returns a boolean if a field has been set.
+func (o *DeliveryTimeStatistics) HasDeliveryTimes() bool {
+	if o != nil && !IsNil(o.DeliveryTimes) {
 		return true
 	}
 
 	return false
 }
 
-// SetMedianDeliveryTime gets a reference to the given float32 and assigns it to the MedianDeliveryTime field.
-func (o *DeliveryTimeStatistics) SetMedianDeliveryTime(v float32) {
-	o.MedianDeliveryTime = &v
-}
-
-// GetCount returns the Count field value
-func (o *DeliveryTimeStatistics) GetCount() int32 {
-	if o == nil {
-		var ret int32
-		return ret
-	}
-
-	return o.Count
-}
-
-// GetCountOk returns a tuple with the Count field value
-// and a boolean to check if the value has been set.
-func (o *DeliveryTimeStatistics) GetCountOk() (*int32, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Count, true
-}
-
-// SetCount sets field value
-func (o *DeliveryTimeStatistics) SetCount(v int32) {
-	o.Count = v
+// SetDeliveryTimes gets a reference to the given []DeliveryTime and assigns it to the DeliveryTimes field.
+func (o *DeliveryTimeStatistics) SetDeliveryTimes(v []DeliveryTime) {
+	o.DeliveryTimes = v
 }
 
 func (o DeliveryTimeStatistics) MarshalJSON() ([]byte, error) {
@@ -221,14 +186,11 @@ func (o DeliveryTimeStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["from_timestamp"] = o.FromTimestamp
 	toSerialize["to_timestamp"] = o.ToTimestamp
-	if !IsNil(o.RecipientDomain) {
-		toSerialize["recipient_domain"] = o.RecipientDomain
-	}
 	toSerialize["avg_delivery_time"] = o.AvgDeliveryTime
-	if !IsNil(o.MedianDeliveryTime) {
-		toSerialize["median_delivery_time"] = o.MedianDeliveryTime
+	toSerialize["delivered_count"] = o.DeliveredCount
+	if !IsNil(o.DeliveryTimes) {
+		toSerialize["delivery_times"] = o.DeliveryTimes
 	}
-	toSerialize["count"] = o.Count
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
@@ -245,7 +207,7 @@ func (o *DeliveryTimeStatistics) UnmarshalJSON(data []byte) (err error) {
 		"from_timestamp",
 		"to_timestamp",
 		"avg_delivery_time",
-		"count",
+		"delivered_count",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -277,10 +239,9 @@ func (o *DeliveryTimeStatistics) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "from_timestamp")
 		delete(additionalProperties, "to_timestamp")
-		delete(additionalProperties, "recipient_domain")
 		delete(additionalProperties, "avg_delivery_time")
-		delete(additionalProperties, "median_delivery_time")
-		delete(additionalProperties, "count")
+		delete(additionalProperties, "delivered_count")
+		delete(additionalProperties, "delivery_times")
 		o.AdditionalProperties = additionalProperties
 	}
 

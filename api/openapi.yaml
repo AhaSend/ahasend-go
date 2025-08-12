@@ -1596,10 +1596,6 @@ components:
           type: string
           format: date-time
           description: End time of the statistics bucket
-        direction:
-          type: string
-          enum: [inbound, outbound]
-          description: Message direction
         sent:
           type: integer
           description: Number of messages sent
@@ -1618,7 +1614,6 @@ components:
       required:
         - from_timestamp
         - to_timestamp
-        - direction
 
     DeliverabilityStatisticsResponse:
       type: object
@@ -1686,23 +1681,36 @@ components:
           type: string
           format: date-time
           description: End time of the statistics bucket
-        recipient_domain:
-          type: string
-          description: Recipient domain
         avg_delivery_time:
           type: number
+          format: double
           description: Average delivery time in seconds
-        median_delivery_time:
-          type: number
-          description: Median delivery time in seconds
-        count:
+        delivered_count:
           type: integer
           description: Number of messages
+        delivery_times:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryTime'
+            description: Delivery times per recipient domain
       required:
         - from_timestamp
         - to_timestamp
         - avg_delivery_time
-        - count
+        - delivered_count
+
+    DeliveryTime:
+      type: object
+      properties:
+        recipient_domain:
+          type: string
+          format: fqdn
+          description: The recipient domain
+        delivery_time:
+          type: number
+          format: double
+          description: The average time from reception to delivery in seconds
+
 
     DeliveryTimeStatisticsResponse:
       type: object

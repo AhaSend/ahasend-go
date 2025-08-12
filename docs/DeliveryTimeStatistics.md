@@ -6,16 +6,15 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
 **ToTimestamp** | **time.Time** | End time of the statistics bucket | 
-**RecipientDomain** | Pointer to **string** | Recipient domain | [optional] 
-**AvgDeliveryTime** | **float32** | Average delivery time in seconds | 
-**MedianDeliveryTime** | Pointer to **float32** | Median delivery time in seconds | [optional] 
-**Count** | **int32** | Number of messages | 
+**AvgDeliveryTime** | **float64** | Average delivery time in seconds | 
+**DeliveredCount** | **int32** | Number of messages | 
+**DeliveryTimes** | Pointer to [**[]DeliveryTime**](DeliveryTime.md) |  | [optional] 
 
 ## Methods
 
 ### NewDeliveryTimeStatistics
 
-`func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float32, count int32, ) *DeliveryTimeStatistics`
+`func NewDeliveryTimeStatistics(fromTimestamp time.Time, toTimestamp time.Time, avgDeliveryTime float64, deliveredCount int32, ) *DeliveryTimeStatistics`
 
 NewDeliveryTimeStatistics instantiates a new DeliveryTimeStatistics object
 This constructor will assign default values to properties that have it defined,
@@ -70,95 +69,70 @@ and a boolean to check if the value has been set.
 SetToTimestamp sets ToTimestamp field to given value.
 
 
-### GetRecipientDomain
-
-`func (o *DeliveryTimeStatistics) GetRecipientDomain() string`
-
-GetRecipientDomain returns the RecipientDomain field if non-nil, zero value otherwise.
-
-### GetRecipientDomainOk
-
-`func (o *DeliveryTimeStatistics) GetRecipientDomainOk() (*string, bool)`
-
-GetRecipientDomainOk returns a tuple with the RecipientDomain field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetRecipientDomain
-
-`func (o *DeliveryTimeStatistics) SetRecipientDomain(v string)`
-
-SetRecipientDomain sets RecipientDomain field to given value.
-
-### HasRecipientDomain
-
-`func (o *DeliveryTimeStatistics) HasRecipientDomain() bool`
-
-HasRecipientDomain returns a boolean if a field has been set.
-
 ### GetAvgDeliveryTime
 
-`func (o *DeliveryTimeStatistics) GetAvgDeliveryTime() float32`
+`func (o *DeliveryTimeStatistics) GetAvgDeliveryTime() float64`
 
 GetAvgDeliveryTime returns the AvgDeliveryTime field if non-nil, zero value otherwise.
 
 ### GetAvgDeliveryTimeOk
 
-`func (o *DeliveryTimeStatistics) GetAvgDeliveryTimeOk() (*float32, bool)`
+`func (o *DeliveryTimeStatistics) GetAvgDeliveryTimeOk() (*float64, bool)`
 
 GetAvgDeliveryTimeOk returns a tuple with the AvgDeliveryTime field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
 ### SetAvgDeliveryTime
 
-`func (o *DeliveryTimeStatistics) SetAvgDeliveryTime(v float32)`
+`func (o *DeliveryTimeStatistics) SetAvgDeliveryTime(v float64)`
 
 SetAvgDeliveryTime sets AvgDeliveryTime field to given value.
 
 
-### GetMedianDeliveryTime
+### GetDeliveredCount
 
-`func (o *DeliveryTimeStatistics) GetMedianDeliveryTime() float32`
+`func (o *DeliveryTimeStatistics) GetDeliveredCount() int32`
 
-GetMedianDeliveryTime returns the MedianDeliveryTime field if non-nil, zero value otherwise.
+GetDeliveredCount returns the DeliveredCount field if non-nil, zero value otherwise.
 
-### GetMedianDeliveryTimeOk
+### GetDeliveredCountOk
 
-`func (o *DeliveryTimeStatistics) GetMedianDeliveryTimeOk() (*float32, bool)`
+`func (o *DeliveryTimeStatistics) GetDeliveredCountOk() (*int32, bool)`
 
-GetMedianDeliveryTimeOk returns a tuple with the MedianDeliveryTime field if it's non-nil, zero value otherwise
+GetDeliveredCountOk returns a tuple with the DeliveredCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetMedianDeliveryTime
+### SetDeliveredCount
 
-`func (o *DeliveryTimeStatistics) SetMedianDeliveryTime(v float32)`
+`func (o *DeliveryTimeStatistics) SetDeliveredCount(v int32)`
 
-SetMedianDeliveryTime sets MedianDeliveryTime field to given value.
+SetDeliveredCount sets DeliveredCount field to given value.
 
-### HasMedianDeliveryTime
 
-`func (o *DeliveryTimeStatistics) HasMedianDeliveryTime() bool`
+### GetDeliveryTimes
 
-HasMedianDeliveryTime returns a boolean if a field has been set.
+`func (o *DeliveryTimeStatistics) GetDeliveryTimes() []DeliveryTime`
 
-### GetCount
+GetDeliveryTimes returns the DeliveryTimes field if non-nil, zero value otherwise.
 
-`func (o *DeliveryTimeStatistics) GetCount() int32`
+### GetDeliveryTimesOk
 
-GetCount returns the Count field if non-nil, zero value otherwise.
+`func (o *DeliveryTimeStatistics) GetDeliveryTimesOk() (*[]DeliveryTime, bool)`
 
-### GetCountOk
-
-`func (o *DeliveryTimeStatistics) GetCountOk() (*int32, bool)`
-
-GetCountOk returns a tuple with the Count field if it's non-nil, zero value otherwise
+GetDeliveryTimesOk returns a tuple with the DeliveryTimes field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetCount
+### SetDeliveryTimes
 
-`func (o *DeliveryTimeStatistics) SetCount(v int32)`
+`func (o *DeliveryTimeStatistics) SetDeliveryTimes(v []DeliveryTime)`
 
-SetCount sets Count field to given value.
+SetDeliveryTimes sets DeliveryTimes field to given value.
 
+### HasDeliveryTimes
+
+`func (o *DeliveryTimeStatistics) HasDeliveryTimes() bool`
+
+HasDeliveryTimes returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

@@ -16,14 +16,13 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 	toTime := time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC)
 
 	t.Run("DeliverabilityStatistics uses from_timestamp and to_timestamp", func(t *testing.T) {
-		stats := ahasend.NewDeliverabilityStatistics(fromTime, toTime, "outbound")
+		stats := ahasend.NewDeliverabilityStatistics(fromTime, toTime)
 		stats.SetSent(100)
 		stats.SetDelivered(95)
 
 		// Test getters
 		assert.Equal(t, fromTime, stats.GetFromTimestamp())
 		assert.Equal(t, toTime, stats.GetToTimestamp())
-		assert.Equal(t, "outbound", stats.GetDirection())
 
 		// Test JSON serialization contains correct fields
 		jsonBytes, err := json.Marshal(stats)
@@ -62,13 +61,12 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 
 	t.Run("DeliveryTimeStatistics uses from_timestamp and to_timestamp", func(t *testing.T) {
 		stats := ahasend.NewDeliveryTimeStatistics(fromTime, toTime, 1.25, 50)
-		stats.SetRecipientDomain("example.com")
 
 		// Test getters
 		assert.Equal(t, fromTime, stats.GetFromTimestamp())
 		assert.Equal(t, toTime, stats.GetToTimestamp())
-		assert.Equal(t, float32(1.25), stats.GetAvgDeliveryTime())
-		assert.Equal(t, int32(50), stats.GetCount())
+		assert.Equal(t, 1.25, stats.GetAvgDeliveryTime())
+		assert.Equal(t, int32(50), stats.GetDeliveredCount())
 
 		// Test JSON serialization contains correct fields
 		jsonBytes, err := json.Marshal(stats)
@@ -90,7 +88,6 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 		jsonData := `{
 			"from_timestamp": "2024-01-01T12:00:00Z",
 			"to_timestamp": "2024-01-01T13:00:00Z",
-			"direction": "outbound",
 			"sent": 100,
 			"delivered": 95
 		}`
@@ -99,7 +96,6 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 		err := json.Unmarshal([]byte(jsonData), &stats)
 		require.NoError(t, err)
 
-		assert.Equal(t, "outbound", stats.GetDirection())
 		assert.Equal(t, int32(100), stats.GetSent())
 		assert.Equal(t, int32(95), stats.GetDelivered())
 
@@ -131,17 +127,15 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 			"from_timestamp": "2024-01-01T12:00:00Z",
 			"to_timestamp": "2024-01-01T13:00:00Z",
 			"avg_delivery_time": 1.25,
-			"count": 50,
-			"recipient_domain": "example.com"
+			"delivered_count": 50
 		}`
 
 		var stats ahasend.DeliveryTimeStatistics
 		err := json.Unmarshal([]byte(jsonData), &stats)
 		require.NoError(t, err)
 
-		assert.Equal(t, float32(1.25), stats.GetAvgDeliveryTime())
-		assert.Equal(t, int32(50), stats.GetCount())
-		assert.Equal(t, "example.com", stats.GetRecipientDomain())
+		assert.Equal(t, 1.25, stats.GetAvgDeliveryTime())
+		assert.Equal(t, int32(50), stats.GetDeliveredCount())
 	})
 }
 
@@ -150,8 +144,7 @@ func TestStatisticsModelsRequiredFields(t *testing.T) {
 	t.Run("DeliverabilityStatistics requires both timestamps", func(t *testing.T) {
 		// Missing from_timestamp
 		jsonData := `{
-			"to_timestamp": "2024-01-01T13:00:00Z",
-			"direction": "outbound"
+			"to_timestamp": "2024-01-01T13:00:00Z"
 		}`
 
 		var stats ahasend.DeliverabilityStatistics
@@ -161,8 +154,7 @@ func TestStatisticsModelsRequiredFields(t *testing.T) {
 
 		// Missing to_timestamp
 		jsonData = `{
-			"from_timestamp": "2024-01-01T12:00:00Z",
-			"direction": "outbound"
+			"from_timestamp": "2024-01-01T12:00:00Z"
 		}`
 
 		err = json.Unmarshal([]byte(jsonData), &stats)

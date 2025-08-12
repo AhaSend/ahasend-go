@@ -36,9 +36,17 @@ func Test_ahasend_StatisticsAPIService(t *testing.T) {
 	validatePrismResponse := func(t *testing.T, resp interface{}, httpRes *http.Response, err error) {
 		if err == nil {
 			require.NotNil(t, resp)
-			assert.True(t, httpRes.StatusCode >= 200 && httpRes.StatusCode < 500, "Expected valid HTTP status code, got %d", httpRes.StatusCode)
+			assert.True(t, httpRes.StatusCode >= 200 && httpRes.StatusCode < 300, "Expected 2xx success status code, got %d", httpRes.StatusCode)
 		} else {
+			// Print error details for debugging
+			t.Logf("API call failed with error: %v", err)
 			if httpRes != nil {
+				t.Logf("HTTP Status Code: %d", httpRes.StatusCode)
+				// If we got a 2xx status code but still have an error, this is a real problem that should fail the test
+				if httpRes.StatusCode >= 200 && httpRes.StatusCode < 300 {
+					t.Errorf("Response parsing failed despite 2xx status code (%d) - this indicates a schema mismatch or parsing issue: %v", httpRes.StatusCode, err)
+					return
+				}
 				assert.True(t, httpRes.StatusCode >= 400 && httpRes.StatusCode < 500, "Expected 4xx error status code, got %d", httpRes.StatusCode)
 			}
 		}

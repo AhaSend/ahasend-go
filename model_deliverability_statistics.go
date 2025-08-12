@@ -15,8 +15,6 @@ type DeliverabilityStatistics struct {
 	FromTimestamp time.Time `json:"from_timestamp"`
 	// End time of the statistics bucket
 	ToTimestamp time.Time `json:"to_timestamp"`
-	// Message direction
-	Direction string `json:"direction"`
 	// Number of messages sent
 	Sent *int32 `json:"sent,omitempty"`
 	// Number of messages delivered
@@ -36,11 +34,10 @@ type _DeliverabilityStatistics DeliverabilityStatistics
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewDeliverabilityStatistics(fromTimestamp time.Time, toTimestamp time.Time, direction string) *DeliverabilityStatistics {
+func NewDeliverabilityStatistics(fromTimestamp time.Time, toTimestamp time.Time) *DeliverabilityStatistics {
 	this := DeliverabilityStatistics{}
 	this.FromTimestamp = fromTimestamp
 	this.ToTimestamp = toTimestamp
-	this.Direction = direction
 	return &this
 }
 
@@ -98,30 +95,6 @@ func (o *DeliverabilityStatistics) GetToTimestampOk() (*time.Time, bool) {
 // SetToTimestamp sets field value
 func (o *DeliverabilityStatistics) SetToTimestamp(v time.Time) {
 	o.ToTimestamp = v
-}
-
-// GetDirection returns the Direction field value
-func (o *DeliverabilityStatistics) GetDirection() string {
-	if o == nil {
-		var ret string
-		return ret
-	}
-
-	return o.Direction
-}
-
-// GetDirectionOk returns a tuple with the Direction field value
-// and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetDirectionOk() (*string, bool) {
-	if o == nil {
-		return nil, false
-	}
-	return &o.Direction, true
-}
-
-// SetDirection sets field value
-func (o *DeliverabilityStatistics) SetDirection(v string) {
-	o.Direction = v
 }
 
 // GetSent returns the Sent field value if set, zero value otherwise.
@@ -296,7 +269,6 @@ func (o DeliverabilityStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["from_timestamp"] = o.FromTimestamp
 	toSerialize["to_timestamp"] = o.ToTimestamp
-	toSerialize["direction"] = o.Direction
 	if !IsNil(o.Sent) {
 		toSerialize["sent"] = o.Sent
 	}
@@ -327,7 +299,6 @@ func (o *DeliverabilityStatistics) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"from_timestamp",
 		"to_timestamp",
-		"direction",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -359,7 +330,6 @@ func (o *DeliverabilityStatistics) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "from_timestamp")
 		delete(additionalProperties, "to_timestamp")
-		delete(additionalProperties, "direction")
 		delete(additionalProperties, "sent")
 		delete(additionalProperties, "delivered")
 		delete(additionalProperties, "bounced")

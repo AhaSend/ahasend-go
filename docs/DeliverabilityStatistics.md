@@ -6,7 +6,6 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
 **ToTimestamp** | **time.Time** | End time of the statistics bucket | 
-**Direction** | **string** | Message direction | 
 **Sent** | Pointer to **int32** | Number of messages sent | [optional] 
 **Delivered** | Pointer to **int32** | Number of messages delivered | [optional] 
 **Bounced** | Pointer to **int32** | Number of messages bounced | [optional] 
@@ -17,7 +16,7 @@ Name | Type | Description | Notes
 
 ### NewDeliverabilityStatistics
 
-`func NewDeliverabilityStatistics(fromTimestamp time.Time, toTimestamp time.Time, direction string, ) *DeliverabilityStatistics`
+`func NewDeliverabilityStatistics(fromTimestamp time.Time, toTimestamp time.Time, ) *DeliverabilityStatistics`
 
 NewDeliverabilityStatistics instantiates a new DeliverabilityStatistics object
 This constructor will assign default values to properties that have it defined,
@@ -70,26 +69,6 @@ and a boolean to check if the value has been set.
 `func (o *DeliverabilityStatistics) SetToTimestamp(v time.Time)`
 
 SetToTimestamp sets ToTimestamp field to given value.
-
-
-### GetDirection
-
-`func (o *DeliverabilityStatistics) GetDirection() string`
-
-GetDirection returns the Direction field if non-nil, zero value otherwise.
-
-### GetDirectionOk
-
-`func (o *DeliverabilityStatistics) GetDirectionOk() (*string, bool)`
-
-GetDirectionOk returns a tuple with the Direction field if it's non-nil, zero value otherwise
-and a boolean to check if the value has been set.
-
-### SetDirection
-
-`func (o *DeliverabilityStatistics) SetDirection(v string)`
-
-SetDirection sets Direction field to given value.
 
 
 ### GetSent
