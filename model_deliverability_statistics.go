@@ -15,16 +15,22 @@ type DeliverabilityStatistics struct {
 	FromTimestamp time.Time `json:"from_timestamp"`
 	// End time of the statistics bucket
 	ToTimestamp time.Time `json:"to_timestamp"`
-	// Number of messages sent
-	Sent *int32 `json:"sent,omitempty"`
+	// Number of messages accepted for delivery
+	ReceptionCount *int32 `json:"reception_count,omitempty"`
 	// Number of messages delivered
-	Delivered *int32 `json:"delivered,omitempty"`
+	DeliveredCount *int32 `json:"delivered_count,omitempty"`
+	// Number of messages deferred
+	DeferredCount *int32 `json:"deferred_count,omitempty"`
 	// Number of messages bounced
-	Bounced *int32 `json:"bounced,omitempty"`
+	BouncedCount *int32 `json:"bounced_count,omitempty"`
 	// Number of messages failed
-	Failed *int32 `json:"failed,omitempty"`
+	FailedCount *int32 `json:"failed_count,omitempty"`
 	// Number of messages suppressed
-	Suppressed           *int32 `json:"suppressed,omitempty"`
+	SuppressedCount *int32 `json:"suppressed_count,omitempty"`
+	// Number of messages opened at least once
+	OpenedCount *int32 `json:"opened_count,omitempty"`
+	// Number of messages that have at least one link in them clicked.
+	ClickedCount         *int32 `json:"clicked_count,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -97,164 +103,260 @@ func (o *DeliverabilityStatistics) SetToTimestamp(v time.Time) {
 	o.ToTimestamp = v
 }
 
-// GetSent returns the Sent field value if set, zero value otherwise.
-func (o *DeliverabilityStatistics) GetSent() int32 {
-	if o == nil || IsNil(o.Sent) {
+// GetReceptionCount returns the ReceptionCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetReceptionCount() int32 {
+	if o == nil || IsNil(o.ReceptionCount) {
 		var ret int32
 		return ret
 	}
-	return *o.Sent
+	return *o.ReceptionCount
 }
 
-// GetSentOk returns a tuple with the Sent field value if set, nil otherwise
+// GetReceptionCountOk returns a tuple with the ReceptionCount field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetSentOk() (*int32, bool) {
-	if o == nil || IsNil(o.Sent) {
+func (o *DeliverabilityStatistics) GetReceptionCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.ReceptionCount) {
 		return nil, false
 	}
-	return o.Sent, true
+	return o.ReceptionCount, true
 }
 
-// HasSent returns a boolean if a field has been set.
-func (o *DeliverabilityStatistics) HasSent() bool {
-	if o != nil && !IsNil(o.Sent) {
+// HasReceptionCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasReceptionCount() bool {
+	if o != nil && !IsNil(o.ReceptionCount) {
 		return true
 	}
 
 	return false
 }
 
-// SetSent gets a reference to the given int32 and assigns it to the Sent field.
-func (o *DeliverabilityStatistics) SetSent(v int32) {
-	o.Sent = &v
+// SetReceptionCount gets a reference to the given int32 and assigns it to the ReceptionCount field.
+func (o *DeliverabilityStatistics) SetReceptionCount(v int32) {
+	o.ReceptionCount = &v
 }
 
-// GetDelivered returns the Delivered field value if set, zero value otherwise.
-func (o *DeliverabilityStatistics) GetDelivered() int32 {
-	if o == nil || IsNil(o.Delivered) {
+// GetDeliveredCount returns the DeliveredCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetDeliveredCount() int32 {
+	if o == nil || IsNil(o.DeliveredCount) {
 		var ret int32
 		return ret
 	}
-	return *o.Delivered
+	return *o.DeliveredCount
 }
 
-// GetDeliveredOk returns a tuple with the Delivered field value if set, nil otherwise
+// GetDeliveredCountOk returns a tuple with the DeliveredCount field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetDeliveredOk() (*int32, bool) {
-	if o == nil || IsNil(o.Delivered) {
+func (o *DeliverabilityStatistics) GetDeliveredCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.DeliveredCount) {
 		return nil, false
 	}
-	return o.Delivered, true
+	return o.DeliveredCount, true
 }
 
-// HasDelivered returns a boolean if a field has been set.
-func (o *DeliverabilityStatistics) HasDelivered() bool {
-	if o != nil && !IsNil(o.Delivered) {
+// HasDeliveredCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasDeliveredCount() bool {
+	if o != nil && !IsNil(o.DeliveredCount) {
 		return true
 	}
 
 	return false
 }
 
-// SetDelivered gets a reference to the given int32 and assigns it to the Delivered field.
-func (o *DeliverabilityStatistics) SetDelivered(v int32) {
-	o.Delivered = &v
+// SetDeliveredCount gets a reference to the given int32 and assigns it to the DeliveredCount field.
+func (o *DeliverabilityStatistics) SetDeliveredCount(v int32) {
+	o.DeliveredCount = &v
 }
 
-// GetBounced returns the Bounced field value if set, zero value otherwise.
-func (o *DeliverabilityStatistics) GetBounced() int32 {
-	if o == nil || IsNil(o.Bounced) {
+// GetDeferredCount returns the DeferredCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetDeferredCount() int32 {
+	if o == nil || IsNil(o.DeferredCount) {
 		var ret int32
 		return ret
 	}
-	return *o.Bounced
+	return *o.DeferredCount
 }
 
-// GetBouncedOk returns a tuple with the Bounced field value if set, nil otherwise
+// GetDeferredCountOk returns a tuple with the DeferredCount field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetBouncedOk() (*int32, bool) {
-	if o == nil || IsNil(o.Bounced) {
+func (o *DeliverabilityStatistics) GetDeferredCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.DeferredCount) {
 		return nil, false
 	}
-	return o.Bounced, true
+	return o.DeferredCount, true
 }
 
-// HasBounced returns a boolean if a field has been set.
-func (o *DeliverabilityStatistics) HasBounced() bool {
-	if o != nil && !IsNil(o.Bounced) {
+// HasDeferredCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasDeferredCount() bool {
+	if o != nil && !IsNil(o.DeferredCount) {
 		return true
 	}
 
 	return false
 }
 
-// SetBounced gets a reference to the given int32 and assigns it to the Bounced field.
-func (o *DeliverabilityStatistics) SetBounced(v int32) {
-	o.Bounced = &v
+// SetDeferredCount gets a reference to the given int32 and assigns it to the DeferredCount field.
+func (o *DeliverabilityStatistics) SetDeferredCount(v int32) {
+	o.DeferredCount = &v
 }
 
-// GetFailed returns the Failed field value if set, zero value otherwise.
-func (o *DeliverabilityStatistics) GetFailed() int32 {
-	if o == nil || IsNil(o.Failed) {
+// GetBouncedCount returns the BouncedCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetBouncedCount() int32 {
+	if o == nil || IsNil(o.BouncedCount) {
 		var ret int32
 		return ret
 	}
-	return *o.Failed
+	return *o.BouncedCount
 }
 
-// GetFailedOk returns a tuple with the Failed field value if set, nil otherwise
+// GetBouncedCountOk returns a tuple with the BouncedCount field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetFailedOk() (*int32, bool) {
-	if o == nil || IsNil(o.Failed) {
+func (o *DeliverabilityStatistics) GetBouncedCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.BouncedCount) {
 		return nil, false
 	}
-	return o.Failed, true
+	return o.BouncedCount, true
 }
 
-// HasFailed returns a boolean if a field has been set.
-func (o *DeliverabilityStatistics) HasFailed() bool {
-	if o != nil && !IsNil(o.Failed) {
+// HasBouncedCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasBouncedCount() bool {
+	if o != nil && !IsNil(o.BouncedCount) {
 		return true
 	}
 
 	return false
 }
 
-// SetFailed gets a reference to the given int32 and assigns it to the Failed field.
-func (o *DeliverabilityStatistics) SetFailed(v int32) {
-	o.Failed = &v
+// SetBouncedCount gets a reference to the given int32 and assigns it to the BouncedCount field.
+func (o *DeliverabilityStatistics) SetBouncedCount(v int32) {
+	o.BouncedCount = &v
 }
 
-// GetSuppressed returns the Suppressed field value if set, zero value otherwise.
-func (o *DeliverabilityStatistics) GetSuppressed() int32 {
-	if o == nil || IsNil(o.Suppressed) {
+// GetFailedCount returns the FailedCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetFailedCount() int32 {
+	if o == nil || IsNil(o.FailedCount) {
 		var ret int32
 		return ret
 	}
-	return *o.Suppressed
+	return *o.FailedCount
 }
 
-// GetSuppressedOk returns a tuple with the Suppressed field value if set, nil otherwise
+// GetFailedCountOk returns a tuple with the FailedCount field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *DeliverabilityStatistics) GetSuppressedOk() (*int32, bool) {
-	if o == nil || IsNil(o.Suppressed) {
+func (o *DeliverabilityStatistics) GetFailedCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.FailedCount) {
 		return nil, false
 	}
-	return o.Suppressed, true
+	return o.FailedCount, true
 }
 
-// HasSuppressed returns a boolean if a field has been set.
-func (o *DeliverabilityStatistics) HasSuppressed() bool {
-	if o != nil && !IsNil(o.Suppressed) {
+// HasFailedCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasFailedCount() bool {
+	if o != nil && !IsNil(o.FailedCount) {
 		return true
 	}
 
 	return false
 }
 
-// SetSuppressed gets a reference to the given int32 and assigns it to the Suppressed field.
-func (o *DeliverabilityStatistics) SetSuppressed(v int32) {
-	o.Suppressed = &v
+// SetFailedCount gets a reference to the given int32 and assigns it to the FailedCount field.
+func (o *DeliverabilityStatistics) SetFailedCount(v int32) {
+	o.FailedCount = &v
+}
+
+// GetSuppressedCount returns the SuppressedCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetSuppressedCount() int32 {
+	if o == nil || IsNil(o.SuppressedCount) {
+		var ret int32
+		return ret
+	}
+	return *o.SuppressedCount
+}
+
+// GetSuppressedCountOk returns a tuple with the SuppressedCount field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DeliverabilityStatistics) GetSuppressedCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.SuppressedCount) {
+		return nil, false
+	}
+	return o.SuppressedCount, true
+}
+
+// HasSuppressedCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasSuppressedCount() bool {
+	if o != nil && !IsNil(o.SuppressedCount) {
+		return true
+	}
+
+	return false
+}
+
+// SetSuppressedCount gets a reference to the given int32 and assigns it to the SuppressedCount field.
+func (o *DeliverabilityStatistics) SetSuppressedCount(v int32) {
+	o.SuppressedCount = &v
+}
+
+// GetOpenedCount returns the OpenedCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetOpenedCount() int32 {
+	if o == nil || IsNil(o.OpenedCount) {
+		var ret int32
+		return ret
+	}
+	return *o.OpenedCount
+}
+
+// GetOpenedCountOk returns a tuple with the OpenedCount field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DeliverabilityStatistics) GetOpenedCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.OpenedCount) {
+		return nil, false
+	}
+	return o.OpenedCount, true
+}
+
+// HasOpenedCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasOpenedCount() bool {
+	if o != nil && !IsNil(o.OpenedCount) {
+		return true
+	}
+
+	return false
+}
+
+// SetOpenedCount gets a reference to the given int32 and assigns it to the OpenedCount field.
+func (o *DeliverabilityStatistics) SetOpenedCount(v int32) {
+	o.OpenedCount = &v
+}
+
+// GetClickedCount returns the ClickedCount field value if set, zero value otherwise.
+func (o *DeliverabilityStatistics) GetClickedCount() int32 {
+	if o == nil || IsNil(o.ClickedCount) {
+		var ret int32
+		return ret
+	}
+	return *o.ClickedCount
+}
+
+// GetClickedCountOk returns a tuple with the ClickedCount field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *DeliverabilityStatistics) GetClickedCountOk() (*int32, bool) {
+	if o == nil || IsNil(o.ClickedCount) {
+		return nil, false
+	}
+	return o.ClickedCount, true
+}
+
+// HasClickedCount returns a boolean if a field has been set.
+func (o *DeliverabilityStatistics) HasClickedCount() bool {
+	if o != nil && !IsNil(o.ClickedCount) {
+		return true
+	}
+
+	return false
+}
+
+// SetClickedCount gets a reference to the given int32 and assigns it to the ClickedCount field.
+func (o *DeliverabilityStatistics) SetClickedCount(v int32) {
+	o.ClickedCount = &v
 }
 
 func (o DeliverabilityStatistics) MarshalJSON() ([]byte, error) {
@@ -269,20 +371,29 @@ func (o DeliverabilityStatistics) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	toSerialize["from_timestamp"] = o.FromTimestamp
 	toSerialize["to_timestamp"] = o.ToTimestamp
-	if !IsNil(o.Sent) {
-		toSerialize["sent"] = o.Sent
+	if !IsNil(o.ReceptionCount) {
+		toSerialize["reception_count"] = o.ReceptionCount
 	}
-	if !IsNil(o.Delivered) {
-		toSerialize["delivered"] = o.Delivered
+	if !IsNil(o.DeliveredCount) {
+		toSerialize["delivered_count"] = o.DeliveredCount
 	}
-	if !IsNil(o.Bounced) {
-		toSerialize["bounced"] = o.Bounced
+	if !IsNil(o.DeferredCount) {
+		toSerialize["deferred_count"] = o.DeferredCount
 	}
-	if !IsNil(o.Failed) {
-		toSerialize["failed"] = o.Failed
+	if !IsNil(o.BouncedCount) {
+		toSerialize["bounced_count"] = o.BouncedCount
 	}
-	if !IsNil(o.Suppressed) {
-		toSerialize["suppressed"] = o.Suppressed
+	if !IsNil(o.FailedCount) {
+		toSerialize["failed_count"] = o.FailedCount
+	}
+	if !IsNil(o.SuppressedCount) {
+		toSerialize["suppressed_count"] = o.SuppressedCount
+	}
+	if !IsNil(o.OpenedCount) {
+		toSerialize["opened_count"] = o.OpenedCount
+	}
+	if !IsNil(o.ClickedCount) {
+		toSerialize["clicked_count"] = o.ClickedCount
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -330,11 +441,14 @@ func (o *DeliverabilityStatistics) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "from_timestamp")
 		delete(additionalProperties, "to_timestamp")
-		delete(additionalProperties, "sent")
-		delete(additionalProperties, "delivered")
-		delete(additionalProperties, "bounced")
-		delete(additionalProperties, "failed")
-		delete(additionalProperties, "suppressed")
+		delete(additionalProperties, "reception_count")
+		delete(additionalProperties, "delivered_count")
+		delete(additionalProperties, "deferred_count")
+		delete(additionalProperties, "bounced_count")
+		delete(additionalProperties, "failed_count")
+		delete(additionalProperties, "suppressed_count")
+		delete(additionalProperties, "opened_count")
+		delete(additionalProperties, "clicked_count")
 		o.AdditionalProperties = additionalProperties
 	}
 

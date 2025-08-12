@@ -6,11 +6,14 @@ Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **FromTimestamp** | **time.Time** | Start time of the statistics bucket | 
 **ToTimestamp** | **time.Time** | End time of the statistics bucket | 
-**Sent** | Pointer to **int32** | Number of messages sent | [optional] 
-**Delivered** | Pointer to **int32** | Number of messages delivered | [optional] 
-**Bounced** | Pointer to **int32** | Number of messages bounced | [optional] 
-**Failed** | Pointer to **int32** | Number of messages failed | [optional] 
-**Suppressed** | Pointer to **int32** | Number of messages suppressed | [optional] 
+**ReceptionCount** | Pointer to **int32** | Number of messages accepted for delivery | [optional] 
+**DeliveredCount** | Pointer to **int32** | Number of messages delivered | [optional] 
+**DeferredCount** | Pointer to **int32** | Number of messages deferred | [optional] 
+**BouncedCount** | Pointer to **int32** | Number of messages bounced | [optional] 
+**FailedCount** | Pointer to **int32** | Number of messages failed | [optional] 
+**SuppressedCount** | Pointer to **int32** | Number of messages suppressed | [optional] 
+**OpenedCount** | Pointer to **int32** | Number of messages opened at least once | [optional] 
+**ClickedCount** | Pointer to **int32** | Number of messages that have at least one link in them clicked. | [optional] 
 
 ## Methods
 
@@ -71,130 +74,205 @@ and a boolean to check if the value has been set.
 SetToTimestamp sets ToTimestamp field to given value.
 
 
-### GetSent
+### GetReceptionCount
 
-`func (o *DeliverabilityStatistics) GetSent() int32`
+`func (o *DeliverabilityStatistics) GetReceptionCount() int32`
 
-GetSent returns the Sent field if non-nil, zero value otherwise.
+GetReceptionCount returns the ReceptionCount field if non-nil, zero value otherwise.
 
-### GetSentOk
+### GetReceptionCountOk
 
-`func (o *DeliverabilityStatistics) GetSentOk() (*int32, bool)`
+`func (o *DeliverabilityStatistics) GetReceptionCountOk() (*int32, bool)`
 
-GetSentOk returns a tuple with the Sent field if it's non-nil, zero value otherwise
+GetReceptionCountOk returns a tuple with the ReceptionCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetSent
+### SetReceptionCount
 
-`func (o *DeliverabilityStatistics) SetSent(v int32)`
+`func (o *DeliverabilityStatistics) SetReceptionCount(v int32)`
 
-SetSent sets Sent field to given value.
+SetReceptionCount sets ReceptionCount field to given value.
 
-### HasSent
+### HasReceptionCount
 
-`func (o *DeliverabilityStatistics) HasSent() bool`
+`func (o *DeliverabilityStatistics) HasReceptionCount() bool`
 
-HasSent returns a boolean if a field has been set.
+HasReceptionCount returns a boolean if a field has been set.
 
-### GetDelivered
+### GetDeliveredCount
 
-`func (o *DeliverabilityStatistics) GetDelivered() int32`
+`func (o *DeliverabilityStatistics) GetDeliveredCount() int32`
 
-GetDelivered returns the Delivered field if non-nil, zero value otherwise.
+GetDeliveredCount returns the DeliveredCount field if non-nil, zero value otherwise.
 
-### GetDeliveredOk
+### GetDeliveredCountOk
 
-`func (o *DeliverabilityStatistics) GetDeliveredOk() (*int32, bool)`
+`func (o *DeliverabilityStatistics) GetDeliveredCountOk() (*int32, bool)`
 
-GetDeliveredOk returns a tuple with the Delivered field if it's non-nil, zero value otherwise
+GetDeliveredCountOk returns a tuple with the DeliveredCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetDelivered
+### SetDeliveredCount
 
-`func (o *DeliverabilityStatistics) SetDelivered(v int32)`
+`func (o *DeliverabilityStatistics) SetDeliveredCount(v int32)`
 
-SetDelivered sets Delivered field to given value.
+SetDeliveredCount sets DeliveredCount field to given value.
 
-### HasDelivered
+### HasDeliveredCount
 
-`func (o *DeliverabilityStatistics) HasDelivered() bool`
+`func (o *DeliverabilityStatistics) HasDeliveredCount() bool`
 
-HasDelivered returns a boolean if a field has been set.
+HasDeliveredCount returns a boolean if a field has been set.
 
-### GetBounced
+### GetDeferredCount
 
-`func (o *DeliverabilityStatistics) GetBounced() int32`
+`func (o *DeliverabilityStatistics) GetDeferredCount() int32`
 
-GetBounced returns the Bounced field if non-nil, zero value otherwise.
+GetDeferredCount returns the DeferredCount field if non-nil, zero value otherwise.
 
-### GetBouncedOk
+### GetDeferredCountOk
 
-`func (o *DeliverabilityStatistics) GetBouncedOk() (*int32, bool)`
+`func (o *DeliverabilityStatistics) GetDeferredCountOk() (*int32, bool)`
 
-GetBouncedOk returns a tuple with the Bounced field if it's non-nil, zero value otherwise
+GetDeferredCountOk returns a tuple with the DeferredCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetBounced
+### SetDeferredCount
 
-`func (o *DeliverabilityStatistics) SetBounced(v int32)`
+`func (o *DeliverabilityStatistics) SetDeferredCount(v int32)`
 
-SetBounced sets Bounced field to given value.
+SetDeferredCount sets DeferredCount field to given value.
 
-### HasBounced
+### HasDeferredCount
 
-`func (o *DeliverabilityStatistics) HasBounced() bool`
+`func (o *DeliverabilityStatistics) HasDeferredCount() bool`
 
-HasBounced returns a boolean if a field has been set.
+HasDeferredCount returns a boolean if a field has been set.
 
-### GetFailed
+### GetBouncedCount
 
-`func (o *DeliverabilityStatistics) GetFailed() int32`
+`func (o *DeliverabilityStatistics) GetBouncedCount() int32`
 
-GetFailed returns the Failed field if non-nil, zero value otherwise.
+GetBouncedCount returns the BouncedCount field if non-nil, zero value otherwise.
 
-### GetFailedOk
+### GetBouncedCountOk
 
-`func (o *DeliverabilityStatistics) GetFailedOk() (*int32, bool)`
+`func (o *DeliverabilityStatistics) GetBouncedCountOk() (*int32, bool)`
 
-GetFailedOk returns a tuple with the Failed field if it's non-nil, zero value otherwise
+GetBouncedCountOk returns a tuple with the BouncedCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetFailed
+### SetBouncedCount
 
-`func (o *DeliverabilityStatistics) SetFailed(v int32)`
+`func (o *DeliverabilityStatistics) SetBouncedCount(v int32)`
 
-SetFailed sets Failed field to given value.
+SetBouncedCount sets BouncedCount field to given value.
 
-### HasFailed
+### HasBouncedCount
 
-`func (o *DeliverabilityStatistics) HasFailed() bool`
+`func (o *DeliverabilityStatistics) HasBouncedCount() bool`
 
-HasFailed returns a boolean if a field has been set.
+HasBouncedCount returns a boolean if a field has been set.
 
-### GetSuppressed
+### GetFailedCount
 
-`func (o *DeliverabilityStatistics) GetSuppressed() int32`
+`func (o *DeliverabilityStatistics) GetFailedCount() int32`
 
-GetSuppressed returns the Suppressed field if non-nil, zero value otherwise.
+GetFailedCount returns the FailedCount field if non-nil, zero value otherwise.
 
-### GetSuppressedOk
+### GetFailedCountOk
 
-`func (o *DeliverabilityStatistics) GetSuppressedOk() (*int32, bool)`
+`func (o *DeliverabilityStatistics) GetFailedCountOk() (*int32, bool)`
 
-GetSuppressedOk returns a tuple with the Suppressed field if it's non-nil, zero value otherwise
+GetFailedCountOk returns a tuple with the FailedCount field if it's non-nil, zero value otherwise
 and a boolean to check if the value has been set.
 
-### SetSuppressed
+### SetFailedCount
 
-`func (o *DeliverabilityStatistics) SetSuppressed(v int32)`
+`func (o *DeliverabilityStatistics) SetFailedCount(v int32)`
 
-SetSuppressed sets Suppressed field to given value.
+SetFailedCount sets FailedCount field to given value.
 
-### HasSuppressed
+### HasFailedCount
 
-`func (o *DeliverabilityStatistics) HasSuppressed() bool`
+`func (o *DeliverabilityStatistics) HasFailedCount() bool`
 
-HasSuppressed returns a boolean if a field has been set.
+HasFailedCount returns a boolean if a field has been set.
+
+### GetSuppressedCount
+
+`func (o *DeliverabilityStatistics) GetSuppressedCount() int32`
+
+GetSuppressedCount returns the SuppressedCount field if non-nil, zero value otherwise.
+
+### GetSuppressedCountOk
+
+`func (o *DeliverabilityStatistics) GetSuppressedCountOk() (*int32, bool)`
+
+GetSuppressedCountOk returns a tuple with the SuppressedCount field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetSuppressedCount
+
+`func (o *DeliverabilityStatistics) SetSuppressedCount(v int32)`
+
+SetSuppressedCount sets SuppressedCount field to given value.
+
+### HasSuppressedCount
+
+`func (o *DeliverabilityStatistics) HasSuppressedCount() bool`
+
+HasSuppressedCount returns a boolean if a field has been set.
+
+### GetOpenedCount
+
+`func (o *DeliverabilityStatistics) GetOpenedCount() int32`
+
+GetOpenedCount returns the OpenedCount field if non-nil, zero value otherwise.
+
+### GetOpenedCountOk
+
+`func (o *DeliverabilityStatistics) GetOpenedCountOk() (*int32, bool)`
+
+GetOpenedCountOk returns a tuple with the OpenedCount field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetOpenedCount
+
+`func (o *DeliverabilityStatistics) SetOpenedCount(v int32)`
+
+SetOpenedCount sets OpenedCount field to given value.
+
+### HasOpenedCount
+
+`func (o *DeliverabilityStatistics) HasOpenedCount() bool`
+
+HasOpenedCount returns a boolean if a field has been set.
+
+### GetClickedCount
+
+`func (o *DeliverabilityStatistics) GetClickedCount() int32`
+
+GetClickedCount returns the ClickedCount field if non-nil, zero value otherwise.
+
+### GetClickedCountOk
+
+`func (o *DeliverabilityStatistics) GetClickedCountOk() (*int32, bool)`
+
+GetClickedCountOk returns a tuple with the ClickedCount field if it's non-nil, zero value otherwise
+and a boolean to check if the value has been set.
+
+### SetClickedCount
+
+`func (o *DeliverabilityStatistics) SetClickedCount(v int32)`
+
+SetClickedCount sets ClickedCount field to given value.
+
+### HasClickedCount
+
+`func (o *DeliverabilityStatistics) HasClickedCount() bool`
+
+HasClickedCount returns a boolean if a field has been set.
 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)

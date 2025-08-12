@@ -1596,21 +1596,30 @@ components:
           type: string
           format: date-time
           description: End time of the statistics bucket
-        sent:
+        reception_count:
           type: integer
-          description: Number of messages sent
-        delivered:
+          description: Number of messages accepted for delivery
+        delivered_count:
           type: integer
           description: Number of messages delivered
-        bounced:
+        deferred_count:
+          type: integer
+          description: Number of messages deferred
+        bounced_count:
           type: integer
           description: Number of messages bounced
-        failed:
+        failed_count:
           type: integer
           description: Number of messages failed
-        suppressed:
+        suppressed_count:
           type: integer
           description: Number of messages suppressed
+        opened_count:
+          type: integer
+          description: Number of messages opened at least once
+        clicked_count:
+          type: integer
+          description: Number of messages that have at least one link in them clicked.
       required:
         - from_timestamp
         - to_timestamp

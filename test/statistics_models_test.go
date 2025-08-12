@@ -17,12 +17,14 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 
 	t.Run("DeliverabilityStatistics uses from_timestamp and to_timestamp", func(t *testing.T) {
 		stats := ahasend.NewDeliverabilityStatistics(fromTime, toTime)
-		stats.SetSent(100)
-		stats.SetDelivered(95)
+		stats.SetReceptionCount(100)
+		stats.SetDeliveredCount(95)
 
 		// Test getters
 		assert.Equal(t, fromTime, stats.GetFromTimestamp())
 		assert.Equal(t, toTime, stats.GetToTimestamp())
+		assert.Equal(t, int32(100), stats.GetReceptionCount())
+		assert.Equal(t, int32(95), stats.GetDeliveredCount())
 
 		// Test JSON serialization contains correct fields
 		jsonBytes, err := json.Marshal(stats)
@@ -34,6 +36,8 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 
 		assert.Contains(t, jsonMap, "from_timestamp")
 		assert.Contains(t, jsonMap, "to_timestamp")
+		assert.Contains(t, jsonMap, "reception_count")
+		assert.Contains(t, jsonMap, "delivered_count")
 		assert.NotContains(t, jsonMap, "time_bucket", "Should not contain old time_bucket field")
 	})
 
@@ -91,16 +95,20 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 		jsonData := `{
 			"from_timestamp": "2024-01-01T12:00:00Z",
 			"to_timestamp": "2024-01-01T13:00:00Z",
-			"sent": 100,
-			"delivered": 95
+			"reception_count": 100,
+			"delivered_count": 95,
+			"bounced_count": 2,
+			"failed_count": 1
 		}`
 
 		var stats ahasend.DeliverabilityStatistics
 		err := json.Unmarshal([]byte(jsonData), &stats)
 		require.NoError(t, err)
 
-		assert.Equal(t, int32(100), stats.GetSent())
-		assert.Equal(t, int32(95), stats.GetDelivered())
+		assert.Equal(t, int32(100), stats.GetReceptionCount())
+		assert.Equal(t, int32(95), stats.GetDeliveredCount())
+		assert.Equal(t, int32(2), stats.GetBouncedCount())
+		assert.Equal(t, int32(1), stats.GetFailedCount())
 
 		// Test timestamps
 		expectedFrom := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
