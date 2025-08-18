@@ -55,7 +55,7 @@ func (pm *PrismManager) Start() error {
 	var cmdDescription string
 
 	// Get absolute path to OpenAPI spec
-	specPath := "../api/openapi.yaml"
+	specPath := "../openapi/openapi.yaml"
 	if absPath, err := filepath.Abs(specPath); err == nil {
 		specPath = absPath
 	}

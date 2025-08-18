@@ -33,7 +33,7 @@ func DefaultMockServerConfig() MockServerConfig {
 	return MockServerConfig{
 		Host:            "localhost",
 		Port:            "4010",
-		SpecPath:        "api/openapi.yaml",
+		SpecPath:        "openapi/openapi.yaml",
 		LogLevel:        "warn",
 		DynamicExamples: true,
 	}
