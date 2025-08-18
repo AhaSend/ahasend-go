@@ -111,14 +111,32 @@ jobs:
         run: |
           npm install -g @stoplight/prism-cli@5
           prism --version
+          echo "Prism installed successfully"
 
       - name: Download Go dependencies
         run: go mod download
 
+      - name: Debug environment
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "API directory contents:"
+          ls -la api/ || echo "api/ directory not found"
+          echo "Test directory contents:"
+          ls -la test/ || echo "test/ directory not found"
+          echo "Environment variables:"
+          env | grep -E "(PRISM|NODE|NPM)" || echo "No relevant env vars"
+          echo "Which commands are available:"
+          which prism || echo "prism not found"
+          which npx || echo "npx not found"
+          which curl || echo "curl not found"
+
       - name: Run integration tests
         run: |
-          # Set timeout for integration tests (10 minutes)
-          go test -v -timeout=10m -tags=integration ./test/
+          # Set timeout for integration tests (15 minutes to account for Prism startup)
+          export SKIP_INTEGRATION_TESTS=false
+          go test -v -timeout=15m -coverprofile=coverage.out -covermode=atomic ./test/
         env:
           # Don't skip integration tests
           SKIP_INTEGRATION_TESTS: false

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,6 +52,7 @@ func NewPrismManager(port string) *PrismManager {
 func (pm *PrismManager) Start() error {
 	// Try to find prism command in order of preference
 	var cmd *exec.Cmd
+	var cmdDescription string
 
 	// Get absolute path to OpenAPI spec
 	specPath := "../api/openapi.yaml"
@@ -58,40 +60,63 @@ func (pm *PrismManager) Start() error {
 		specPath = absPath
 	}
 
+	// Check if spec file exists
+	if _, err := os.Stat(specPath); os.IsNotExist(err) {
+		return fmt.Errorf("OpenAPI spec file not found at %s", specPath)
+	}
+
+	fmt.Printf("Using OpenAPI spec: %s\n", specPath)
+
 	// 1. Check for custom PRISM_CMD environment variable
 	if prismCmd := os.Getenv("PRISM_CMD"); prismCmd != "" {
 		args := []string{"mock", specPath, "--host", "0.0.0.0", "--port", pm.port, "--dynamic"}
 		cmd = exec.Command(prismCmd, args...)
+		cmdDescription = fmt.Sprintf("%s %s", prismCmd, strings.Join(args, " "))
 	} else if prismPath, err := exec.LookPath("prism"); err == nil {
 		// 2. Use prism if it's in PATH
 		cmd = exec.Command(prismPath, "mock", specPath, "--host", "0.0.0.0", "--port", pm.port, "--dynamic")
+		cmdDescription = fmt.Sprintf("%s mock %s --host 0.0.0.0 --port %s --dynamic", prismPath, specPath, pm.port)
 	} else if _, err := exec.LookPath("npx"); err == nil {
 		// 3. Fall back to npx (most CI/CD environments have this)
 		cmd = exec.Command("npx", "@stoplight/prism-cli", "mock", specPath, "--host", "0.0.0.0", "--port", pm.port, "--dynamic")
+		cmdDescription = fmt.Sprintf("npx @stoplight/prism-cli mock %s --host 0.0.0.0 --port %s --dynamic", specPath, pm.port)
 	} else {
 		return fmt.Errorf("prism is not available. Install with: npm install -g @stoplight/prism-cli or ensure npx is available")
 	}
 
+	fmt.Printf("Starting Prism with command: %s\n", cmdDescription)
 	pm.cmd = cmd
+
+	// Capture stdout and stderr for debugging
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	// Start the command
 	err := pm.cmd.Start()
 	if err != nil {
-		return fmt.Errorf("failed to start prism: %w", err)
+		return fmt.Errorf("failed to start prism command '%s': %w", cmdDescription, err)
 	}
 
-	// Wait for Prism to be ready (up to 30 seconds to account for npx downloads)
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(200 * time.Millisecond)
+	fmt.Printf("Prism process started with PID %d\n", pm.cmd.Process.Pid)
+
+	// Wait for Prism to be ready (up to 60 seconds to account for npx downloads and slow CI)
+	timeout := time.After(60 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	attempts := 0
 	for {
 		select {
 		case <-timeout:
 			pm.Stop()
-			return fmt.Errorf("prism failed to start within 30 seconds")
+			return fmt.Errorf("prism failed to start within 60 seconds after %d attempts", attempts)
 		case <-ticker.C:
+			attempts++
+			if attempts%10 == 0 {
+				fmt.Printf("Still waiting for Prism to be ready... (attempt %d)\n", attempts)
+			}
 			if pm.isReady() {
+				fmt.Printf("Prism is ready after %d attempts!\n", attempts)
 				return nil
 			}
 		}
@@ -108,15 +133,27 @@ func (pm *PrismManager) Stop() error {
 
 // isReady checks if Prism is ready to accept requests
 func (pm *PrismManager) isReady() bool {
-	// Don't use -f flag since we expect 401 (authentication required) which indicates prism is running
-	cmd := exec.Command("curl", "-s", "-w", "%{http_code}", "-o", "/dev/null", fmt.Sprintf("http://localhost:%s/v2/ping", pm.port))
-	output, err := cmd.Output()
-	if err != nil {
-		return false
+	// Try multiple endpoints to check if Prism is ready
+	endpoints := []string{
+		fmt.Sprintf("http://localhost:%s/v2/ping", pm.port),
+		fmt.Sprintf("http://localhost:%s/v2/accounts", pm.port),
+		fmt.Sprintf("http://localhost:%s/__spec", pm.port),
 	}
-	statusCode := string(output)
-	// Accept both 200 and 401 as valid responses (401 means server is running but requires auth)
-	return statusCode == "200" || statusCode == "401"
+
+	for _, endpoint := range endpoints {
+		// Don't use -f flag since we expect 401 (authentication required) which indicates prism is running
+		cmd := exec.Command("curl", "-s", "-w", "%{http_code}", "-o", "/dev/null", "--max-time", "2", endpoint)
+		output, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		statusCode := string(output)
+		// Accept both 200, 401, and 422 as valid responses (means server is running)
+		if statusCode == "200" || statusCode == "401" || statusCode == "422" {
+			return true
+		}
+	}
+	return false
 }
 
 // TestMain sets up and tears down the test environment
