@@ -158,13 +158,9 @@ func (pm *PrismManager) isReady() bool {
 
 // TestMain sets up and tears down the test environment
 func TestMain(m *testing.M) {
-	// Skip integration tests that require Prism if explicitly disabled or in short mode
-	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" || testing.Short() {
-		if testing.Short() {
-			fmt.Println("Skipping Prism setup in short test mode")
-		} else {
-			fmt.Println("Skipping Prism-based integration tests (SKIP_INTEGRATION_TESTS=true)")
-		}
+	// Skip integration tests that require Prism if explicitly disabled
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		fmt.Println("Skipping Prism-based integration tests (SKIP_INTEGRATION_TESTS=true)")
 		// Still run other tests, just not the ones that need Prism
 		os.Exit(m.Run())
 	}

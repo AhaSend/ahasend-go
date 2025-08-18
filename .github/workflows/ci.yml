@@ -60,6 +60,8 @@ jobs:
         run: |
           # Run all tests with -short flag (skips integration tests)
           go test -v -race -short -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          SKIP_INTEGRATION_TESTS: true
 
       - name: Generate coverage report
         run: |
