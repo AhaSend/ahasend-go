@@ -66,6 +66,43 @@ func main() {
 }
 ```
 
+## Authentication & API Keys
+
+All API requests require a Bearer token. There are three ways to authenticate:
+
+### Environment Variable (Recommended)
+```bash
+# Set environment variable
+export AHASEND_API_KEY="aha-sk-your-64-character-key"
+```
+
+### Client-wide Configuration
+```go
+// Set API key when creating client
+client := ahasend.NewAPIClient(
+    api.WithAPIKey(apiKey),
+)
+
+// or:
+// cfg := api.NewConfiguration()
+// cfg.APIKey = "aha-sk-..."
+// client := ahasend.NewAPIClientWithConfig(cfg)
+
+// All subsequent API calls will use this key automatically
+response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+```
+
+### Context Override (Per-request)
+```go
+// Override API key for specific requests
+ctx := context.WithValue(context.Background(),
+    ahasend.ContextAccessToken, "aha-sk-your-64-character-key")
+
+response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+```
+
+Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
+
 ## Core Functionality
 
 ### Email Operations
@@ -216,37 +253,8 @@ make help
 
 - 📚 [API Documentation](https://ahasend.com/docs)
 - 🔗 [Go Package Documentation](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
-- 💬 [Support](https://ahasend.com/support)
+- 💬 [Support](mailto:suport@ahasend.com)
 - 🐛 [Issues](https://github.com/AhaSend/ahasend-go/issues)
-
-## Authentication & API Keys
-
-All API requests require a Bearer token:
-
-```bash
-# Set environment variable
-export AHASEND_API_KEY="aha-sk-your-64-character-key"
-```
-
-```go
-// In code
-ctx := context.WithValue(context.Background(),
-    ahasend.ContextAccessToken, "aha-sk-your-64-character-key")
-```
-
-Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
-
-## API Scopes
-
-The AhaSend API uses fine-grained scopes for access control:
-
-- `messages:write:all` - Send emails
-- `messages:read:all` - View email status
-- `domains:write:all` - Manage domains
-- `webhooks:write:all` - Configure webhooks
-- `statistics:read:all` - Access analytics
-
-Refer to the [API documentation](https://ahasend.com/docs) for the complete list of scopes.
 
 ## Requirements
 
