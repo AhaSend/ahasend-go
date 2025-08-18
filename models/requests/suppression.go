@@ -1,0 +1,19 @@
+package requests
+
+import "time"
+
+// CreateSuppressionRequest represents a request to create a new email suppression.
+type CreateSuppressionRequest struct {
+	Email     string    `json:"email"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Domain    *string   `json:"domain,omitempty"`
+	Reason    *string   `json:"reason,omitempty"`
+}
+
+type GetSuppressionsParams struct {
+	Domain   *string
+	FromDate *time.Time
+	ToDate   *time.Time
+	Limit    *int32
+	Cursor   *string
+}

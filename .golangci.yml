@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - errcheck
+  exclusions:
+    warn-unused: true
+    paths:
+      - examples
+      - test
+    rules:
+      # Disable errcheck for generated API files that have many Body.Close calls
+      - path: "api_.*\\.go$"
+        linters:
+          - errcheck
+
+      # Disable errcheck for client.go and errors.go (generated/utility code)
+      - path: "(client|errors)\\.go$"
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
