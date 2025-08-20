@@ -688,8 +688,6 @@ func (c *APIClient) handleErrorResponse(resp *http.Response, body []byte, method
 	apiErr := &APIError{
 		StatusCode: resp.StatusCode,
 		Type:       determineErrorType(resp.StatusCode),
-		Method:     method,
-		Endpoint:   path,
 		Raw:        body,
 	}
 
@@ -711,17 +709,10 @@ func (c *APIClient) handleErrorResponse(resp *http.Response, body []byte, method
 	var errorResp common.ErrorResponse
 	if err := json.Unmarshal(body, &errorResp); err == nil {
 		apiErr.Message = errorResp.Message
-		// Note: ErrorResponse doesn't have a Code field, using Message for now
-
-		// Note: ErrorResponse doesn't have Field or Resource fields
 	} else {
 		// Fallback to HTTP status text if parsing fails
 		apiErr.Message = http.StatusText(resp.StatusCode)
 	}
-
-	// Parse message context and generate suggestions
-	apiErr.parseMessageContext()
-	apiErr.generateSuggestions()
 
 	return apiErr
 }

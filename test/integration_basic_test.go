@@ -2,6 +2,7 @@ package ahasend_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -157,22 +158,23 @@ func TestErrorHandlingInfrastructure(t *testing.T) {
 		assert.Contains(t, netErr.Error(), "context deadline exceeded")
 	})
 
-	t.Run("Error helpers", func(t *testing.T) {
+	t.Run("Error types", func(t *testing.T) {
 		apiErr := &api.APIError{Type: api.ErrorTypeValidation}
 		netErr := &api.NetworkError{Op: "test", Err: context.Canceled}
 
-		_, isAPIErr1 := api.IsAPIError(apiErr)
-		_, isAPIErr2 := api.IsAPIError(netErr)
-		assert.True(t, isAPIErr1)
-		assert.False(t, isAPIErr2)
+		// Test APIError type assertion
+		var testAPIErr *api.APIError
+		assert.True(t, errors.As(apiErr, &testAPIErr))
+		assert.False(t, errors.As(netErr, &testAPIErr))
 
-		_, isNetErr1 := api.IsNetworkError(netErr)
-		_, isNetErr2 := api.IsNetworkError(apiErr)
-		assert.True(t, isNetErr1)
-		assert.False(t, isNetErr2)
+		// Test NetworkError type assertion
+		var testNetErr *api.NetworkError
+		assert.True(t, errors.As(netErr, &testNetErr))
+		assert.False(t, errors.As(apiErr, &testNetErr))
 
-		assert.True(t, api.IsRetryableError(netErr))
-		assert.False(t, api.IsRetryableError(apiErr))
+		// Test IsRetryable method
+		assert.True(t, netErr.IsRetryable())
+		assert.False(t, apiErr.IsRetryable())
 	})
 }
 

@@ -37,7 +37,7 @@ func Test_ahasend_SMTPCredentialsAPIService(t *testing.T) {
 		if httpRes != nil {
 			// Any 2xx-4xx range is acceptable for mock responses
 			assert.True(t, httpRes.StatusCode >= 200 && httpRes.StatusCode < 500, "Expected valid HTTP status code, got %d", httpRes.StatusCode)
-			
+
 			// If we got a successful status code, we should have a response
 			if httpRes.StatusCode >= 200 && httpRes.StatusCode < 400 {
 				assert.NotNil(t, resp, "Expected response body for successful status code %d", httpRes.StatusCode)

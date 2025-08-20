@@ -123,7 +123,7 @@ func TestGetMessagesParameterPassing(t *testing.T) {
 					Status:          ahasend.String("Bounced,Failed"),
 					Recipient:       ahasend.String("recipient@example.com"),
 					Subject:         ahasend.String("Complete Subject"),
-					MessageIdHeader: ahasend.String("msg-12345"),
+					MessageIDHeader: ahasend.String("msg-12345"),
 					Limit:           ahasend.Int32(25),
 					Cursor:          ahasend.String("test-cursor"),
 				}
@@ -333,7 +333,7 @@ func TestGetMessagesDirectMethodCall(t *testing.T) {
 			Status:          ahasend.String("Delivered"),
 			Recipient:       ahasend.String("recipient@example.com"),
 			Subject:         ahasend.String("Test Subject"),
-			MessageIdHeader: ahasend.String("msg-1234"),
+			MessageIDHeader: ahasend.String("msg-1234"),
 			Limit:           ahasend.Int32(10),
 			Cursor:          ahasend.String("test-cursor"),
 		}

@@ -914,7 +914,7 @@ func TestGetMessagesStatusParameterCombinations(t *testing.T) {
 			Status:          ahasend.String("Delivered,Bounced"),
 			Recipient:       ahasend.String("recipient@example.com"),
 			Subject:         ahasend.String("Test Subject"),
-			MessageIdHeader: ahasend.String("msg-12345"),
+			MessageIDHeader: ahasend.String("msg-12345"),
 			Limit:           ahasend.Int32(25),
 			Cursor:          ahasend.String("comprehensive-test-cursor"),
 		}

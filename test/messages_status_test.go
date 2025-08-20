@@ -135,7 +135,7 @@ func TestGetMessagesDirectMethodEdgeCases(t *testing.T) {
 			Status:          ahasend.String("Delivered,Bounced"),
 			Recipient:       ahasend.String("recipient@example.com"),
 			Subject:         ahasend.String("Test Subject"),
-			MessageIdHeader: ahasend.String("msg-123"),
+			MessageIDHeader: ahasend.String("msg-123"),
 			Limit:           ahasend.Int32(50),
 			Cursor:          ahasend.String("cursor-123"),
 		}
