@@ -11,6 +11,7 @@ type CreateSuppressionRequest struct {
 }
 
 type GetSuppressionsParams struct {
+	Email    *string
 	Domain   *string
 	FromDate *time.Time
 	ToDate   *time.Time

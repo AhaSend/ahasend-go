@@ -89,7 +89,7 @@ func (a *SuppressionsAPIService) DeleteAllSuppressions(
 
 	config := RequestConfig{
 		Method:       http.MethodDelete,
-		PathTemplate: "/v2/accounts/{account_id}/suppressions",
+		PathTemplate: "/v2/accounts/{account_id}/suppressions/all",
 		PathParams: map[string]string{
 			"account_id": accountId.String(),
 		},
@@ -132,16 +132,16 @@ func (a *SuppressionsAPIService) DeleteSuppression(
 
 	// Build query parameters
 	queryParams := url.Values{}
+	queryParams.Set("email", email)
 	if domain != nil {
 		queryParams.Set("domain", *domain)
 	}
 
 	config := RequestConfig{
 		Method:       http.MethodDelete,
-		PathTemplate: "/v2/accounts/{account_id}/suppressions/{email}",
+		PathTemplate: "/v2/accounts/{account_id}/suppressions",
 		PathParams: map[string]string{
 			"account_id": accountId.String(),
-			"email":      email,
 		},
 		QueryParams: queryParams,
 		Result:      &result,
@@ -184,6 +184,9 @@ func (a *SuppressionsAPIService) GetSuppressions(
 
 	// Build query parameters
 	queryParams := url.Values{}
+	if params.Email != nil {
+		queryParams.Set("email", *params.Email)
+	}
 	if params.Domain != nil {
 		queryParams.Set("domain", *params.Domain)
 	}

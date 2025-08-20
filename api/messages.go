@@ -144,8 +144,8 @@ func (a *MessagesAPIService) GetMessages(
 	if params.Subject != nil {
 		queryParams.Set("subject", *params.Subject)
 	}
-	if params.MessageIdHeader != nil {
-		queryParams.Set("message_id_header", *params.MessageIdHeader)
+	if params.MessageIDHeader != nil {
+		queryParams.Set("message_id_header", *params.MessageIDHeader)
 	}
 	if params.FromTime != nil {
 		queryParams.Set("from_time", params.FromTime.Format(time.RFC3339))

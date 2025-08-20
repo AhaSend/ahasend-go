@@ -31,7 +31,7 @@ type GetMessagesParams struct {
 	Sender          *string
 	Recipient       *string
 	Subject         *string
-	MessageIdHeader *string
+	MessageIDHeader *string
 	FromTime        *time.Time
 	ToTime          *time.Time
 	Limit           *int32
