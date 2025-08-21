@@ -30,15 +30,15 @@ Validation Requirements:
 	@param accountId Account ID
 	@param request CreateSuppressionRequest - The suppression details to create
 	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
-	@return Suppression, *http.Response, error
+	@return CreateSuppressionResponse, *http.Response, error
 */
 func (a *SuppressionsAPIService) CreateSuppression(
 	ctx context.Context,
 	accountId uuid.UUID,
 	request requests.CreateSuppressionRequest,
 	opts ...RequestOption,
-) (*responses.Suppression, *http.Response, error) {
-	var result responses.Suppression
+) (*responses.CreateSuppressionResponse, *http.Response, error) {
+	var result responses.CreateSuppressionResponse
 
 	config := RequestConfig{
 		Method:       http.MethodPost,

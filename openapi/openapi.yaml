@@ -662,6 +662,7 @@ components:
           type: string
           nullable: true
           description: Message ID (null if the message was not sent)
+          example: <uuid@example.com>
         recipient:
           $ref: '#/components/schemas/Recipient'
         status:
@@ -1058,6 +1059,22 @@ components:
         - updated_at
         - email
         - expires_at
+
+    CreateSuppressionResponse:
+      type: object
+      required:
+        - object
+        - data
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suppression'
+          description: Array of suppressions
 
     CreateSuppressionRequest:
       type: object
@@ -1783,10 +1800,46 @@ paths:
       security:
         - BearerAuth: []
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend ping --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.UtilityAPI.Ping(ctx)
+              if err != nil {
+                log.Fatalf("Error pinging API: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Ping successful! Status: %d\n", httpResp.StatusCode)
+                if response != nil && response.Message != "" {
+                    fmt.Printf("Response: %s\n", response.Message)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
+
 
       responses:
         '200':
@@ -1861,6 +1914,11 @@ paths:
             type: string
       security:
         - BearerAuth: ["api-keys:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            ahasend apikeys list --output json
       responses:
         '200':
           description: List of API keys
@@ -1910,6 +1968,15 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["api-keys:write"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend apikeys create \
+              --label "Test API Key" \
+              --scope messages:read:all \
+              --scope domains:read \
+              --output json
       requestBody:
         required: true
         content:
@@ -1979,6 +2046,11 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["api-keys:read"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend apikeys get {api_key_id} --output json
       responses:
         '200':
           description: API key details
@@ -2040,6 +2112,15 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["api-keys:write"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend apikeys update {api_key_id} \
+              --label "Updated label" \
+              --scope messages:read:{example.com} \
+              --scope domains:write \
+              --output json
       requestBody:
         required: true
         content:
@@ -2107,6 +2188,11 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["api-keys:delete"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend apikeys delete {api_key_id} --output json --force
       responses:
         '200':
           description: API key deleted successfully
@@ -2114,6 +2200,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+              example:
+                message: "api key {id} ({label}) deleted successfully"
         '400':
           description: Bad request
           content:
@@ -2182,6 +2270,11 @@ paths:
             type: string
       security:
         - BearerAuth: ["domains:read"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend domains list --output json
       responses:
         '200':
           description: List of domains
@@ -2231,6 +2324,11 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["domains:write"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend domains create example.com --output json
       requestBody:
         required: true
         content:
@@ -2299,6 +2397,11 @@ paths:
             type: string
       security:
         - BearerAuth: ["domains:read"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend domains get example.com --output json
       responses:
         '200':
           description: Domain details
@@ -2359,6 +2462,11 @@ paths:
             type: string
       security:
         - BearerAuth: ["domains:delete:{domain}", "domains:delete:all"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend domains delete example.com --output json
       responses:
         '200':
           description: Domain deleted successfully
@@ -2482,6 +2590,70 @@ paths:
             type: string
       security:
         - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend messages list \
+              --status bounced \
+              --status failed \
+              --from-time 7d \
+              --to-time 1d \
+              --sender info@example.com \
+              --recipient john@exampl.com \
+              --subject 'Login code' \
+              --output json
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.MessagesAPI.GetMessages(
+                ctx,
+                accountID,
+                requests.GetMessagesParams{
+                  Status: ahasend.String("bounced,failed"),
+                  Sender: ahasend.String("info@example.com"),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error getting messages: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d messages\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: List of messages
@@ -2541,6 +2713,78 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend messages send \
+              --from sender@exampel.com \
+              --to recipient@example.com \
+              --subject "Hello"\
+              --text "Hello World"
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.MessagesAPI.CreateMessage(
+                ctx,
+                accountID,
+                requests.CreateMessageRequest{
+                  From: common.SenderAddress{
+                    Email: "info@example.com",
+                    Name:  ahasend.String("Example Corp."),
+                  },
+                  Recipients: []common.Recipient{
+                    {
+                      Email: "john@example.com",
+                      Name:  ahasend.String("John Smith"),
+                    },
+                  },
+                  Subject:     "Hello",
+                  TextContent: ahasend.String("Hello world!"),
+                  Sandbox:     ahasend.Bool(true),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error sending message: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Send successful! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Message ID: %s\n", *response.Data[0].ID)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
+
       requestBody:
         required: true
         content:
@@ -2604,11 +2848,61 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message ID
+          description: Message API ID (the same ID returned by [Create Message API](/api-reference/messages/create-message))
           schema:
             type: string
       security:
         - BearerAuth: ["messages:cancel:all", "messages:cancel:{domain}"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend messages cancel {message_id_header}
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.MessagesAPI.CancelMessage(
+                ctx,
+                accountID,
+                "<uuid@example.com>",
+              )
+              if err != nil {
+                log.Fatalf("Error canceling message: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Successfully canceled! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Message canceled: %s\n", response.Message)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: Scheduled message is cancelled
@@ -2962,6 +3256,7 @@ paths:
 
         **Query Parameters:**
         - `domain`: Filter by domain (optional)
+        - `email`: Filter by email (optional)
         - `from_date`: Filter suppressions created after this date (RFC3339 format)
         - `to_date`: Filter suppressions created before this date (RFC3339 format)
         - `limit`: Maximum number of items to return (1-100, default: 100)
@@ -2982,6 +3277,13 @@ paths:
           description: Filter by domain
           schema:
             type: string
+        - name: email
+          in: query
+          required: true
+          description: Email address
+          schema:
+            type: string
+            format: email
         - name: from_date
           in: query
           description: Filter suppressions created after this date (RFC3339 format)
@@ -3009,6 +3311,11 @@ paths:
             type: string
       security:
         - BearerAuth: ["suppressions:read"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend suppressions list
       responses:
         '200':
           description: List of suppressions
@@ -3064,6 +3371,11 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["suppressions:write"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend suppressions create info@example.com --reason 'Invalid Email Address'
       requestBody:
         required: true
         content:
@@ -3079,7 +3391,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Suppression'
+                $ref: '#/components/schemas/CreateSuppressionResponse'
         '400':
           description: Bad request
           content:
@@ -3108,7 +3420,125 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete Suppression
+      description: |
+        Deletes suppressions for an email address
 
+        **Query Parameters:**
+        - `email`: Required email address to delete from suppression list
+        - `domain`: Optional domain filter to delete suppressions for specific domain only
+      operationId: deleteSuppression
+      tags:
+        - Suppressions
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: email
+          in: query
+          required: true
+          description: Email address
+          schema:
+            type: string
+            format: email
+        - name: domain
+          in: query
+          description: Optional domain filter
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["suppressions:delete"]
+      x-code-samples:
+        - lang: bash
+          label: AhaSend CLI
+          source: |
+            ahasend suppressions delete info@example.com
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SuppressionsAPI.DeleteSuppression(
+                ctx,
+                accountID,
+                "info@bigco.com",
+                ahasend.String("notifications.example.com"),
+              )
+              if err != nil {
+                log.Fatalf("Error deleting suppression: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted the suppression, response: %s\n", len(response.Message))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
+      responses:
+        '200':
+          description: Suppression deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/suppressions/all:
     delete:
       summary: Delete All Suppressions
       description: |
@@ -3155,77 +3585,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /v2/accounts/{account_id}/suppressions/{email}:
-    delete:
-      summary: Delete Suppression
-      description: |
-        Deletes a specific suppression by email address
-
-        **Query Parameters:**
-        - `domain`: Optional domain filter to delete suppression for specific domain only
-      operationId: deleteSuppression
-      tags:
-        - Suppressions
-      parameters:
-        - name: account_id
-          in: path
-          required: true
-          description: Account ID
-          schema:
-            type: string
-            format: uuid
-        - name: email
-          in: path
-          required: true
-          description: Email address
-          schema:
-            type: string
-            format: email
-        - name: domain
-          in: query
-          description: Optional domain filter
-          schema:
-            type: string
-      security:
-        - BearerAuth: ["suppressions:delete"]
-      responses:
-        '200':
-          description: Suppression deleted successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessResponse'
-        '400':
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Suppression not found
           content:
             application/json:
               schema:

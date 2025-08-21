@@ -18,3 +18,9 @@ type Suppression struct {
 	Domain    string    `json:"domain,omitempty"`
 	Reason    string    `json:"reason,omitempty"`
 }
+
+// CreateSuppressionResponse represents the response when creating suppressions
+type CreateSuppressionResponse struct {
+	Object string       `json:"object"`
+	Data   []Suppression `json:"data"`
+}

@@ -121,3 +121,86 @@ func TestSuppression_JSONMarshaling(t *testing.T) {
 		assert.Contains(t, result, "expires_at")
 	})
 }
+
+func TestCreateSuppressionResponse_JSONMarshaling(t *testing.T) {
+	id := uint64(1)
+	accountID := uuid.MustParse("01234567-89ab-cdef-0123-456789abcdef")
+	createdAt := time.Now().UTC().Truncate(time.Second)
+	updatedAt := createdAt.Add(time.Hour)
+	expiresAt := createdAt.Add(24 * time.Hour)
+
+	t.Run("create suppression response with multiple suppressions", func(t *testing.T) {
+		response := CreateSuppressionResponse{
+			Object: "list",
+			Data: []Suppression{
+				{
+					Object:    "suppression",
+					ID:        id,
+					AccountID: accountID,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+					Email:     "user1@example.com",
+					ExpiresAt: expiresAt,
+					Domain:    "example.com",
+					Reason:    "user_request",
+				},
+				{
+					Object:    "suppression",
+					ID:        id + 1,
+					AccountID: accountID,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+					Email:     "user2@example.com",
+					ExpiresAt: expiresAt,
+				},
+			},
+		}
+
+		// Marshal to JSON
+		jsonData, err := json.Marshal(response)
+		require.NoError(t, err)
+
+		// Verify JSON structure
+		assert.Contains(t, string(jsonData), `"object":"list"`)
+		assert.Contains(t, string(jsonData), `"data":[`)
+		assert.Contains(t, string(jsonData), `"user1@example.com"`)
+		assert.Contains(t, string(jsonData), `"user2@example.com"`)
+
+		// Unmarshal and verify
+		var decoded CreateSuppressionResponse
+		err = json.Unmarshal(jsonData, &decoded)
+		require.NoError(t, err)
+
+		assert.Equal(t, "list", decoded.Object)
+		assert.Len(t, decoded.Data, 2)
+
+		// Verify first suppression
+		assert.Equal(t, "user1@example.com", decoded.Data[0].Email)
+		assert.Equal(t, "example.com", decoded.Data[0].Domain)
+		assert.Equal(t, "user_request", decoded.Data[0].Reason)
+
+		// Verify second suppression
+		assert.Equal(t, "user2@example.com", decoded.Data[1].Email)
+		assert.Equal(t, "", decoded.Data[1].Domain)
+		assert.Equal(t, "", decoded.Data[1].Reason)
+	})
+
+	t.Run("create suppression response with empty data array", func(t *testing.T) {
+		response := CreateSuppressionResponse{
+			Object: "list",
+			Data:   []Suppression{},
+		}
+
+		// Marshal to JSON
+		jsonData, err := json.Marshal(response)
+		require.NoError(t, err)
+
+		// Unmarshal and verify
+		var decoded CreateSuppressionResponse
+		err = json.Unmarshal(jsonData, &decoded)
+		require.NoError(t, err)
+
+		assert.Equal(t, "list", decoded.Object)
+		assert.Len(t, decoded.Data, 0)
+	})
+}
