@@ -21,6 +21,6 @@ type Suppression struct {
 
 // CreateSuppressionResponse represents the response when creating suppressions
 type CreateSuppressionResponse struct {
-	Object string       `json:"object"`
+	Object string        `json:"object"`
 	Data   []Suppression `json:"data"`
 }
