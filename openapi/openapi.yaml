@@ -1156,10 +1156,10 @@ components:
           description: Recipient filter
         attachments:
           type: boolean
-          description: Whether to include attachments in webhooks
+          description: Whether to include attachments in route payload
         headers:
           type: boolean
-          description: Whether to include headers in webhooks
+          description: Whether to include headers in route payload
         group_by_message_id:
           type: boolean
           description: Whether to group by message ID
@@ -1169,6 +1169,19 @@ components:
         enabled:
           type: boolean
           description: Whether the route is enabled
+        success_count:
+          type: integer
+          description: Number of successful calls
+        error_count:
+          type: integer
+          description: Number of unsuccessful calls
+        errors_since_last_success:
+          type: integer
+          description: Number of consecutive failed calls
+        last_request_at:
+          type: string
+          format: date-time
+          description: When the route was last called
       required:
         - object
         - id
@@ -1350,6 +1363,19 @@ components:
           items:
             type: string
           description: Domains this webhook applies to
+        success_count:
+          type: integer
+          description: Number of successful calls
+        error_count:
+          type: integer
+          description: Number of unsuccessful calls
+        errors_since_last_success:
+          type: integer
+          description: Number of consecutive failed calls
+        last_request_at:
+          type: string
+          format: date-time
+          description: When the webhook was last called
       required:
         - object
         - id
