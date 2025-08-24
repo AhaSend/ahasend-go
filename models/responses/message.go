@@ -10,14 +10,13 @@ import (
 // Message represents an AhaSend message
 type Message struct {
 	Object               string          `json:"object"`
+	ID                   uuid.UUID       `json:"id"`
+	MessageID            string          `json:"message_id"`
 	CreatedAt            time.Time       `json:"created_at"`
 	UpdatedAt            time.Time       `json:"updated_at"`
 	SentAt               *time.Time      `json:"sent_at,omitempty"`
 	DeliveredAt          *time.Time      `json:"delivered_at,omitempty"`
 	RetainUntil          time.Time       `json:"retain_until"`
-	MessageID            string          `json:"message_id"`
-	ApiID                uuid.UUID       `json:"api_id"`
-	AhasendID            string          `json:"ahasend_id"`
 	Subject              string          `json:"subject"`
 	Tags                 []string        `json:"tags"`
 	Sender               string          `json:"sender"`

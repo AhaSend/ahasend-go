@@ -72,14 +72,14 @@ func TestPaginatedResponse(t *testing.T) {
 			Object: "list",
 			Data: []responses.Message{
 				{
-					ApiID:     uuid.MustParse("00000000-0000-0000-0000-000000000123"),
+					ID:        uuid.MustParse("00000000-0000-0000-0000-000000000123"),
 					Subject:   "Test Message",
 					Status:    "delivered",
 					Sender:    "test@example.com",
 					Recipient: "user@example.com",
 				},
 				{
-					ApiID:     uuid.MustParse("00000000-0000-0000-0000-000000000124"),
+					ID:        uuid.MustParse("00000000-0000-0000-0000-000000000124"),
 					Subject:   "Another Message",
 					Status:    "queued",
 					Sender:    "test@example.com",
@@ -102,7 +102,7 @@ func TestPaginatedResponse(t *testing.T) {
 
 		assert.Equal(t, "list", decoded.Object)
 		assert.Len(t, decoded.Data, 2)
-		assert.Equal(t, uuid.MustParse("00000000-0000-0000-0000-000000000123"), decoded.Data[0].ApiID)
+		assert.Equal(t, uuid.MustParse("00000000-0000-0000-0000-000000000123"), decoded.Data[0].ID)
 		assert.Equal(t, "Test Message", decoded.Data[0].Subject)
 		assert.Equal(t, true, decoded.Pagination.HasMore)
 		assert.NotNil(t, decoded.Pagination.NextCursor)
@@ -206,7 +206,7 @@ func TestPaginationJSONFormat(t *testing.T) {
 			Object: "list",
 			Data: []responses.Message{
 				{
-					ApiID:     uuid.MustParse("00000000-0000-0000-0000-000000000123"),
+					ID:        uuid.MustParse("00000000-0000-0000-0000-000000000123"),
 					AccountID: uuid.MustParse("00000000-0000-0000-0000-000000000123"),
 					Subject:   "Test Message",
 					Status:    "delivered",
@@ -241,7 +241,7 @@ func TestPaginationJSONFormat(t *testing.T) {
 		assert.Len(t, dataArray, 1)
 
 		message := dataArray[0].(map[string]interface{})
-		assert.Equal(t, "00000000-0000-0000-0000-000000000123", message["api_id"])
+		assert.Equal(t, "00000000-0000-0000-0000-000000000123", message["id"])
 		assert.Equal(t, "00000000-0000-0000-0000-000000000123", message["account_id"])
 		assert.Equal(t, "Test Message", message["subject"])
 		assert.Equal(t, "delivered", message["status"])

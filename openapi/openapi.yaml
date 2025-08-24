@@ -758,13 +758,10 @@ components:
         message_id:
           type: string
           description: Message-ID header value
-        api_id:
+        id:
           type: string
           format: uuid
           description: API-generated message ID
-        ahasend_id:
-          type: string
-          description: Internal AhaSend message ID
         subject:
           type: string
           description: Message subject
@@ -814,7 +811,7 @@ components:
         - is_bounce_notification
         - delivery_attempts
         - message_id
-        - ahasend_id
+        - id
         - subject
         - tags
         - sender
