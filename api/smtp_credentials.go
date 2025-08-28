@@ -71,7 +71,7 @@ Deletes an SMTP credential
 func (a *SMTPCredentialsAPIService) DeleteSMTPCredential(
 	ctx context.Context,
 	accountId uuid.UUID,
-	smtpCredentialId uuid.UUID,
+	smtpCredentialId uint64,
 	opts ...RequestOption,
 ) (*common.SuccessResponse, *http.Response, error) {
 	var result common.SuccessResponse
@@ -81,7 +81,7 @@ func (a *SMTPCredentialsAPIService) DeleteSMTPCredential(
 		PathTemplate: "/v2/accounts/{account_id}/smtp-credentials/{smtp_credential_id}",
 		PathParams: map[string]string{
 			"account_id":         accountId.String(),
-			"smtp_credential_id": smtpCredentialId.String(),
+			"smtp_credential_id": fmt.Sprintf("%d", smtpCredentialId),
 		},
 		Result: &result,
 	}
@@ -109,7 +109,7 @@ Returns a specific SMTP credential by ID
 func (a *SMTPCredentialsAPIService) GetSMTPCredential(
 	ctx context.Context,
 	accountId uuid.UUID,
-	smtpCredentialId uuid.UUID,
+	smtpCredentialId uint64,
 	opts ...RequestOption,
 ) (*responses.SMTPCredential, *http.Response, error) {
 	var result responses.SMTPCredential
@@ -119,7 +119,7 @@ func (a *SMTPCredentialsAPIService) GetSMTPCredential(
 		PathTemplate: "/v2/accounts/{account_id}/smtp-credentials/{smtp_credential_id}",
 		PathParams: map[string]string{
 			"account_id":         accountId.String(),
-			"smtp_credential_id": smtpCredentialId.String(),
+			"smtp_credential_id": fmt.Sprintf("%d", smtpCredentialId),
 		},
 		Result: &result,
 	}

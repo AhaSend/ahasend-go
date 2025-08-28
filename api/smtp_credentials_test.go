@@ -75,7 +75,7 @@ func Test_ahasend_SMTPCredentialsAPIService(t *testing.T) {
 		}
 
 		accountId := uuid.New()
-		smtpCredentialId := uuid.New()
+		smtpCredentialId := uint64(1)
 
 		resp, httpRes, err := apiClient.SMTPCredentialsAPI.DeleteSMTPCredential(auth, accountId, smtpCredentialId)
 
@@ -91,7 +91,7 @@ func Test_ahasend_SMTPCredentialsAPIService(t *testing.T) {
 		}
 
 		accountId := uuid.New()
-		smtpCredentialId := uuid.New()
+		smtpCredentialId := uint64(1)
 
 		resp, httpRes, err := apiClient.SMTPCredentialsAPI.GetSMTPCredential(auth, accountId, smtpCredentialId)
 
