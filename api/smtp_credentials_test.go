@@ -57,10 +57,8 @@ func Test_ahasend_SMTPCredentialsAPIService(t *testing.T) {
 
 		accountId := uuid.New()
 		createSMTPCredentialRequest := requests.CreateSMTPCredentialRequest{
-			Name:     "Test SMTP Credential",
-			Username: "test-user",
-			Password: "test-password",
-			Scope:    "global",
+			Name:  "Test SMTP Credential",
+			Scope: "global",
 		}
 
 		resp, httpRes, err := apiClient.SMTPCredentialsAPI.CreateSMTPCredential(auth, accountId, createSMTPCredentialRequest)

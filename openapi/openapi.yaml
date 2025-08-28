@@ -1594,22 +1594,12 @@ components:
       type: object
       required:
         - name
-        - username
-        - password
         - scope
       properties:
         name:
           type: string
           maxLength: 255
           description: Credential name
-        username:
-          type: string
-          maxLength: 255
-          description: SMTP username
-        password:
-          type: string
-          maxLength: 255
-          description: SMTP password
         sandbox:
           type: boolean
           description: Whether this is a sandbox credential

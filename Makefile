@@ -77,7 +77,7 @@ test-unit: ## Run unit tests
 test-integration: ## Run integration tests (requires Prism)
 	@echo "$(BLUE)Running integration tests...$(RESET)"
 	@which prism > /dev/null || (echo "$(RED)Prism CLI is required for integration tests$(RESET)" && echo "$(YELLOW)Install with: npm install -g @stoplight/prism-cli$(RESET)" && exit 1)
-	@test -f api/openapi.yaml || (echo "$(RED)OpenAPI spec not found at api/openapi.yaml$(RESET)" && exit 1)
+	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at api/openapi.yaml$(RESET)" && exit 1)
 	SKIP_INTEGRATION_TESTS=false go test -v -timeout=10m -tags=integration ./test/
 
 test-coverage: ## Run tests with coverage
@@ -166,17 +166,17 @@ perf-test: ## Run performance tests
 quality-report: ## Generate code quality reports
 	@echo "$(BLUE)Generating code quality reports...$(RESET)"
 	mkdir -p reports
-	
+
 	# Linting report
 	golangci-lint run --out-format=html > reports/lint-report.html 2>/dev/null || true
-	
+
 	# Test coverage
 	go test -coverprofile=reports/coverage.out ./...
 	go tool cover -html=reports/coverage.out -o reports/coverage.html
-	
+
 	# Security report
 	gosec -fmt=html -out=reports/security-report.html ./... || true
-	
+
 	@echo "$(GREEN)Quality reports generated in ./reports/$(RESET)"
 
 # Release preparation
