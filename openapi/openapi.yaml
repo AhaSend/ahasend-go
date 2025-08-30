@@ -1931,7 +1931,50 @@ paths:
         - lang: go
           label: AhaSend Go SDK
           source: |
-            ahasend apikeys list --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.APIKeysAPI.GetAPIKeys(
+                ctx,
+                accountID,
+                nil,
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting API keys: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d API keys\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: List of API keys
@@ -1982,14 +2025,59 @@ paths:
       security:
         - BearerAuth: ["api-keys:write"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend apikeys create \
-              --label "Test API Key" \
-              --scope messages:read:all \
-              --scope domains:read \
-              --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.APIKeysAPI.CreateAPIKey(
+                ctx,
+                accountID,
+                requests.CreateAPIKeyRequest{
+                  Label: "My API Key",
+                  Scopes: []string{
+                    "messages:read:all",
+                    "domains:read:all",
+                  },
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error creating API key: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created API key, secret key: %s\n", response.SecretKey)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       requestBody:
         required: true
         content:
@@ -2060,10 +2148,51 @@ paths:
       security:
         - BearerAuth: ["api-keys:read"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend apikeys get {api_key_id} --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.APIKeysAPI.GetAPIKey(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+              )
+              if err != nil {
+                log.Fatalf("Error getting API key: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("API key: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: API key details
@@ -2126,14 +2255,61 @@ paths:
       security:
         - BearerAuth: ["api-keys:write"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend apikeys update {api_key_id} \
-              --label "Updated label" \
-              --scope messages:read:{example.com} \
-              --scope domains:write \
-              --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.APIKeysAPI.UpdateAPIKey(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+                requests.UpdateAPIKeyRequest{
+                  Label: ahasend.String("My API Key"),
+                  Scopes: &[]string{
+                    "messages:read:all",
+                    "domains:read:all",
+                  },
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error updating API key: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Updated API key: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       requestBody:
         required: true
         content:
@@ -2202,10 +2378,51 @@ paths:
       security:
         - BearerAuth: ["api-keys:delete"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend apikeys delete {api_key_id} --output json --force
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.APIKeysAPI.DeleteAPIKey(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+              )
+              if err != nil {
+                log.Fatalf("Error deleting API key: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted API key: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: API key deleted successfully
@@ -2284,10 +2501,54 @@ paths:
       security:
         - BearerAuth: ["domains:read"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend domains list --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.DomainsAPI.GetDomains(
+                ctx,
+                accountID,
+                nil,
+                nil,
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting domains: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d domains\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: List of domains
@@ -2338,10 +2599,55 @@ paths:
       security:
         - BearerAuth: ["domains:write"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend domains create example.com --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.DomainsAPI.CreateDomain(
+                ctx,
+                accountID,
+                requests.CreateDomainRequest{
+                  Domain: "example.com",
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error creating domain: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created domain: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       requestBody:
         required: true
         content:
@@ -2411,10 +2717,51 @@ paths:
       security:
         - BearerAuth: ["domains:read"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend domains get example.com --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.DomainsAPI.GetDomain(
+                ctx,
+                accountID,
+                "example.com",
+              )
+              if err != nil {
+                log.Fatalf("Error getting domain: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Domain: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Domain details
@@ -2476,10 +2823,52 @@ paths:
       security:
         - BearerAuth: ["domains:delete:{domain}", "domains:delete:all"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend domains delete example.com --output json
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.DomainsAPI.DeleteDomain(
+                ctx,
+                accountID,
+                "example.com",
+              )
+              if err != nil {
+                log.Fatalf("Error deleting domain: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted domain: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: Domain deleted successfully
@@ -2604,18 +2993,6 @@ paths:
       security:
         - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
-          source: |
-            ahasend messages list \
-              --status bounced \
-              --status failed \
-              --from-time 7d \
-              --to-time 1d \
-              --sender info@example.com \
-              --recipient john@exampl.com \
-              --subject 'Login code' \
-              --output json
         - lang: go
           label: AhaSend Go SDK
           source: |
@@ -2727,14 +3104,6 @@ paths:
       security:
         - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
-          source: |
-            ahasend messages send \
-              --from sender@exampel.com \
-              --to recipient@example.com \
-              --subject "Hello"\
-              --text "Hello World"
         - lang: go
           label: AhaSend Go SDK
           source: |
@@ -2867,10 +3236,6 @@ paths:
       security:
         - BearerAuth: ["messages:cancel:all", "messages:cancel:{domain}"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
-          source: |
-            ahasend messages cancel {message_id_header}
         - lang: go
           label: AhaSend Go SDK
           source: |
@@ -3325,10 +3690,54 @@ paths:
       security:
         - BearerAuth: ["suppressions:read"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend suppressions list
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SuppressionsAPI.GetSuppressions(
+                ctx,
+                accountID,
+                requests.GetSuppressionsParams{},
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting suppressions: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d suppressions\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: List of suppressions
@@ -3385,10 +3794,58 @@ paths:
       security:
         - BearerAuth: ["suppressions:write"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
+        - lang: go
+          label: AhaSend Go SDK
           source: |
-            ahasend suppressions create info@example.com --reason 'Invalid Email Address'
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SuppressionsAPI.CreateSuppression(
+                ctx,
+                accountID,
+                requests.CreateSuppressionRequest{
+                  Email:     "test@example.com",
+                  Reason:    ahasend.String("Inbox full"),
+                  ExpiresAt: time.Now().Add(time.Hour * 24 * 30),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error creating suppression: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created suppression: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -3467,10 +3924,6 @@ paths:
       security:
         - BearerAuth: ["suppressions:delete"]
       x-code-samples:
-        - lang: bash
-          label: AhaSend CLI
-          source: |
-            ahasend suppressions delete info@example.com
         - lang: go
           label: AhaSend Go SDK
           source: |
@@ -3577,6 +4030,53 @@ paths:
             type: string
       security:
         - BearerAuth: ["suppressions:wipe"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SuppressionsAPI.DeleteAllSuppressions(
+                ctx,
+                accountID,
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error deleting all suppressions: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted all suppressions: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: All suppressions deleted successfully
@@ -3640,6 +4140,54 @@ paths:
             type: string
       security:
         - BearerAuth: ["routes:read:all", "routes:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.RoutesAPI.GetRoutes(
+                ctx,
+                accountID,
+                nil,
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting routes: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d routes\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: List of routes
@@ -3689,6 +4237,62 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["routes:write:all", "routes:write:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.RoutesAPI.CreateRoute(
+                ctx,
+                accountID,
+                requests.CreateRouteRequest{
+                  Name: "My Route",
+                  URL:  "https://mystartup.com/tickets",
+                  Recipient: "ticket-*@mystartup.com",
+                  Enabled:   true,
+                  Attachments: true,
+                  Headers: true,
+                  StripReplies: true,
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error creating route: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created route: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       requestBody:
         required: true
         content:
@@ -3758,6 +4362,52 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["routes:read:all", "routes:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.RoutesAPI.GetRoute(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+              )
+              if err != nil {
+                log.Fatalf("Error getting route: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Route: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Route details
@@ -3819,6 +4469,59 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["routes:write:all", "routes:write:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.RoutesAPI.UpdateRoute(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+                requests.UpdateRouteRequest{
+                  Name: ahasend.String("Updated Name"),
+                  URL:  ahasend.String("https://mystartup.com/new-tickets"),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error updating route: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Updated route: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       requestBody:
         required: true
         content:
@@ -3886,6 +4589,53 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["routes:delete:all", "routes:delete:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.RoutesAPI.DeleteRoute(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+              )
+              if err != nil {
+                log.Fatalf("Error deleting route: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted route: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
+
       responses:
         '200':
           description: Route deleted successfully
@@ -4017,6 +4767,56 @@ paths:
             type: string
       security:
         - BearerAuth: ["webhooks:read:all", "webhooks:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.WebhooksAPI.GetWebhooks(
+                ctx,
+                accountID,
+                api.GetWebhooksParams{
+                  Limit: ahasend.Int32(100),
+                },
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting webhooks: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d webhooks\n", len(response.Data))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: List of webhooks
@@ -4066,6 +4866,61 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["webhooks:write:all", "webhooks:write:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.WebhooksAPI.CreateWebhook(
+                ctx,
+                accountID,
+                requests.CreateWebhookRequest{
+                  Name:   "Failures",
+                  URL:    "https://mystartup.com/webhook",
+                  Enabled: true,
+                  OnBounced: true,
+                  OnTransientError: true,
+                  OnFailed: true,
+                },
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error creating webhook: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created webhook: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4135,6 +4990,53 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["webhooks:read:all", "webhooks:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.WebhooksAPI.GetWebhook(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting webhook: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Webhook: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Webhook details
@@ -4199,6 +5101,60 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["webhooks:write:all", "webhooks:write:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.WebhooksAPI.UpdateWebhook(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+                requests.UpdateWebhookRequest{
+                  Name:      ahasend.String("Failures"),
+                  URL:       ahasend.String("https://mystartup.com/webhook"),
+                  Enabled:   ahasend.Bool(true),
+                  OnBounced: ahasend.Bool(true),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error updating webhook: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Updated webhook: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4266,6 +5222,52 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["webhooks:delete:all", "webhooks:delete:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.WebhooksAPI.DeleteWebhook(
+                ctx,
+                accountID,
+                uuid.MustParse("c5a32c40-b351-439f-8230-779daed3e42c"),
+              )
+              if err != nil {
+                log.Fatalf("Error deleting webhook: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted webhook: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Webhook deleted successfully
@@ -4335,6 +5337,53 @@ paths:
             type: string
       security:
         - BearerAuth: ["smtp-credentials:read:all", "smtp-credentials:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SMTPCredentialsAPI.GetSMTPCredentials(
+                ctx,
+                accountID,
+                nil,
+                nil,
+              )
+              if err != nil {
+                log.Fatalf("Error getting SMTP credentials: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("SMTP credentials: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: List of SMTP credentials
@@ -4384,6 +5433,57 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["smtp-credentials:write:all", "smtp-credentials:write:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SMTPCredentialsAPI.CreateSMTPCredential(
+                ctx,
+                accountID,
+                requests.CreateSMTPCredentialRequest{
+                  Name: "My SMTP Credential",
+                  Scope: "global",
+                  Sandbox: true,
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error creating SMTP credentials: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Created SMTP credentials: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4453,6 +5553,52 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["smtp-credentials:read:all", "smtp-credentials:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SMTPCredentialsAPI.GetSMTPCredential(
+                ctx,
+                accountID,
+                123,
+              )
+              if err != nil {
+                log.Fatalf("Error getting SMTP credentials: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("SMTP credentials: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: SMTP credential details
@@ -4514,6 +5660,52 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["smtp-credentials:delete:all", "smtp-credentials:delete:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Call the ping endpoint
+              response, httpResp, err := client.SMTPCredentialsAPI.DeleteSMTPCredential(
+                ctx,
+                accountID,
+                123,
+              )
+              if err != nil {
+                log.Fatalf("Error deleting SMTP credentials: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deleted SMTP credentials: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: SMTP credential deleted successfully
@@ -4614,6 +5806,61 @@ paths:
             default: day
       security:
         - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              fromTime := time.Now().Add(-time.Hour * 24 * 30)
+              // Call the ping endpoint
+              response, httpResp, err := client.StatisticsAPI.GetDeliverabilityStatistics(
+                ctx,
+                accountID,
+                requests.GetDeliverabilityStatisticsParams{
+                  FromTime:         &fromTime,
+                  SenderDomain:     ahasend.String("example.com"),
+                  RecipientDomains: ahasend.String("gmail.com"),
+                  GroupBy:          ahasend.String("week"),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error getting deliverability statistics: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Deliverability statistics: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Deliverability statistics
@@ -4713,6 +5960,61 @@ paths:
             default: day
       security:
         - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              fromTime := time.Now().Add(-time.Hour * 24 * 30)
+              // Call the ping endpoint
+              response, httpResp, err := client.StatisticsAPI.GetBounceStatistics(
+                ctx,
+                accountID,
+                requests.GetBounceStatisticsParams{
+                  FromTime:         &fromTime,
+                  SenderDomain:     ahasend.String("example.com"),
+                  RecipientDomains: ahasend.String("gmail.com"),
+                  GroupBy:          ahasend.String("week"),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error getting bounce statistics: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Bounce statistics: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Bounce statistics
@@ -4812,6 +6114,61 @@ paths:
             default: day
       security:
         - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              fromTime := time.Now().Add(-time.Hour * 24 * 30)
+              // Call the ping endpoint
+              response, httpResp, err := client.StatisticsAPI.GetDeliveryTimeStatistics(
+                ctx,
+                accountID,
+                requests.GetDeliveryTimeStatisticsParams{
+                  FromTime:         &fromTime,
+                  SenderDomain:     ahasend.String("example.com"),
+                  RecipientDomains: ahasend.String("gmail.com"),
+                  GroupBy:          ahasend.String("week"),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error getting delivery time statistics: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Delivery time statistics: %#v\n", response)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Delivery time statistics
