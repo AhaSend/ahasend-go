@@ -108,7 +108,6 @@ func Test_ahasend_RoutesAPIService(t *testing.T) {
 		resp, httpRes, err := apiClient.RoutesAPI.GetRoutes(auth, accountId, nil, nil)
 
 		validatePrismResponse(t, resp, httpRes, err)
-
 	})
 
 	t.Run("Test RoutesAPIService UpdateRoute", func(t *testing.T) {

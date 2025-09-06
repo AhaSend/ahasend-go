@@ -180,3 +180,29 @@ func (a *MessagesAPIService) GetMessages(
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
 }
+
+func (a *MessagesAPIService) GetMessage(
+	ctx context.Context,
+	accountId uuid.UUID,
+	messageId string,
+	opts ...RequestOption,
+) (*responses.Message, *http.Response, error) {
+	var result responses.Message
+
+	config := RequestConfig{
+		Method:       http.MethodGet,
+		PathTemplate: "/v2/accounts/{account_id}/messages/{message_id}",
+		PathParams: map[string]string{
+			"account_id": accountId.String(),
+			"message_id": messageId,
+		},
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}

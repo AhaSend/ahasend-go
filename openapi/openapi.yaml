@@ -802,6 +802,9 @@ components:
           type: string
           format: uuid
           description: Account ID this message belongs to
+        content:
+          type: string
+          description: Original, raw email content
       required:
         - object
         - created_at
@@ -3205,6 +3208,68 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/messages/{message_id}:
+    get:
+      summary: Get Message
+      description: Returns a message by its API ID
+      operationId: getMessage
+      tags:
+        - Messages
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: message_id
+          in: path
+          required: true
+          description: Message API ID (the same ID returned by [Create Message API](/api-reference/messages/create-message))
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
+      responses:
+        '200':
+          description: Message details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Message not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:

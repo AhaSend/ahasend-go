@@ -18,6 +18,7 @@ type Message struct {
 	DeliveredAt          *time.Time      `json:"delivered_at,omitempty"`
 	RetainUntil          time.Time       `json:"retain_until"`
 	Subject              string          `json:"subject"`
+	Content              *string         `json:"content,omitempty"`
 	Tags                 []string        `json:"tags"`
 	Sender               string          `json:"sender"`
 	Recipient            string          `json:"recipient"`

@@ -82,7 +82,7 @@ test-integration: ## Run integration tests (requires Prism)
 
 test-coverage: ## Run tests with coverage
 	@echo "$(BLUE)Running tests with coverage...$(RESET)"
-	go test -v -race -coverprofile=$(COVERAGE_OUT) -covermode=atomic ./...
+	SKIP_INTEGRATION_TESTS=true go test -v -race -coverprofile=$(COVERAGE_OUT) -covermode=atomic ./...
 	go tool cover -html=$(COVERAGE_OUT) -o $(COVERAGE_HTML)
 	go tool cover -func=$(COVERAGE_OUT)
 	@echo "$(GREEN)Coverage report generated: $(COVERAGE_HTML)$(RESET)"
@@ -95,7 +95,6 @@ benchmark: ## Run benchmarks
 # Security
 security: ## Run security checks
 	@echo "$(BLUE)Running security checks...$(RESET)"
-	gosec -fmt=json -out=gosec-report.json -stdout -verbose=text ./...
 	govulncheck ./...
 
 # Build

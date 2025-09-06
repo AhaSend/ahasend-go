@@ -149,4 +149,18 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 
 	})
 
+	t.Run("Test MessagesAPIService GetMessage", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		messageId := uuid.New().String()
+
+		resp, httpRes, err := apiClient.MessagesAPI.GetMessage(auth, accountId, messageId)
+
+		validatePrismResponse(t, resp, httpRes, err)
+	})
 }
