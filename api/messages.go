@@ -184,7 +184,7 @@ func (a *MessagesAPIService) GetMessages(
 func (a *MessagesAPIService) GetMessage(
 	ctx context.Context,
 	accountId uuid.UUID,
-	messageId string,
+	messageId uuid.UUID,
 	opts ...RequestOption,
 ) (*responses.Message, *http.Response, error) {
 	var result responses.Message
@@ -194,8 +194,9 @@ func (a *MessagesAPIService) GetMessage(
 		PathTemplate: "/v2/accounts/{account_id}/messages/{message_id}",
 		PathParams: map[string]string{
 			"account_id": accountId.String(),
-			"message_id": messageId,
+			"message_id": messageId.String(),
 		},
+		Result: &result,
 	}
 
 	// Apply options

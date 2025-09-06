@@ -157,7 +157,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 		}
 
 		accountId := uuid.New()
-		messageId := uuid.New().String()
+		messageId := uuid.New()
 
 		resp, httpRes, err := apiClient.MessagesAPI.GetMessage(auth, accountId, messageId)
 

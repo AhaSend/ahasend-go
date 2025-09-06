@@ -8,7 +8,7 @@ package api
 import (
 	"context"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"time"
@@ -123,7 +123,7 @@ func (rc RetryConfig) GetDelay(attempt int) time.Duration {
 	case BackoffExponential:
 		delay = time.Duration(1<<uint(attempt-1)) * rc.BaseDelay
 		// Add jitter (±25% randomization)
-		jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+		jitter := time.Duration(rand.Int64N(int64(delay / 2)))
 		delay = delay + jitter - delay/4
 	case BackoffLinear:
 		delay = time.Duration(attempt) * rc.BaseDelay
