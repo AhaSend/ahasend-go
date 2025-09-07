@@ -7,6 +7,24 @@ import (
 	"github.com/google/uuid"
 )
 
+type ContentParsed struct {
+	Parts       []ContentPart       `json:"parts"`
+	Attachments []ContentAttachment `json:"attachments"`
+	Headers     map[string][]string `json:"headers"`
+}
+
+type ContentPart struct {
+	ContentType string `json:"content_type"`
+	Content     string `json:"content"`
+}
+
+type ContentAttachment struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Content     string `json:"content"`
+	ContentID   string `json:"content_id"`
+}
+
 // Message represents an AhaSend message
 type Message struct {
 	Object               string          `json:"object"`
@@ -19,6 +37,7 @@ type Message struct {
 	RetainUntil          time.Time       `json:"retain_until"`
 	Subject              string          `json:"subject"`
 	Content              *string         `json:"content,omitempty"`
+	ContentParsed        *ContentParsed  `json:"content_parsed,omitempty"`
 	Tags                 []string        `json:"tags"`
 	Sender               string          `json:"sender"`
 	Recipient            string          `json:"recipient"`

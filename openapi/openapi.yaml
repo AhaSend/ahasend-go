@@ -711,7 +711,74 @@ components:
         - log
         - status
 
-    Message:
+    MessageContentPart:
+      type: object
+      properties:
+        content_type:
+          type: string
+          description: MIME content type (e.g., "text/plain", "text/html")
+          example: "text/html"
+        content:
+          type: string
+          description: The actual content for this part
+      required:
+        - content_type
+        - content
+
+    MessageAttachment:
+      type: object
+      properties:
+        filename:
+          type: string
+          description: Original filename of the attachment
+          example: "document.pdf"
+        content:
+          type: string
+          description: Base64 encoded attachment content
+        content_type:
+          type: string
+          description: MIME content type of the attachment
+          example: "application/pdf"
+        content_id:
+          type: string
+          description: Content-ID for inline attachments
+          nullable: true
+          example: "image001@example.com"
+      required:
+        - filename
+        - content
+        - content_type
+
+    MessageContentParsed:
+      type: object
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageContentPart'
+          description: Array of message content parts (text, HTML, etc.)
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageAttachment'
+          description: Array of message attachments
+        headers:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Email headers as key-value pairs (values are arrays to handle multiple headers with same name)
+          example:
+            "Content-Type": ["text/html; charset=utf-8"]
+            "X-Custom-Header": ["value1", "value2"]
+      required:
+        - parts
+        - attachments
+        - headers
+
+    # Base message schema without heavy content fields
+    MessageSummary:
       type: object
       properties:
         object:
@@ -802,9 +869,6 @@ components:
           type: string
           format: uuid
           description: Account ID this message belongs to
-        content:
-          type: string
-          description: Original, raw email content
       required:
         - object
         - created_at
@@ -826,6 +890,21 @@ components:
         - domain_id
         - account_id
 
+    # Full message schema with content fields
+    Message:
+      allOf:
+        - $ref: '#/components/schemas/MessageSummary'
+        - type: object
+          properties:
+            content:
+              type: string
+              nullable: true
+              description: Original, raw email content (RFC822 format) - may be null if the message content is not available.
+            content_parsed:
+              $ref: '#/components/schemas/MessageContentParsed'
+              description: Parsed and structured message content including parts, attachments, and headers - may be null if the message content is not available.
+
+    # Update the paginated response to use the lighter schema
     PaginatedMessagesResponse:
       type: object
       required:
@@ -840,8 +919,8 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/Message'
-          description: Array of messages
+            $ref: '#/components/schemas/MessageSummary'
+          description: Array of message summaries (content and content_parsed fields omitted for performance)
         pagination:
           $ref: '#/components/schemas/PaginationInfo'
 
@@ -2915,18 +2994,8 @@ paths:
     get:
       summary: Get Messages
       description: |
-        Returns a list of messages for the account. Can be filtered by various parameters.
+        Returns a list of message summaries for the account. Can be filtered by various parameters.
 
-        **Query Parameters:**
-        - `status`: Filter by comma-separated list of message statuses (any of 'Received', 'Delivered', 'Deferred', 'Bounced', 'Failed', 'Suppressed', 'Sandbox Delivered', 'Sandbox Deferred', 'Sandbox Failed', 'Sandbox Bounced', 'Sandbox Suppressed')
-        - `sender`: Filter by sender email (must be from domain in API key scopes)
-        - `recipient`: Filter by recipient email
-        - `subject`: Filter by subject text
-        - `message_id_header`: Filter by message ID header (same ID returned by CreateMessage API)
-        - `from_time`: Filter messages created after this time (RFC3339 format)
-        - `to_time`: Filter messages created before this time (RFC3339 format)
-        - `limit`: Maximum number of items to return (1-100, default: 100)
-        - `cursor`: Pagination cursor for the next page
       operationId: getMessages
       tags:
         - Messages
@@ -3218,7 +3287,8 @@ paths:
   /v2/accounts/{account_id}/messages/{message_id}:
     get:
       summary: Get Message
-      description: Returns a message by its API ID
+      description: |
+        Returns the complete message by its ID, including raw content and parsed content structure.
       operationId: getMessage
       tags:
         - Messages
