@@ -11,6 +11,9 @@ type Attachment struct {
 	// The MIME type of the attachment
 	ContentType string `json:"content_type"`
 
+	// The Content-Disposition of the attachment
+	ContentDisposition string `json:"content_disposition"`
+
 	// The Content-ID of the attachment for inline images
 	ContentID *string `json:"content_id,omitempty"`
 

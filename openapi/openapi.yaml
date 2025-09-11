@@ -506,6 +506,9 @@ components:
         content_type:
           type: string
           description: The MIME type of the attachment
+        content_disposition:
+          type: string
+          description: The disposition of the attachment
         content_id:
           type: string
           description: The Content-ID of the attachment for inline images
