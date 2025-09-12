@@ -459,5 +459,5 @@ func generateSignature(t *testing.T, verifier *WebhookVerifier, msgID, timestamp
 	h.Write([]byte(signedContent))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 
-	return fmt.Sprintf("v1=%s", signature)
+	return fmt.Sprintf("v1,%s", signature)
 }

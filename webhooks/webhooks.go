@@ -95,7 +95,7 @@ func (v *WebhookVerifier) Verify(payload []byte, headers http.Header) error {
 	// Check if any signature matches
 	for _, sig := range signatures {
 		// Remove version prefix if present
-		sig = strings.TrimPrefix(sig, SignatureVersion+"=")
+		sig = strings.TrimPrefix(sig, SignatureVersion+",")
 
 		// Constant-time comparison
 		if hmac.Equal([]byte(sig), []byte(expectedSignature)) {
