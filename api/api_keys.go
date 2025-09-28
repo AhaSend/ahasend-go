@@ -140,29 +140,39 @@ Returns a list of API keys for the account
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
-	@param limit Maximum number of items to return (optional, default: 100)
-	@param cursor Pagination cursor for the next page (optional)
+	@param pagination Pagination parameters (optional)
 	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
 	@return PaginatedAPIKeysResponse, *http.Response, error
 */
 func (a *APIKeysAPIService) GetAPIKeys(
 	ctx context.Context,
 	accountId uuid.UUID,
-	limit *int32,
-	cursor *string,
+	pagination *common.PaginationParams,
 	opts ...RequestOption,
 ) (*responses.PaginatedAPIKeysResponse, *http.Response, error) {
 	var result responses.PaginatedAPIKeysResponse
 
 	// Build query parameters
 	queryParams := url.Values{}
-	if limit != nil {
-		queryParams.Set("limit", fmt.Sprintf("%d", *limit))
+
+	// Handle pagination parameters
+	if pagination != nil {
+		if pagination.Limit != nil {
+			queryParams.Set("limit", fmt.Sprintf("%d", *pagination.Limit))
+		} else {
+			queryParams.Set("limit", "100") // Default value
+		}
+
+		// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
+		if pagination.After != nil {
+			queryParams.Set("after", *pagination.After)
+		} else if pagination.Before != nil {
+			queryParams.Set("before", *pagination.Before)
+		} else if pagination.Cursor != nil {
+			queryParams.Set("cursor", *pagination.Cursor)
+		}
 	} else {
 		queryParams.Set("limit", "100") // Default value
-	}
-	if cursor != nil {
-		queryParams.Set("cursor", *cursor)
 	}
 
 	config := RequestConfig{

@@ -10,6 +10,7 @@ import (
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
 )
@@ -72,7 +73,9 @@ func main() {
 
 func listWebhooks(ctx context.Context, client *api.APIClient, accountID uuid.UUID) {
 	params := api.GetWebhooksParams{
-		Limit: ahasend.Int32(10),
+		PaginationParams: common.PaginationParams{
+			Limit: ahasend.Int32(10),
+		},
 	}
 	response, httpResp, err := client.WebhooksAPI.GetWebhooks(ctx, accountID, params)
 

@@ -1,6 +1,10 @@
 package requests
 
-import "time"
+import (
+	"time"
+
+	"github.com/AhaSend/ahasend-go/models/common"
+)
 
 // CreateSuppressionRequest represents a request to create a new email suppression.
 type CreateSuppressionRequest struct {
@@ -15,6 +19,5 @@ type GetSuppressionsParams struct {
 	Domain   *string
 	FromDate *time.Time
 	ToDate   *time.Time
-	Limit    *int32
-	Cursor   *string
+	common.PaginationParams
 }

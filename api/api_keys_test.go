@@ -104,7 +104,7 @@ func Test_ahasend_APIKeysAPIService(t *testing.T) {
 
 		accountId := uuid.New()
 
-		resp, httpRes, err := apiClient.APIKeysAPI.GetAPIKeys(auth, accountId, nil, nil)
+		resp, httpRes, err := apiClient.APIKeysAPI.GetAPIKeys(auth, accountId, nil)
 
 		validatePrismResponse(t, resp, httpRes, err)
 

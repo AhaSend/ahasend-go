@@ -8,6 +8,7 @@ import (
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/AhaSend/ahasend-go/models/responses"
 	"github.com/google/uuid"
@@ -136,8 +137,10 @@ func TestGetMessagesDirectMethodEdgeCases(t *testing.T) {
 			Recipient:       ahasend.String("recipient@example.com"),
 			Subject:         ahasend.String("Test Subject"),
 			MessageIDHeader: ahasend.String("msg-123"),
-			Limit:           ahasend.Int32(50),
-			Cursor:          ahasend.String("cursor-123"),
+			PaginationParams: common.PaginationParams{
+				Limit:  ahasend.Int32(50),
+				Cursor: ahasend.String("cursor-123"),
+			},
 		}
 
 		_, _, err := client.MessagesAPI.GetMessages(ctx, accountID, params)
@@ -181,7 +184,9 @@ func TestGetMessagesDirectMethodDocumentationExamples(t *testing.T) {
 			Sender:    ahasend.String("noreply@example.com"),
 			Status:    ahasend.String("Delivered"),
 			Recipient: ahasend.String("user@example.com"),
-			Limit:     ahasend.Int32(10),
+			PaginationParams: common.PaginationParams{
+				Limit: ahasend.Int32(10),
+			},
 		}
 
 		_, _, err := client.MessagesAPI.GetMessages(ctx, accountID, params)

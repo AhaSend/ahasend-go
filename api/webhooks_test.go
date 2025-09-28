@@ -104,7 +104,7 @@ func Test_ahasend_WebhooksAPIService(t *testing.T) {
 
 		accountId := uuid.New()
 
-		params := GetWebhooksParams{nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil}
+		params := GetWebhooksParams{}
 		resp, httpRes, err := apiClient.WebhooksAPI.GetWebhooks(auth, accountId, params)
 
 		validatePrismResponse(t, resp, httpRes, err)

@@ -103,7 +103,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 
 		// Test 1: Basic GetMessages with required sender parameter
 		t.Run("Basic GetMessages", func(t *testing.T) {
-			params := requests.GetMessagesParams{Status: nil, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, Limit: nil, Cursor: nil}
+			params := requests.GetMessagesParams{Status: nil, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, PaginationParams: common.PaginationParams{Limit: nil, Cursor: nil}}
 			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId, params)
 
 			validatePrismResponse(t, resp, httpRes, err)
@@ -112,7 +112,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 		// Test 2: GetMessages with status filter (single status)
 		t.Run("GetMessages with single status", func(t *testing.T) {
 			status := "Delivered"
-			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, Limit: nil, Cursor: nil}
+			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, PaginationParams: common.PaginationParams{Limit: nil, Cursor: nil}}
 			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId, params)
 
 			validatePrismResponse(t, resp, httpRes, err)
@@ -121,7 +121,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 		// Test 3: GetMessages with multiple statuses
 		t.Run("GetMessages with multiple statuses", func(t *testing.T) {
 			status := "Bounced,Failed"
-			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, Limit: nil, Cursor: nil}
+			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, PaginationParams: common.PaginationParams{Limit: nil, Cursor: nil}}
 			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId, params)
 
 			validatePrismResponse(t, resp, httpRes, err)
@@ -132,7 +132,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 			status := "Delivered"
 			recipient := "user@example.com"
 			limit := int32(10)
-			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: &recipient, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, Limit: &limit, Cursor: nil}
+			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: &recipient, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, PaginationParams: common.PaginationParams{Limit: &limit, Cursor: nil}}
 			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId, params)
 
 			validatePrismResponse(t, resp, httpRes, err)
@@ -141,7 +141,7 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 		// Test 5: GetMessages with all possible statuses
 		t.Run("GetMessages with all statuses", func(t *testing.T) {
 			status := "Delivered,Bounced,Failed,Queued,Processing,Suppressed"
-			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, Limit: nil, Cursor: nil}
+			params := requests.GetMessagesParams{Status: &status, Sender: &senderEmail, Recipient: nil, Subject: nil, MessageIDHeader: nil, FromTime: nil, ToTime: nil, PaginationParams: common.PaginationParams{Limit: nil, Cursor: nil}}
 			resp, httpRes, err := apiClient.MessagesAPI.GetMessages(auth, accountId, params)
 
 			validatePrismResponse(t, resp, httpRes, err)

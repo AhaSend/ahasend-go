@@ -34,6 +34,5 @@ type GetMessagesParams struct {
 	MessageIDHeader *string
 	FromTime        *time.Time
 	ToTime          *time.Time
-	Limit           *int32
-	Cursor          *string
+	common.PaginationParams
 }

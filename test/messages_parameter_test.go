@@ -10,6 +10,7 @@ import (
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/AhaSend/ahasend-go/models/responses"
 	"github.com/google/uuid"
@@ -103,7 +104,9 @@ func TestGetMessagesParameterPassing(t *testing.T) {
 					Status:    ahasend.String("Delivered"),
 					Recipient: ahasend.String("recipient@example.com"),
 					Subject:   ahasend.String("Test Subject"),
-					Limit:     ahasend.Int32(10),
+					PaginationParams: common.PaginationParams{
+						Limit: ahasend.Int32(10),
+					},
 				}
 				return client.MessagesAPI.GetMessages(ctx, accountID, params)
 			},
@@ -124,8 +127,10 @@ func TestGetMessagesParameterPassing(t *testing.T) {
 					Recipient:       ahasend.String("recipient@example.com"),
 					Subject:         ahasend.String("Complete Subject"),
 					MessageIDHeader: ahasend.String("msg-12345"),
-					Limit:           ahasend.Int32(25),
-					Cursor:          ahasend.String("test-cursor"),
+					PaginationParams: common.PaginationParams{
+						Limit:  ahasend.Int32(25),
+						Cursor: ahasend.String("test-cursor"),
+					},
 				}
 				return client.MessagesAPI.GetMessages(ctx, accountID, params)
 			},
@@ -285,7 +290,9 @@ func TestGetMessagesStatusParameterQueryStringBuilding(t *testing.T) {
 			Status:    ahasend.String("Delivered"),
 			Recipient: ahasend.String("recipient@example.com"),
 			Subject:   ahasend.String("Test"),
-			Limit:     ahasend.Int32(10),
+			PaginationParams: common.PaginationParams{
+				Limit: ahasend.Int32(10),
+			},
 		}
 		_, _, _ = client.MessagesAPI.GetMessages(ctx, accountID, params)
 
@@ -334,8 +341,10 @@ func TestGetMessagesDirectMethodCall(t *testing.T) {
 			Recipient:       ahasend.String("recipient@example.com"),
 			Subject:         ahasend.String("Test Subject"),
 			MessageIDHeader: ahasend.String("msg-1234"),
-			Limit:           ahasend.Int32(10),
-			Cursor:          ahasend.String("test-cursor"),
+			PaginationParams: common.PaginationParams{
+				Limit:  ahasend.Int32(10),
+				Cursor: ahasend.String("test-cursor"),
+			},
 		}
 		// This should compile and not panic (even if it fails due to no server)
 		_, _, err := client.MessagesAPI.GetMessages(ctx, accountID, params)

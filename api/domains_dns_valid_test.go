@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,7 +23,7 @@ func TestGetDomainsWithDnsValidParameter(t *testing.T) {
 
 	t.Run("GetDomains with dnsValid=true parameter", func(t *testing.T) {
 		dnsValid := true
-		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, nil, nil)
+		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, nil)
 
 		// We expect this to fail with a network error since we're not hitting a real API
 		// but it should not fail with a compilation or type error
@@ -31,7 +32,7 @@ func TestGetDomainsWithDnsValidParameter(t *testing.T) {
 
 	t.Run("GetDomains with dnsValid=false parameter", func(t *testing.T) {
 		dnsValid := false
-		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, nil, nil)
+		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, nil)
 
 		// We expect this to fail with a network error since we're not hitting a real API
 		// but it should not fail with a compilation or type error
@@ -40,10 +41,28 @@ func TestGetDomainsWithDnsValidParameter(t *testing.T) {
 
 	t.Run("GetDomains with all parameters set", func(t *testing.T) {
 		dnsValid := true
-		limit := int32(50)
-		cursor := "test-cursor"
+		pagination := &common.PaginationParams{
+			Limit:  &[]int32{50}[0],
+			Cursor: &[]string{"test-cursor"}[0],
+			After:  &[]string{"test-after-cursor"}[0],
+			Before: &[]string{"test-before-cursor"}[0],
+		}
 
-		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, &limit, &cursor)
+		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, pagination)
+
+		// We expect this to fail with a network error since we're not hitting a real API
+		// but it should not fail with a compilation or type error
+		assert.Error(t, err) // This will be a network error, which is expected
+	})
+
+	t.Run("GetDomains with bidirectional pagination", func(t *testing.T) {
+		dnsValid := true
+		pagination := &common.PaginationParams{
+			Limit: &[]int32{50}[0],
+			After: &[]string{"test-after-cursor"}[0],
+		}
+
+		_, _, err := apiClient.DomainsAPI.GetDomains(ctx, accountId, &dnsValid, pagination)
 
 		// We expect this to fail with a network error since we're not hitting a real API
 		// but it should not fail with a compilation or type error

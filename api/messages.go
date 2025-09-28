@@ -115,7 +115,9 @@ Returns a list of messages for the account. Can be filtered by various parameter
 - `from_time`: Filter messages created after this time (RFC3339 format)
 - `to_time`: Filter messages created before this time (RFC3339 format)
 - `limit`: Maximum number of items to return (1-100, default: 100)
-- `cursor`: Pagination cursor for the next page
+- `cursor`: Pagination cursor for the next page (backward compatibility)
+- `after`: Get items after this cursor (forward pagination)
+- `before`: Get items before this cursor (backward pagination)
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -153,12 +155,19 @@ func (a *MessagesAPIService) GetMessages(
 	if params.ToTime != nil {
 		queryParams.Set("to_time", params.ToTime.Format(time.RFC3339))
 	}
+	// Handle pagination parameters
 	if params.Limit != nil {
 		queryParams.Set("limit", fmt.Sprintf("%d", *params.Limit))
 	} else {
 		queryParams.Set("limit", "100") // Default value
 	}
-	if params.Cursor != nil {
+
+	// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
+	if params.After != nil {
+		queryParams.Set("after", *params.After)
+	} else if params.Before != nil {
+		queryParams.Set("before", *params.Before)
+	} else if params.Cursor != nil {
 		queryParams.Set("cursor", *params.Cursor)
 	}
 

@@ -186,7 +186,9 @@ func demonstratePerEndpointRateLimiting(ctx context.Context, client *api.APIClie
 	start := time.Now()
 	for i := 0; i < 3; i++ {
 		params := requests.GetMessagesParams{
-			Limit: ahasend.Int32(1),
+			PaginationParams: common.PaginationParams{
+				Limit: ahasend.Int32(1),
+			},
 		}
 		client.MessagesAPI.GetMessages(ctx, accountID, params)
 	}

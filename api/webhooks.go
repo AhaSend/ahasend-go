@@ -145,8 +145,7 @@ type GetWebhooksParams struct {
 	OnClicked            *bool
 	OnSuppressionCreated *bool
 	OnDnsError           *bool
-	Limit                *int32
-	Cursor               *string
+	common.PaginationParams
 }
 
 /*
@@ -158,7 +157,9 @@ GetWebhooks Get Webhooks
 - `enabled`: Filter by enabled status
 - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_suppression_created`, `on_dns_error`
 - `limit`: Maximum number of items to return (1-100, default: 100)
-- `cursor`: Pagination cursor for the next page
+- `cursor`: Pagination cursor for the next page (backward compatibility)
+- `after`: Get items after this cursor (forward pagination)
+- `before`: Get items before this cursor (backward pagination)
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -208,12 +209,19 @@ func (a *WebhooksAPIService) GetWebhooks(
 	if params.OnDnsError != nil {
 		queryParams.Set("on_dns_error", fmt.Sprintf("%t", *params.OnDnsError))
 	}
+	// Handle pagination parameters
 	if params.Limit != nil {
 		queryParams.Set("limit", fmt.Sprintf("%d", *params.Limit))
 	} else {
 		queryParams.Set("limit", "100") // Default value
 	}
-	if params.Cursor != nil {
+
+	// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
+	if params.After != nil {
+		queryParams.Set("after", *params.After)
+	} else if params.Before != nil {
+		queryParams.Set("before", *params.Before)
+	} else if params.Cursor != nil {
 		queryParams.Set("cursor", *params.Cursor)
 	}
 

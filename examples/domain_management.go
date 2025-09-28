@@ -10,6 +10,7 @@ import (
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
 )
@@ -70,7 +71,14 @@ func main() {
 }
 
 func listDomains(ctx context.Context, client *api.APIClient, accountID uuid.UUID) {
-	response, httpResp, err := client.DomainsAPI.GetDomains(ctx, accountID, nil, ahasend.Int32(10), nil)
+	response, httpResp, err := client.DomainsAPI.GetDomains(
+		ctx,
+		accountID,
+		nil,
+		&common.PaginationParams{
+			Limit: ahasend.Int32(10),
+		},
+	)
 
 	if err != nil {
 		handleError(err)

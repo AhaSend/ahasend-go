@@ -198,6 +198,9 @@ components:
         next_cursor:
           type: string
           description: Cursor for the next page of results
+        previous_cursor:
+          type: string
+          description: Cursor for the previous page of results
       example:
         has_more: true
         next_cursor: "eyJpZCI6MTIzNH0="
@@ -2007,7 +2010,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -2580,7 +2594,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -3062,7 +3087,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -3822,7 +3858,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -4273,7 +4320,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -4900,7 +4958,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:
@@ -5470,7 +5539,18 @@ paths:
             default: 100
         - name: cursor
           in: query
+          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
+          schema:
+            type: string
+          deprecated: true
+        - name: after
+          in: query
           description: Pagination cursor for the next page
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page
           schema:
             type: string
       security:

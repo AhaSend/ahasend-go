@@ -11,6 +11,7 @@ import (
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
 )
@@ -268,7 +269,9 @@ func getDeliveryTimeStats(ctx context.Context, client *api.APIClient, accountID 
 
 func getRecentMessages(ctx context.Context, client *api.APIClient, accountID uuid.UUID) {
 	params := requests.GetMessagesParams{
-		Limit: ahasend.Int32(5),
+		PaginationParams: common.PaginationParams{
+			Limit: ahasend.Int32(5),
+		},
 	}
 	response, httpResp, err := client.MessagesAPI.GetMessages(ctx, accountID, params)
 
@@ -279,8 +282,8 @@ func getRecentMessages(ctx context.Context, client *api.APIClient, accountID uui
 
 	if httpResp.StatusCode >= 200 && httpResp.StatusCode < 300 && response.Data != nil && len(response.Data) > 0 {
 		for i, msg := range response.Data {
-			fmt.Printf("  %d. Message API ID: %s\n", i+1, msg.ApiID.String())
-			fmt.Printf("     AhaSend ID: %s\n", msg.AhasendID)
+			fmt.Printf("  %d. Message API ID: %s\n", i+1, msg.ID.String())
+			fmt.Printf("     Message-ID header: %s\n", msg.MessageID)
 			fmt.Printf("     Direction: %s\n", msg.Direction)
 			fmt.Printf("     Subject: %s\n", msg.Subject)
 			fmt.Printf("     From: %s → To: %s\n", msg.Sender, msg.Recipient)
