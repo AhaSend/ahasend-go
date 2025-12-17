@@ -23,6 +23,7 @@ CreateDomain Create Domain
 Validation Requirements:
 - `domain` must be a valid domain name
 - `domain` must not already exist in the account
+- `dkim_private_key` is optional and must be a valid DKIM RSA private key with a minimum key length of 2048 bits if provided.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
