@@ -36,7 +36,7 @@ install-tools: ## Install required development tools
 	@echo "$(BLUE)Installing development tools...$(RESET)"
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
 	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/securecodewarrior/github-action-gosec/v2/cmd/gosec@latest
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@which npm > /dev/null || (echo "$(RED)npm is required but not installed$(RESET)" && exit 1)
 	npm install -g @stoplight/prism-cli@5
 	@echo "$(GREEN)Development tools installed successfully!$(RESET)"
