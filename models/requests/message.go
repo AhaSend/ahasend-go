@@ -28,6 +28,7 @@ type CreateMessageRequest struct {
 
 type GetMessagesParams struct {
 	Status          *string
+	Tags            []string
 	Sender          *string
 	Recipient       *string
 	Subject         *string

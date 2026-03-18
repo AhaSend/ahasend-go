@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/AhaSend/ahasend-go/models/common"
@@ -108,6 +109,7 @@ Returns a list of messages for the account. Can be filtered by various parameter
 
 **Query Parameters:**
 - `status`: Filter by comma-separated list of message statuses
+- `tags`: Filter by tags
 - `sender`: Filter by sender email (must be from domain in API key scopes)
 - `recipient`: Filter by recipient email
 - `subject`: Filter by subject text
@@ -136,6 +138,9 @@ func (a *MessagesAPIService) GetMessages(
 	queryParams := url.Values{}
 	if params.Status != nil {
 		queryParams.Set("status", *params.Status)
+	}
+	if len(params.Tags) > 0 {
+		queryParams.Set("tags", strings.Join(params.Tags, ","))
 	}
 	if params.Sender != nil {
 		queryParams.Set("sender", *params.Sender)

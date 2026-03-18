@@ -3063,6 +3063,12 @@ paths:
           description: Filter by message ID header (same ID returned by CreateMessage API)
           schema:
             type: string
+        - name: tags
+          in: query
+          description: Filter by comma-separated list of tags (max 20)
+          schema:
+            type: string
+          example: "billing,urgent"
         - name: from_time
           in: query
           description: Filter messages created after this time (RFC3339 format)
@@ -3093,12 +3099,12 @@ paths:
           deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:
@@ -3137,6 +3143,7 @@ paths:
                 accountID,
                 requests.GetMessagesParams{
                   Status: ahasend.String("bounced,failed"),
+                  Tags: []string{"billing", "urgent"},
                   Sender: ahasend.String("info@example.com"),
                 },
               )
