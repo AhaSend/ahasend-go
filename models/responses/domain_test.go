@@ -17,14 +17,26 @@ func TestDomain_JSONMarshaling(t *testing.T) {
 	accountID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 
 	t.Run("Domain with all fields", func(t *testing.T) {
+		trackingSub := "click"
+		returnPathSub := "mail"
+		subscriptionSub := "preferences"
+		mediaSub := "media"
+		rotationDays := 45
+
 		domain := Domain{
-			Object:         "domain",
-			ID:             domainID,
-			CreatedAt:      now,
-			UpdatedAt:      now,
-			LastDNSCheckAt: &lastCheck,
-			Domain:         "example.com",
-			AccountID:      accountID,
+			Object:                   "domain",
+			ID:                       domainID,
+			CreatedAt:                now,
+			UpdatedAt:                now,
+			LastDNSCheckAt:           &lastCheck,
+			Domain:                   "example.com",
+			AccountID:                accountID,
+			TrackingSubdomain:        &trackingSub,
+			ReturnPathSubdomain:      &returnPathSub,
+			SubscriptionSubdomain:    &subscriptionSub,
+			MediaSubdomain:           &mediaSub,
+			DKIMRotationIntervalDays: &rotationDays,
+			RotationReady:            true,
 			DNSRecords: []DNSRecord{
 				{
 					Type:       "CNAME",
@@ -59,6 +71,19 @@ func TestDomain_JSONMarshaling(t *testing.T) {
 		assert.NotNil(t, unmarshaled.LastDNSCheckAt)
 		assert.True(t, unmarshaled.LastDNSCheckAt.Equal(lastCheck))
 
+		// Verify DNS settings fields
+		require.NotNil(t, unmarshaled.TrackingSubdomain)
+		assert.Equal(t, "click", *unmarshaled.TrackingSubdomain)
+		require.NotNil(t, unmarshaled.ReturnPathSubdomain)
+		assert.Equal(t, "mail", *unmarshaled.ReturnPathSubdomain)
+		require.NotNil(t, unmarshaled.SubscriptionSubdomain)
+		assert.Equal(t, "preferences", *unmarshaled.SubscriptionSubdomain)
+		require.NotNil(t, unmarshaled.MediaSubdomain)
+		assert.Equal(t, "media", *unmarshaled.MediaSubdomain)
+		require.NotNil(t, unmarshaled.DKIMRotationIntervalDays)
+		assert.Equal(t, 45, *unmarshaled.DKIMRotationIntervalDays)
+		assert.True(t, unmarshaled.RotationReady)
+
 		// Verify DNS records
 		assert.Len(t, unmarshaled.DNSRecords, 1)
 		record := unmarshaled.DNSRecords[0]
@@ -89,14 +114,20 @@ func TestDomain_JSONMarshaling(t *testing.T) {
 		err = json.Unmarshal(data, &result)
 		require.NoError(t, err)
 
-		// LastDNSCheckAt should be omitted
+		// Optional pointer fields should be omitted when nil
 		assert.NotContains(t, result, "last_dns_check_at")
+		assert.NotContains(t, result, "tracking_subdomain")
+		assert.NotContains(t, result, "return_path_subdomain")
+		assert.NotContains(t, result, "subscription_subdomain")
+		assert.NotContains(t, result, "media_subdomain")
+		assert.NotContains(t, result, "dkim_rotation_interval_days")
 
 		// These should be present
 		assert.Contains(t, result, "object")
 		assert.Contains(t, result, "domain")
 		assert.Contains(t, result, "dns_valid")
 		assert.Contains(t, result, "dns_records")
+		assert.Contains(t, result, "rotation_ready")
 	})
 }
 

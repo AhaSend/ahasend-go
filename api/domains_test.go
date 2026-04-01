@@ -77,6 +77,42 @@ func Test_ahasend_DomainsAPIService(t *testing.T) {
 
 	})
 
+	t.Run("Test DomainsAPIService UpdateDomain", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		domain := "example.com"
+		trackingSub := "click"
+		updateRequest := requests.UpdateDomainRequest{
+			TrackingSubdomain: &trackingSub,
+		}
+
+		resp, httpRes, err := apiClient.DomainsAPI.UpdateDomain(auth, accountId, domain, updateRequest)
+
+		validatePrismResponse(t, resp, httpRes, err)
+
+	})
+
+	t.Run("Test DomainsAPIService CheckDomainDNS", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		domain := "example.com"
+
+		resp, httpRes, err := apiClient.DomainsAPI.CheckDomainDNS(auth, accountId, domain)
+
+		validatePrismResponse(t, resp, httpRes, err)
+
+	})
+
 	t.Run("Test DomainsAPIService GetDomain", func(t *testing.T) {
 
 		// Skip test when not running against a real API

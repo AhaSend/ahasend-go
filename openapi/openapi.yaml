@@ -405,12 +405,35 @@ components:
           description: DNS records required for domain verification
         last_dns_check_at:
           type: string
-          nullable: string
+          nullable: true
           format: date-time
           description: When DNS records were last checked
         dns_valid:
           type: boolean
           description: Whether all required DNS records are properly configured
+        tracking_subdomain:
+          type: string
+          nullable: true
+          description: Custom tracking subdomain. Null means the account or product default is used.
+        return_path_subdomain:
+          type: string
+          nullable: true
+          description: Custom return-path subdomain. Null means the account or product default is used.
+        subscription_subdomain:
+          type: string
+          nullable: true
+          description: Custom subscription management subdomain. Null means the account or product default is used.
+        media_subdomain:
+          type: string
+          nullable: true
+          description: Custom media subdomain. Null means the account or product default is used.
+        dkim_rotation_interval_days:
+          type: integer
+          nullable: true
+          description: Custom DKIM rotation interval in days. Null means the account default is used.
+        rotation_ready:
+          type: boolean
+          description: Whether the standby DKIM slot is ready for rotation.
       required:
         - object
         - id
@@ -430,8 +453,59 @@ components:
           type: string
           format: hostname
           description: Fully qualified domain name
+        dkim_private_key:
+          type: string
+          description: |
+            DKIM Private Key for the domain. Only RSA keys with a minimum key size of 2048 bits are supported.
+
+            **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+        tracking_subdomain:
+          type: string
+          description: Optional custom tracking subdomain. Omit to use the default on create.
+        return_path_subdomain:
+          type: string
+          description: Optional custom return-path subdomain. Omit to use the default on create.
+        subscription_subdomain:
+          type: string
+          description: Optional custom subscription management subdomain. Omit to use the default on create.
+        media_subdomain:
+          type: string
+          description: Optional custom media subdomain. Omit to use the default on create.
+        dkim_rotation_interval_days:
+          type: integer
+          description: Optional custom DKIM rotation interval in days. Only supported for managed DNS domains on eligible plans.
       example:
         domain: "example.com"
+        tracking_subdomain: "click"
+        return_path_subdomain: "mail"
+        subscription_subdomain: "preferences"
+        media_subdomain: "media"
+        dkim_rotation_interval_days: 45
+
+    UpdateDomainRequest:
+      type: object
+      properties:
+        tracking_subdomain:
+          type: string
+          description: Optional custom tracking subdomain. Omit to leave the current value unchanged.
+        return_path_subdomain:
+          type: string
+          description: Optional custom return-path subdomain. Omit to leave the current value unchanged.
+        subscription_subdomain:
+          type: string
+          description: Optional custom subscription management subdomain. Omit to leave the current value unchanged.
+        media_subdomain:
+          type: string
+          description: Optional custom media subdomain. Omit to leave the current value unchanged.
+        dkim_rotation_interval_days:
+          type: integer
+          description: Optional custom DKIM rotation interval in days. Omit to leave the current value unchanged. Only supported for managed DNS domains on eligible plans.
+      example:
+        tracking_subdomain: "click"
+        return_path_subdomain: "mail"
+        subscription_subdomain: "preferences"
+        media_subdomain: "media"
+        dkim_rotation_interval_days: 45
 
     PaginatedDomainsResponse:
       type: object
@@ -453,7 +527,7 @@ components:
           $ref: '#/components/schemas/PaginationInfo'
 
     # Message Schemas
-    SenderAddress:
+    Address:
       type: object
       required:
         - email
@@ -582,7 +656,7 @@ components:
         - subject
       properties:
         from:
-          $ref: '#/components/schemas/SenderAddress'
+          $ref: '#/components/schemas/Address'
         recipients:
           type: array
           items:
@@ -590,7 +664,7 @@ components:
           minItems: 1
           description: This does not set the To header to multiple addresses, it sends a separate message for each recipient
         reply_to:
-          $ref: '#/components/schemas/SenderAddress'
+          $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers array must not be provided
         subject:
           type: string
@@ -652,6 +726,99 @@ components:
         text_content: "Welcome {{first_name}}!"
         substitutions:
           first_name: "John"
+
+    CreateConversationMessageRequest:
+      type: object
+      required:
+        - from
+        - recipients
+        - subject
+      properties:
+        from:
+          $ref: '#/components/schemas/Address'
+        to:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+          minItems: 1
+          description: This parameter can set the `To` header to multiple addresses.
+        cc:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+          minItems: 1
+          description: This parameter can set the `CC` header to multiple addresses. Do not include `cc` in the headers array.
+        bcc:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+          minItems: 1
+          description: This parameter can set the `To` header to multiple addresses.
+        reply_to:
+          $ref: '#/components/schemas/Address'
+          description: If provided, the reply-to header in headers array must not be provided
+        subject:
+          type: string
+          description: Email subject line
+        text_content:
+          type: string
+          description: Plain text content. Required if html_content is empty
+        html_content:
+          type: string
+          description: HTML content. Required if text_content is empty
+        amp_content:
+          type: string
+          description: AMP HTML content
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: File attachments
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom email headers. `cc` and `reply-to` headers cannot be provided if `reply_to` or `cc` parameters are provided, message-id will be ignored and automatically generated
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorizing messages
+        sandbox:
+          type: boolean
+          description: If true, the message will be sent to the sandbox environment
+          default: false
+        sandbox_result:
+          type: string
+          enum: [deliver, bounce, defer, fail, suppress]
+          description: The result of the sandbox send
+        tracking:
+          $ref: '#/components/schemas/Tracking'
+          description: Tracking settings for the message, overrides default account settings
+        retention:
+          $ref: '#/components/schemas/Retention'
+          description: Retention settings for the message, overrides default account settings
+        schedule:
+          $ref: '#/components/schemas/MessageSchedule'
+          description: Schedule for message delivery
+      example:
+        from:
+          email: "noreply@example.com"
+          name: "Example Corp"
+        to:
+          - email: "user@example.com"
+            name: "John Doe"
+          - email: "someone@example.com"
+            name: "Jane Doe"
+        cc:
+          - email: "hr@example.com"
+            name: "Example Corp HR"
+        bcc:
+          - email: "bcc@example.com"
+            name: "BCC Recipient"
+        subject: "Welcome to Example Corp"
+        html_content: "<h1>Dear John and Jane, welcome to Example Corp!</h1>"
+        text_content: "Dear John and Jane, welcome to Example Corp!"
 
     CreateSingleMessageResponse:
       type: object
@@ -2008,20 +2175,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:
@@ -2081,12 +2242,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedAPIKeysResponse'
-        '400':
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -2193,12 +2348,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIKey'
-        '400':
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -2592,20 +2741,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:
@@ -2910,6 +3053,121 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+    put:
+      summary: Update Domain
+      description: Updates DNS domain settings such as custom subdomains and DKIM rotation interval.
+      operationId: updateDomain
+      tags:
+        - Domains
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: domain
+          in: path
+          required: true
+          description: Domain name
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["domains:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              ahasend "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Update domain settings
+              response, httpResp, err := client.DomainsAPI.UpdateDomain(
+                ctx,
+                accountID,
+                "example.com",
+                requests.UpdateDomainRequest{
+                  TrackingSubdomain:        ahasend.String("click"),
+                  ReturnPathSubdomain:      ahasend.String("mail"),
+                  DKIMRotationIntervalDays: ahasend.Int(45),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error updating domain: %v", err)
+              }
+
+              fmt.Printf("Status: %d\n", httpResp.StatusCode)
+              if response != nil {
+                fmt.Printf("Updated domain: %s\n", response.Domain)
+              }
+            }
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDomainRequest'
+      responses:
+        '200':
+          description: Domain updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     delete:
       summary: Delete Domain
       description: Deletes a domain
@@ -3017,6 +3275,109 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v2/accounts/{account_id}/domains/{domain}/check-dns:
+    post:
+      summary: Check Domain DNS
+      description: Triggers a DNS validation check for the domain. If the domain was checked within the last 60 seconds, the cached validation result is returned instead of performing a fresh lookup.
+      operationId: checkDomainDNS
+      tags:
+        - Domains
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: domain
+          in: path
+          required: true
+          description: Domain name
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["domains:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Trigger a DNS validation check
+              response, httpResp, err := client.DomainsAPI.CheckDomainDNS(
+                ctx,
+                accountID,
+                "example.com",
+              )
+              if err != nil {
+                log.Fatalf("Error checking domain DNS: %v", err)
+              }
+
+              fmt.Printf("Status: %d\n", httpResp.StatusCode)
+              if response != nil {
+                fmt.Printf("DNS valid: %t\n", response.DNSValid)
+              }
+            }
+
+      responses:
+        '200':
+          description: Domain DNS status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Managed DNS is currently unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   # Messages endpoints
   /v2/accounts/{account_id}/messages:
     get:
@@ -3091,12 +3452,6 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
           description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
@@ -3143,8 +3498,8 @@ paths:
                 accountID,
                 requests.GetMessagesParams{
                   Status: ahasend.String("bounced,failed"),
-                  Tags: []string{"billing", "urgent"},
                   Sender: ahasend.String("info@example.com"),
+                  Tags:   []string{"billing", "urgent"},
                 },
               )
               if err != nil {
@@ -3197,7 +3552,7 @@ paths:
     post:
       summary: Create Message
       description: |
-        Creates and sends a message to one or more recipients.
+        Creates and sends a message to one or more recipients. This API cannot be used if you want to send a conversational/P2P message and set CC or BCC. Use [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation) instead.
 
         **Validation Requirements:**
         - Either `text_content` or `html_content` is required
@@ -3254,7 +3609,7 @@ paths:
                 ctx,
                 accountID,
                 requests.CreateMessageRequest{
-                  From: common.SenderAddress{
+                  From: common.Address{
                     Email: "info@example.com",
                     Name:  ahasend.String("Example Corp."),
                   },
@@ -3330,6 +3685,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v2/accounts/{account_id}/messages/conversation:
+    post:
+      summary: Create Conversational Message
+      description: |
+        Creates and sends a conversational message (with support for CC and BCC) to one or more recipients. This API does not support template substitutions, use [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) instead if you need substitutions.
+
+        **Validation Requirements:**
+        - Either `text_content` or `html_content` is required
+        - `from.email` must be from a domain you own with valid DNS records
+        - `retention.metadata` must be between 1 and 30 days
+        - `retention.data` must be between 0 and 30 days
+        - If the `reply_to` parameter is provided, do not include `reply-to` in headers
+        - If the `cc` parameter is provided, do not include `cc` in headers
+        - `message-id` header will be ignored and automatically generated
+        - Schedule times must be in RFC3339 format
+      operationId: createConversationMessage
+      tags:
+        - Messages
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConversationMessageRequest'
+      responses:
+        '202':
+          description: Message created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMessageResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '412':
+          $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /v2/accounts/{account_id}/messages/{message_id}:
     get:
       summary: Get Message
@@ -3349,7 +3778,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID (the same ID returned by [Create Message API](/api-reference/messages/create-message))
+          description: Message API ID (the same ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
           schema:
             type: string
             format: uuid
@@ -3411,7 +3840,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID (the same ID returned by [Create Message API](/api-reference/messages/create-message))
+          description: Message API ID (the same ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
           schema:
             type: string
       security:
@@ -3863,20 +4292,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page. Provide the value provided in `previous_cursor` from the response.
           schema:
             type: string
       security:
@@ -4325,20 +4748,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:
@@ -4963,20 +5380,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:
@@ -5544,20 +5955,14 @@ paths:
             minimum: 1
             maximum: 100
             default: 100
-        - name: cursor
-          in: query
-          description: "DEPRECATED: Pagination cursor for the next page. This is an alternative for `after`, kept for backward compatibility."
-          schema:
-            type: string
-          deprecated: true
         - name: after
           in: query
-          description: Pagination cursor for the next page
+          description: Pagination cursor for the next page. Provide the value provided in `next_cursor` from the response.
           schema:
             type: string
         - name: before
           in: query
-          description: Pagination cursor for the previous page
+          description: Pagination cursor for the previous page.
           schema:
             type: string
       security:

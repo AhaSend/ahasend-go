@@ -97,6 +97,85 @@ func (a *DomainsAPIService) DeleteDomain(
 }
 
 /*
+UpdateDomain Update Domain
+
+Updates DNS domain settings such as custom subdomains and DKIM rotation interval.
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Account ID
+	@param domain Domain name
+	@param request UpdateDomainRequest - The domain settings to update
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return Domain, *http.Response, error
+*/
+func (a *DomainsAPIService) UpdateDomain(
+	ctx context.Context,
+	accountId uuid.UUID,
+	domain string,
+	request requests.UpdateDomainRequest,
+	opts ...RequestOption,
+) (*responses.Domain, *http.Response, error) {
+	var result responses.Domain
+
+	config := RequestConfig{
+		Method:       http.MethodPut,
+		PathTemplate: "/v2/accounts/{account_id}/domains/{domain}",
+		PathParams: map[string]string{
+			"account_id": accountId.String(),
+			"domain":     domain,
+		},
+		Body:   request,
+		Result: &result,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
+CheckDomainDNS Check Domain DNS
+
+Triggers a DNS validation check for the domain. If the domain was checked within the last 60 seconds, the cached validation result is returned instead of performing a fresh lookup.
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Account ID
+	@param domain Domain name
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return Domain, *http.Response, error
+*/
+func (a *DomainsAPIService) CheckDomainDNS(
+	ctx context.Context,
+	accountId uuid.UUID,
+	domain string,
+	opts ...RequestOption,
+) (*responses.Domain, *http.Response, error) {
+	var result responses.Domain
+
+	config := RequestConfig{
+		Method:       http.MethodPost,
+		PathTemplate: "/v2/accounts/{account_id}/domains/{domain}/check-dns",
+		PathParams: map[string]string{
+			"account_id": accountId.String(),
+			"domain":     domain,
+		},
+		Result: &result,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
 GetDomain Get Domain
 
 Returns a specific domain by name
