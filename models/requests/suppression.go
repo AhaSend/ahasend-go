@@ -17,7 +17,11 @@ type CreateSuppressionRequest struct {
 type GetSuppressionsParams struct {
 	Email    *string
 	Domain   *string
+	FromTime *time.Time
+	ToTime   *time.Time
+	// Deprecated: use FromTime.
 	FromDate *time.Time
-	ToDate   *time.Time
+	// Deprecated: use ToTime.
+	ToDate *time.Time
 	common.PaginationParams
 }

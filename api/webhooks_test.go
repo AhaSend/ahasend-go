@@ -53,8 +53,9 @@ func Test_ahasend_WebhooksAPIService(t *testing.T) {
 
 		accountId := uuid.New()
 		createWebhookRequest := requests.CreateWebhookRequest{
-			Name: "Test Webhook",
-			URL:  "https://example.com/webhook",
+			Name:  "Test Webhook",
+			URL:   "https://example.com/webhook",
+			Scope: "global",
 		}
 
 		resp, httpRes, err := apiClient.WebhooksAPI.CreateWebhook(auth, accountId, createWebhookRequest)

@@ -54,7 +54,7 @@ func Test_ahasend_APIKeysAPIService(t *testing.T) {
 		accountId := uuid.New()
 		createAPIKeyRequest := requests.CreateAPIKeyRequest{
 			Label:  "Test API Key",
-			Scopes: []string{"messages:send"},
+			Scopes: []string{"messages:send:all"},
 		}
 
 		resp, httpRes, err := apiClient.APIKeysAPI.CreateAPIKey(auth, accountId, createAPIKeyRequest)

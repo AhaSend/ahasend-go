@@ -54,8 +54,9 @@ func Test_ahasend_RoutesAPIService(t *testing.T) {
 
 		accountId := uuid.New()
 		createRouteRequest := requests.CreateRouteRequest{
-			Name: "Test Route",
-			URL:  "https://example.com/webhook",
+			Name:      "Test Route",
+			URL:       "https://example.com/webhook",
+			Recipient: "support@example.com",
 		}
 
 		resp, httpRes, err := apiClient.RoutesAPI.CreateRoute(auth, accountId, createRouteRequest)

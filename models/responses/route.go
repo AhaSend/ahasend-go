@@ -10,7 +10,6 @@ import (
 type Route struct {
 	Object                 string     `json:"object"`
 	ID                     uuid.UUID  `json:"id"`
-	AccountID              uuid.UUID  `json:"account_id"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 	Name                   string     `json:"name"`

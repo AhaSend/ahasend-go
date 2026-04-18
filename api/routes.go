@@ -22,8 +22,8 @@ CreateRoute Create Route
 
 Validation Requirements:
 - `name` must be a unique route name within the account
-- `destination` must be a valid webhook URL or email address
-- `patterns` array must contain at least one routing pattern
+- `url` must be a valid webhook URL
+- `recipient` must be a valid inbound route address
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -151,29 +151,42 @@ func (a *RoutesAPIService) GetRoutes(
 	pagination *common.PaginationParams,
 	opts ...RequestOption,
 ) (*responses.PaginatedRoutesResponse, *http.Response, error) {
+	params := requests.GetRoutesParams{}
+	if pagination != nil {
+		params.PaginationParams = *pagination
+	}
+	return a.GetRoutesWithParams(ctx, accountId, params, opts...)
+}
+
+// GetRoutesWithParams returns routes and supports the domain filter required for domain-scoped route keys.
+func (a *RoutesAPIService) GetRoutesWithParams(
+	ctx context.Context,
+	accountId uuid.UUID,
+	params requests.GetRoutesParams,
+	opts ...RequestOption,
+) (*responses.PaginatedRoutesResponse, *http.Response, error) {
 	var result responses.PaginatedRoutesResponse
 
 	// Build query parameters
 	queryParams := url.Values{}
+	if params.Domain != nil {
+		queryParams.Set("domain", *params.Domain)
+	}
 
 	// Handle pagination parameters
-	if pagination != nil {
-		if pagination.Limit != nil {
-			queryParams.Set("limit", fmt.Sprintf("%d", *pagination.Limit))
-		} else {
-			queryParams.Set("limit", "100") // Default value
-		}
-
-		// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
-		if pagination.After != nil {
-			queryParams.Set("after", *pagination.After)
-		} else if pagination.Before != nil {
-			queryParams.Set("before", *pagination.Before)
-		} else if pagination.Cursor != nil {
-			queryParams.Set("cursor", *pagination.Cursor)
-		}
+	if params.Limit != nil {
+		queryParams.Set("limit", fmt.Sprintf("%d", *params.Limit))
 	} else {
 		queryParams.Set("limit", "100") // Default value
+	}
+
+	// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
+	if params.After != nil {
+		queryParams.Set("after", *params.After)
+	} else if params.Before != nil {
+		queryParams.Set("before", *params.Before)
+	} else if params.Cursor != nil {
+		queryParams.Set("cursor", *params.Cursor)
 	}
 
 	config := RequestConfig{

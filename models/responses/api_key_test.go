@@ -91,7 +91,7 @@ func TestAPIKey_JSONMarshaling(t *testing.T) {
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
 					APIKeyID:  apiKeyID,
-					Scope:     "domains:read:example.com",
+					Scope:     "routes:read:{example.com}",
 					DomainID:  &domainID,
 				},
 			},
@@ -158,7 +158,7 @@ func TestAPIKeyScope_JSONMarshaling(t *testing.T) {
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
 			APIKeyID:  apiKeyID,
-			Scope:     "domains:read:example.com",
+			Scope:     "routes:read:{example.com}",
 			DomainID:  &domainID,
 		}
 

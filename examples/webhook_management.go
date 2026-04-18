@@ -120,7 +120,7 @@ func createWebhook(ctx context.Context, client *api.APIClient, accountID uuid.UU
 	request := requests.CreateWebhookRequest{
 		Name:        "Email Event Webhook",
 		URL:         "https://your-domain.com/webhooks/ahasend",
-		Enabled:     true,
+		Enabled:     ahasend.Bool(true),
 		OnReception: true,
 		OnDelivered: true,
 		OnBounced:   true,

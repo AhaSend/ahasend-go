@@ -68,6 +68,8 @@ Creates and sends a message to one or more recipients.
 - If `reply_to` is provided, do not include `reply-to` in headers
 - `message-id` header will be ignored and automatically generated
 - Schedule times must be in RFC3339 format
+- `schedule.first_attempt` must be in the future and within 7 days
+- `schedule.expires` must be in the future and within 8 days
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -94,6 +96,55 @@ func (a *MessagesAPIService) CreateMessage(
 	}
 
 	// Apply options
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
+CreateConversationMessage Create Conversational Message
+
+Creates and sends a conversational message with support for To, CC, and BCC recipients.
+
+**Validation Requirements:**
+- Either `text_content` or `html_content` is required
+- `from.email` must be from a domain you own with valid DNS records
+- `to` must contain at least one recipient
+- The combined `to`, `cc`, and `bcc` recipient count must not exceed 50
+- If `reply_to` is provided, do not include `reply-to` in headers
+- If `cc` is provided, do not include `cc` in headers
+- `message-id` header will be ignored and automatically generated
+- Schedule times must be in RFC3339 format
+- `schedule.first_attempt` must be in the future and within 7 days
+- `schedule.expires` must be in the future and within 8 days
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Account ID
+	@param request CreateConversationMessageRequest - The conversational message details to create
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return CreateMessageResponse, *http.Response, error
+*/
+func (a *MessagesAPIService) CreateConversationMessage(
+	ctx context.Context,
+	accountId uuid.UUID,
+	request requests.CreateConversationMessageRequest,
+	opts ...RequestOption,
+) (*responses.CreateMessageResponse, *http.Response, error) {
+	var result responses.CreateMessageResponse
+
+	config := RequestConfig{
+		Method:       http.MethodPost,
+		PathTemplate: "/v2/accounts/{account_id}/messages/conversation",
+		PathParams: map[string]string{
+			"account_id": accountId.String(),
+		},
+		Body:   request,
+		Result: &result,
+	}
+
 	for _, opt := range opts {
 		opt(&config)
 	}
@@ -201,6 +252,16 @@ func (a *MessagesAPIService) GetMessage(
 	messageId uuid.UUID,
 	opts ...RequestOption,
 ) (*responses.Message, *http.Response, error) {
+	return a.GetMessageByAPIID(ctx, accountId, messageId.String(), opts...)
+}
+
+// GetMessageByAPIID returns a message by its API ID. messageId can be a bare UUID or a generated Message-ID like <uuid@example.com>.
+func (a *MessagesAPIService) GetMessageByAPIID(
+	ctx context.Context,
+	accountId uuid.UUID,
+	messageId string,
+	opts ...RequestOption,
+) (*responses.Message, *http.Response, error) {
 	var result responses.Message
 
 	config := RequestConfig{
@@ -208,7 +269,7 @@ func (a *MessagesAPIService) GetMessage(
 		PathTemplate: "/v2/accounts/{account_id}/messages/{message_id}",
 		PathParams: map[string]string{
 			"account_id": accountId.String(),
-			"message_id": messageId.String(),
+			"message_id": messageId,
 		},
 		Result: &result,
 	}

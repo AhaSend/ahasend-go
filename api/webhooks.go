@@ -22,7 +22,8 @@ CreateWebhook Create Webhook
 
 Validation Requirements:
 - `url` must be a valid HTTPS URL
-- `events` array must contain at least one event type
+- `scope` must be either `global` or `scoped`
+- `domains` is required for scoped webhooks
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

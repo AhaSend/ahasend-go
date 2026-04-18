@@ -93,6 +93,7 @@ info:
     - Duplicate requests return the same response with `Idempotent-Replayed: true`
     - In-progress requests return HTTP 409 with `Idempotent-Replayed: false`
     - Failed requests return HTTP 412 with `Idempotent-Replayed: false`
+    - Reusing a key with a different request payload returns HTTP 422
     - Idempotency keys expire after 24 hours
 
   version: "2.0.0"
@@ -164,6 +165,15 @@ components:
           example:
             message: "The original request with this idempotency key failed and cannot be retried"
 
+    IdempotencyPayloadMismatch:
+      description: Idempotency key was already used with a different request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "idempotency key was already used with a different request payload"
+
   schemas:
     ErrorResponse:
       type: object
@@ -231,6 +241,7 @@ components:
         domain_id:
           type: string
           format: uuid
+          nullable: true
           description: Domain ID for domain-specific scopes
       required:
         - id
@@ -261,6 +272,7 @@ components:
         last_used_at:
           type: string
           format: date-time
+          nullable: true
           description: When the API key was last used (updates every 5-10 minutes)
         account_id:
           type: string
@@ -325,7 +337,7 @@ components:
           description: Array of scope strings to grant to this API key
       example:
         label: "Updated API Key"
-        scopes: ["messages:send:example.com", "domains:read"]
+        scopes: ["messages:send:{example.com}", "domains:read"]
 
     PaginatedAPIKeysResponse:
       type: object
@@ -353,6 +365,10 @@ components:
         type:
           type: string
           description: DNS record type (e.g., CNAME, TXT, MX)
+        label:
+          type: string
+          nullable: true
+          description: Human-readable DNS record label
         host:
           type: string
           description: DNS record host/name
@@ -434,6 +450,10 @@ components:
         rotation_ready:
           type: boolean
           description: Whether the standby DKIM slot is ready for rotation.
+        dsn_recipient:
+          type: string
+          nullable: true
+          description: Optional recipient address for delivery status notifications.
       required:
         - object
         - id
@@ -639,14 +659,11 @@ components:
         first_attempt:
           type: string
           format: date-time
-          description: The time to make the first attempt for delivering the message (RFC3339 format)
+          description: The time to make the first attempt for delivering the message. Must be RFC3339 format, in the future, and within 7 days of the request.
         expires:
           type: string
           format: date-time
-          description: Expire and drop the message if not delivered by this time (RFC3339 format)
-      example:
-        first_attempt: "2023-12-25T10:30:00Z"
-        expires: "2023-12-26T10:30:00Z"
+          description: Expire and drop the message if not delivered by this time. Must be RFC3339 format, in the future, and within 8 days of the request.
 
     CreateMessageRequest:
       type: object
@@ -662,6 +679,7 @@ components:
           items:
             $ref: '#/components/schemas/Recipient'
           minItems: 1
+          maxItems: 100
           description: This does not set the To header to multiple addresses, it sends a separate message for each recipient
         reply_to:
           $ref: '#/components/schemas/Address'
@@ -731,7 +749,7 @@ components:
       type: object
       required:
         - from
-        - recipients
+        - to
         - subject
       properties:
         from:
@@ -741,19 +759,22 @@ components:
           items:
             $ref: '#/components/schemas/Address'
           minItems: 1
-          description: This parameter can set the `To` header to multiple addresses.
+          maxItems: 50
+          description: This parameter can set the `To` header to multiple addresses. The combined to, cc, and bcc recipient count must not exceed 50.
         cc:
           type: array
           items:
             $ref: '#/components/schemas/Address'
           minItems: 1
-          description: This parameter can set the `CC` header to multiple addresses. Do not include `cc` in the headers array.
+          maxItems: 50
+          description: This parameter can set the `CC` header to multiple addresses. Do not include `cc` in the headers array. The combined to, cc, and bcc recipient count must not exceed 50.
         bcc:
           type: array
           items:
             $ref: '#/components/schemas/Address'
           minItems: 1
-          description: This parameter can set the `To` header to multiple addresses.
+          maxItems: 50
+          description: This parameter can set the `To` header to multiple addresses. The combined to, cc, and bcc recipient count must not exceed 50.
         reply_to:
           $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers array must not be provided
@@ -982,7 +1003,7 @@ components:
           description: When the message data will be purged
         direction:
           type: string
-          enum: [incoming, outgoing]
+          enum: [inbound, outbound]
           description: Message direction
         is_bounce_notification:
           type: boolean
@@ -1033,6 +1054,7 @@ components:
         reference_message_id:
           type: integer
           format: int64
+          nullable: true
           description: ID of the original message (for bounce messages)
         domain_id:
           type: string
@@ -1147,12 +1169,17 @@ components:
         message_data_retention:
           type: integer
           description: Default message data retention in days
+        owner_id:
+          type: string
+          format: uuid
+          description: Account owner user ID
       required:
         - object
         - id
         - created_at
         - updated_at
         - name
+        - owner_id
 
     UpdateAccountRequest:
       type: object
@@ -1198,10 +1225,6 @@ components:
     UserAccount:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier for the user account relationship
         created_at:
           type: string
           format: date-time
@@ -1223,7 +1246,6 @@ components:
           enum: [Administrator, Developer, Analyst, "Billing Manager"]
           description: User role in the account
       required:
-        - id
         - created_at
         - updated_at
         - user_id
@@ -1284,10 +1306,6 @@ components:
           type: string
           format: date-time
           description: When the suppression was created
-        updated_at:
-          type: string
-          format: date-time
-          description: When the suppression was last updated
         email:
           type: string
           format: email
@@ -1308,7 +1326,6 @@ components:
         - object
         - id
         - created_at
-        - updated_at
         - email
         - expires_at
 
@@ -1433,6 +1450,7 @@ components:
         last_request_at:
           type: string
           format: date-time
+          nullable: true
           description: When the route was last called
       required:
         - object
@@ -1443,11 +1461,23 @@ components:
         - url
         - enabled
 
+    CreatedRoute:
+      allOf:
+        - $ref: '#/components/schemas/Route'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: Route signing secret. Returned only when the route is created.
+          required:
+            - secret
+
     CreateRouteRequest:
       type: object
       required:
         - name
         - url
+        - recipient
       properties:
         name:
           type: string
@@ -1484,6 +1514,7 @@ components:
       example:
         name: "Support Route"
         url: "https://example.com/webhook"
+        recipient: "support@example.com"
         enabled: true
 
     UpdateRouteRequest:
@@ -1609,6 +1640,7 @@ components:
           description: Trigger on DNS errors
         scope:
           type: string
+          enum: [global, scoped]
           description: Webhook scope
         domains:
           type: array
@@ -1627,6 +1659,7 @@ components:
         last_request_at:
           type: string
           format: date-time
+          nullable: true
           description: When the webhook was last called
       required:
         - object
@@ -1637,11 +1670,23 @@ components:
         - url
         - enabled
 
+    CreatedWebhook:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: Webhook signing secret. Returned only when the webhook is created.
+          required:
+            - secret
+
     CreateWebhookRequest:
       type: object
       required:
         - name
         - url
+        - scope
       properties:
         name:
           type: string
@@ -1697,6 +1742,7 @@ components:
           default: false
         scope:
           type: string
+          enum: [global, scoped]
           description: Webhook scope
         domains:
           type: array
@@ -1707,6 +1753,7 @@ components:
       example:
         name: "Delivery Webhook"
         url: "https://example.com/webhook"
+        scope: "global"
         enabled: true
         on_delivered: true
 
@@ -1769,6 +1816,7 @@ components:
           description: Trigger on DNS errors
         scope:
           type: string
+          enum: [global, scoped]
           nullable: true
           description: Webhook scope
         domains:
@@ -1803,7 +1851,7 @@ components:
       properties:
         object:
           type: string
-          enum: [smtp_credential]
+          enum: [credential_smtp]
           description: Object type identifier
         id:
           type: string
@@ -1845,6 +1893,17 @@ components:
         - sandbox
         - scope
 
+    CreatedSMTPCredential:
+      allOf:
+        - $ref: '#/components/schemas/SMTPCredential'
+        - type: object
+          properties:
+            password:
+              type: string
+              description: SMTP password. Returned only when the credential is created.
+          required:
+            - password
+
     CreateSMTPCredentialRequest:
       type: object
       required:
@@ -1870,8 +1929,6 @@ components:
           description: Required if scope is "scoped"
       example:
         name: "Production SMTP"
-        username: "smtp_user"
-        password: "secure_password"
         scope: "global"
 
     PaginatedSMTPCredentialsResponse:
@@ -2038,6 +2095,10 @@ components:
           type: number
           format: double
           description: The average time from reception to delivery in seconds
+        count:
+          type: integer
+          format: int64
+          description: Number of delivered messages included in the average
 
 
     DeliveryTimeStatisticsResponse:
@@ -2242,6 +2303,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedAPIKeysResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -2313,7 +2380,7 @@ paths:
                   Label: "My API Key",
                   Scopes: []string{
                     "messages:read:all",
-                    "domains:read:all",
+                    "domains:read",
                   },
                 },
               )
@@ -2322,7 +2389,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created API key, secret key: %s\n", response.SecretKey)
@@ -2348,6 +2415,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIKey'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -2364,6 +2437,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -2539,7 +2614,7 @@ paths:
                   Label: ahasend.String("My API Key"),
                   Scopes: &[]string{
                     "messages:read:all",
-                    "domains:read:all",
+                    "domains:read",
                   },
                 },
               )
@@ -2891,7 +2966,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created domain: %#v\n", response)
@@ -2939,6 +3014,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -3398,7 +3475,11 @@ paths:
             format: uuid
         - name: status
           in: query
-          description: Filter by comma-separated list of message statuses
+          description: |
+            Filter by comma-separated list of message statuses. Allowed values are:
+            `Received`, `Delivered`, `Deferred`, `Bounced`, `Failed`, `Suppressed`,
+            `Sandbox Delivered`, `Sandbox Deferred`, `Sandbox Failed`, `Sandbox Bounced`,
+            and `Sandbox Suppressed`.
           schema:
             type: string
           example: "Bounced,Failed"
@@ -3497,7 +3578,7 @@ paths:
                 ctx,
                 accountID,
                 requests.GetMessagesParams{
-                  Status: ahasend.String("bounced,failed"),
+                  Status: ahasend.String("Bounced,Failed"),
                   Sender: ahasend.String("info@example.com"),
                   Tags:   []string{"billing", "urgent"},
                 },
@@ -3562,6 +3643,8 @@ paths:
         - If `reply_to` is provided, do not include `reply-to` in headers
         - `message-id` header will be ignored and automatically generated
         - Schedule times must be in RFC3339 format
+        - `schedule.first_attempt` must be in the future and within 7 days of the request
+        - `schedule.expires` must be in the future and within 8 days of the request
       operationId: createMessage
       tags:
         - Messages
@@ -3629,7 +3712,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 202 {
                 fmt.Printf("✅ Send successful! Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Message ID: %s\n", *response.Data[0].ID)
@@ -3678,6 +3761,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -3700,6 +3785,8 @@ paths:
         - If the `cc` parameter is provided, do not include `cc` in headers
         - `message-id` header will be ignored and automatically generated
         - Schedule times must be in RFC3339 format
+        - `schedule.first_attempt` must be in the future and within 7 days of the request
+        - `schedule.expires` must be in the future and within 8 days of the request
       operationId: createConversationMessage
       tags:
         - Messages
@@ -3752,6 +3839,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -3778,10 +3867,9 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID (the same ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
-            format: uuid
       security:
         - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
       responses:
@@ -3840,7 +3928,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID (the same ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
       security:
@@ -4130,7 +4218,7 @@ paths:
             schema:
               $ref: '#/components/schemas/AddMemberRequest'
       responses:
-        '200':
+        '201':
           description: Member added successfully
           headers:
             Idempotent-Replayed:
@@ -4161,6 +4249,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -4245,8 +4335,8 @@ paths:
         **Query Parameters:**
         - `domain`: Filter by domain (optional)
         - `email`: Filter by email (optional)
-        - `from_date`: Filter suppressions created after this date (RFC3339 format)
-        - `to_date`: Filter suppressions created before this date (RFC3339 format)
+        - `from_time`: Filter suppressions created after this time (RFC3339 format, optional)
+        - `to_time`: Filter suppressions created before this time (RFC3339 format, optional)
         - `limit`: Maximum number of items to return (1-100, default: 100)
         - `cursor`: Pagination cursor for the next page
       operationId: getSuppressions
@@ -4267,20 +4357,19 @@ paths:
             type: string
         - name: email
           in: query
-          required: true
           description: Email address
           schema:
             type: string
             format: email
-        - name: from_date
+        - name: from_time
           in: query
-          description: Filter suppressions created after this date (RFC3339 format)
+          description: Filter suppressions created after this time (RFC3339 format)
           schema:
             type: string
             format: date-time
-        - name: to_date
+        - name: to_time
           in: query
-          description: Filter suppressions created before this date (RFC3339 format)
+          description: Filter suppressions created before this time (RFC3339 format)
           schema:
             type: string
             format: date-time
@@ -4378,6 +4467,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -4452,7 +4547,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created suppression: %#v\n", response)
@@ -4496,9 +4591,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          description: Suppression already exists or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -4612,6 +4713,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Suppression not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -4717,6 +4824,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Domain not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -4740,6 +4853,11 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: domain
+          in: query
+          description: Domain to filter routes by. Required when using a domain-scoped routes:read:{domain} API key.
+          schema:
+            type: string
         - name: limit
           in: query
           description: Maximum number of items to return (1-100)
@@ -4903,7 +5021,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created route: %#v\n", response)
@@ -4928,7 +5046,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Route'
+                $ref: '#/components/schemas/CreatedRoute'
         '400':
           description: Bad request
           content:
@@ -4951,6 +5069,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -5525,6 +5645,7 @@ paths:
                 requests.CreateWebhookRequest{
                   Name:   "Failures",
                   URL:    "https://mystartup.com/webhook",
+                  Scope:  "global",
                   Enabled: true,
                   OnBounced: true,
                   OnTransientError: true,
@@ -5537,7 +5658,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created webhook: %#v\n", response)
@@ -5561,7 +5682,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Webhook'
+                $ref: '#/components/schemas/CreatedWebhook'
         '400':
           description: Bad request
           content:
@@ -5584,6 +5705,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -6105,7 +6228,7 @@ paths:
               }
 
               // Check response
-              if httpResp.StatusCode == 200 {
+              if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
                 if response != nil {
                   fmt.Printf("Created SMTP credentials: %#v\n", response)
@@ -6129,7 +6252,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SMTPCredential'
+                $ref: '#/components/schemas/CreatedSMTPCredential'
         '400':
           description: Bad request
           content:
@@ -6152,6 +6275,8 @@ paths:
           $ref: '#/components/responses/IdempotencyConflict'
         '412':
           $ref: '#/components/responses/IdempotencyPreconditionFailed'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
           description: Internal server error
           content:
@@ -6205,6 +6330,7 @@ paths:
               )
 
               accountID := uuid.New()
+              smtpCredentialID := uuid.MustParse("0194f7ac-2f6a-7d29-9f0c-9a27b19f2d1c")
 
               // Create context for the API call
               ctx := context.Background()
@@ -6213,7 +6339,7 @@ paths:
               response, httpResp, err := client.SMTPCredentialsAPI.GetSMTPCredential(
                 ctx,
                 accountID,
-                123,
+                smtpCredentialID,
               )
               if err != nil {
                 log.Fatalf("Error getting SMTP credentials: %v", err)
@@ -6312,6 +6438,7 @@ paths:
               )
 
               accountID := uuid.New()
+              smtpCredentialID := uuid.MustParse("0194f7ac-2f6a-7d29-9f0c-9a27b19f2d1c")
 
               // Create context for the API call
               ctx := context.Background()
@@ -6320,7 +6447,7 @@ paths:
               response, httpResp, err := client.SMTPCredentialsAPI.DeleteSMTPCredential(
                 ctx,
                 accountID,
-                123,
+                smtpCredentialID,
               )
               if err != nil {
                 log.Fatalf("Error deleting SMTP credentials: %v", err)

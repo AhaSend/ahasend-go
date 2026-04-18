@@ -24,16 +24,16 @@ func TestWebhook_JSONMarshaling(t *testing.T) {
 			Name:      "Test Webhook",
 			URL:       "https://example.com/webhook",
 			Enabled:   true,
+			Scope:     "global",
+			Domains:   []string{},
 		}
 
 		// Marshal to JSON
 		jsonData, err := json.Marshal(webhook)
 		require.NoError(t, err)
 
-		// Should not contain empty optional fields (only string/slice fields with omitempty work)
-		assert.NotContains(t, string(jsonData), "scope")
-		assert.NotContains(t, string(jsonData), "domains")
-		// Boolean fields with false values will still appear in JSON
+		assert.Contains(t, string(jsonData), "scope")
+		assert.Contains(t, string(jsonData), "domains")
 
 		// Unmarshal and verify
 		var decoded Webhook
@@ -46,14 +46,13 @@ func TestWebhook_JSONMarshaling(t *testing.T) {
 		assert.Equal(t, webhook.URL, decoded.URL)
 		assert.Equal(t, webhook.Enabled, decoded.Enabled)
 
-		// Optional fields should have default values
 		assert.Equal(t, false, decoded.OnReception)
-		assert.Equal(t, "", decoded.Scope)
-		assert.Nil(t, decoded.Domains)
+		assert.Equal(t, "global", decoded.Scope)
+		assert.Equal(t, []string{}, decoded.Domains)
 	})
 
 	t.Run("complete webhook with all optional fields", func(t *testing.T) {
-		scope := "domain"
+		scope := "scoped"
 		onReception := true
 		onDelivered := false
 		onTransientError := true
@@ -120,7 +119,8 @@ func TestWebhook_JSONMarshaling(t *testing.T) {
 			Name:      "Test Webhook",
 			URL:       "https://example.com/webhook",
 			Enabled:   true,
-			// All optional fields are nil/empty
+			Scope:     "global",
+			Domains:   []string{},
 		}
 
 		data, err := json.Marshal(webhook)
@@ -131,10 +131,8 @@ func TestWebhook_JSONMarshaling(t *testing.T) {
 		err = json.Unmarshal(data, &result)
 		require.NoError(t, err)
 
-		// These string/slice fields should be omitted when empty
-		assert.NotContains(t, result, "scope")
-		assert.NotContains(t, result, "domains")
-		// Boolean fields will appear even when false
+		assert.Contains(t, result, "scope")
+		assert.Contains(t, result, "domains")
 
 		// These should be present
 		assert.Contains(t, result, "object")

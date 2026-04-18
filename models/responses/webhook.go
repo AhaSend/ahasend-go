@@ -10,7 +10,6 @@ import (
 type Webhook struct {
 	Object                 string     `json:"object"`
 	ID                     uuid.UUID  `json:"id"`
-	AccountID              uuid.UUID  `json:"account_id"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
 	Name                   string     `json:"name"`
@@ -27,8 +26,8 @@ type Webhook struct {
 	OnClicked              bool       `json:"on_clicked"`
 	OnSuppressionCreated   bool       `json:"on_suppression_created"`
 	OnDNSError             bool       `json:"on_dns_error"`
-	Scope                  string     `json:"scope,omitempty"`
-	Domains                []string   `json:"domains,omitempty"`
+	Scope                  string     `json:"scope"`
+	Domains                []string   `json:"domains"`
 	ErrorCount             uint64     `json:"error_count"`
 	SuccessCount           uint64     `json:"success_count"`
 	ErrorsSinceLastSuccess int        `json:"errors_since_last_success"`

@@ -163,8 +163,9 @@ GetSuppressions Get Suppressions
 
 Query Parameters:
 - `domain`: Filter by domain (optional)
-- `from_date`: Filter suppressions created after this date (RFC3339 format)
-- `to_date`: Filter suppressions created before this date (RFC3339 format)
+- `email`: Filter by email (optional)
+- `from_time`: Filter suppressions created after this time (RFC3339 format)
+- `to_time`: Filter suppressions created before this time (RFC3339 format)
 - `limit`: Maximum number of items to return (1-100, default: 100)
 - `cursor`: Pagination cursor for the next page (backward compatibility)
 - `after`: Get items after this cursor (forward pagination)
@@ -192,11 +193,19 @@ func (a *SuppressionsAPIService) GetSuppressions(
 	if params.Domain != nil {
 		queryParams.Set("domain", *params.Domain)
 	}
-	if params.FromDate != nil {
-		queryParams.Set("from_date", params.FromDate.Format(time.RFC3339))
+	fromTime := params.FromTime
+	if fromTime == nil {
+		fromTime = params.FromDate
 	}
-	if params.ToDate != nil {
-		queryParams.Set("to_date", params.ToDate.Format(time.RFC3339))
+	if fromTime != nil {
+		queryParams.Set("from_time", fromTime.Format(time.RFC3339))
+	}
+	toTime := params.ToTime
+	if toTime == nil {
+		toTime = params.ToDate
+	}
+	if toTime != nil {
+		queryParams.Set("to_time", toTime.Format(time.RFC3339))
 	}
 	// Handle pagination parameters
 	if params.Limit != nil {

@@ -5,18 +5,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSMTPCredential_JSONMarshaling(t *testing.T) {
-	credentialID := uint64(1)
+	credentialID := uuid.MustParse("01234567-89ab-cdef-0123-456789abcdef")
 	createdAt := time.Now().UTC().Truncate(time.Second)
 	updatedAt := createdAt.Add(time.Hour)
 
 	t.Run("minimal SMTP credential without optional fields", func(t *testing.T) {
 		credential := SMTPCredential{
-			Object:    "smtp_credential",
+			Object:    "credential_smtp",
 			ID:        credentialID,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
@@ -52,7 +53,7 @@ func TestSMTPCredential_JSONMarshaling(t *testing.T) {
 		domains := []string{"example.com", "test.com"}
 
 		credential := SMTPCredential{
-			Object:    "smtp_credential",
+			Object:    "credential_smtp",
 			ID:        credentialID,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
@@ -85,7 +86,7 @@ func TestSMTPCredential_JSONMarshaling(t *testing.T) {
 
 	t.Run("SMTP credential with all fields", func(t *testing.T) {
 		credential := SMTPCredential{
-			Object:    "smtp_credential",
+			Object:    "credential_smtp",
 			ID:        credentialID,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
@@ -114,7 +115,7 @@ func TestSMTPCredential_JSONMarshaling(t *testing.T) {
 		assert.Contains(t, result, "username")
 		assert.Contains(t, result, "sandbox")
 		assert.Contains(t, result, "scope")
-		assert.Contains(t, result, "scoped_domains")
+		assert.Contains(t, result, "domains")
 
 		// Unmarshal back and verify
 		var decoded SMTPCredential
@@ -134,7 +135,7 @@ func TestSMTPCredential_JSONMarshaling(t *testing.T) {
 	t.Run("different scope values", func(t *testing.T) {
 		// Global scope
 		globalCred := SMTPCredential{
-			Object:    "smtp_credential",
+			Object:    "credential_smtp",
 			ID:        credentialID,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
@@ -157,7 +158,7 @@ func TestSMTPCredential_JSONMarshaling(t *testing.T) {
 
 		// Scoped credential
 		scopedCred := SMTPCredential{
-			Object:    "smtp_credential",
+			Object:    "credential_smtp",
 			ID:        credentialID,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,

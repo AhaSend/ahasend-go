@@ -19,17 +19,17 @@ type Account struct {
 	About   *string `json:"about,omitempty"`
 
 	// Email behavior settings
-	TrackOpens               *bool  `json:"track_opens,omitempty"`
-	TrackClicks              *bool  `json:"track_clicks,omitempty"`
-	RejectBadRecipients      *bool  `json:"reject_bad_recipients,omitempty"`
-	RejectMistypedRecipients *bool  `json:"reject_mistyped_recipients,omitempty"`
-	MessageMetadataRetention *int32 `json:"message_metadata_retention,omitempty"`
-	MessageDataRetention     *int32 `json:"message_data_retention,omitempty"`
+	TrackOpens               *bool     `json:"track_opens,omitempty"`
+	TrackClicks              *bool     `json:"track_clicks,omitempty"`
+	RejectBadRecipients      *bool     `json:"reject_bad_recipients,omitempty"`
+	RejectMistypedRecipients *bool     `json:"reject_mistyped_recipients,omitempty"`
+	MessageMetadataRetention *int32    `json:"message_metadata_retention,omitempty"`
+	MessageDataRetention     *int32    `json:"message_data_retention,omitempty"`
+	OwnerID                  uuid.UUID `json:"owner_id"`
 }
 
 // UserAccount represents a user's relationship to an account
 type UserAccount struct {
-	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	UserID    uuid.UUID `json:"user_id"`

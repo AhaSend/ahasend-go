@@ -104,14 +104,12 @@ func TestAccount_JSONMarshaling(t *testing.T) {
 }
 
 func TestUserAccount_JSONMarshaling(t *testing.T) {
-	userAccountID := uuid.MustParse("01234567-89ab-cdef-0123-456789abcdef")
 	userID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
 	accountID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 	createdAt := time.Now().UTC().Truncate(time.Second)
 	updatedAt := createdAt.Add(time.Hour)
 
 	userAccount := UserAccount{
-		ID:        userAccountID,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 		UserID:    userID,
@@ -128,7 +126,6 @@ func TestUserAccount_JSONMarshaling(t *testing.T) {
 	err = json.Unmarshal(jsonData, &decoded)
 	require.NoError(t, err)
 
-	assert.Equal(t, userAccount.ID, decoded.ID)
 	assert.True(t, userAccount.CreatedAt.Equal(decoded.CreatedAt))
 	assert.True(t, userAccount.UpdatedAt.Equal(decoded.UpdatedAt))
 	assert.Equal(t, userAccount.UserID, decoded.UserID)
@@ -141,7 +138,6 @@ func TestAccountMembersResponse_JSONMarshaling(t *testing.T) {
 		Object: "list",
 		Data: []UserAccount{
 			{
-				ID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 				UserID:    uuid.MustParse("22222222-2222-2222-2222-222222222222"),
@@ -149,7 +145,6 @@ func TestAccountMembersResponse_JSONMarshaling(t *testing.T) {
 				Role:      "Administrator",
 			},
 			{
-				ID:        uuid.MustParse("44444444-4444-4444-4444-444444444444"),
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 				UserID:    uuid.MustParse("55555555-5555-5555-5555-555555555555"),

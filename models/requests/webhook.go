@@ -4,7 +4,7 @@ package requests
 type CreateWebhookRequest struct {
 	Name                 string    `json:"name"`
 	URL                  string    `json:"url"`
-	Enabled              bool      `json:"enabled"`
+	Enabled              *bool     `json:"enabled,omitempty"`
 	OnReception          bool      `json:"on_reception"`
 	OnDelivered          bool      `json:"on_delivered"`
 	OnTransientError     bool      `json:"on_transient_error"`

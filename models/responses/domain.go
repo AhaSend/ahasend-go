@@ -23,13 +23,15 @@ type Domain struct {
 	MediaSubdomain           *string     `json:"media_subdomain,omitempty"`
 	DKIMRotationIntervalDays *int        `json:"dkim_rotation_interval_days,omitempty"`
 	RotationReady            bool        `json:"rotation_ready"`
+	DSNRecipient             *string     `json:"dsn_recipient,omitempty"`
 }
 
 // DNSRecord represents a DNS record required for domain verification
 type DNSRecord struct {
-	Type       string `json:"type"`
-	Host       string `json:"host"`
-	Content    string `json:"content"`
-	Required   bool   `json:"required"`
-	Propagated bool   `json:"propagated"`
+	Type       string  `json:"type"`
+	Label      *string `json:"label,omitempty"`
+	Host       string  `json:"host"`
+	Content    string  `json:"content"`
+	Required   bool    `json:"required"`
+	Propagated bool    `json:"propagated"`
 }

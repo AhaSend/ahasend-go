@@ -56,6 +56,9 @@ type DeliveryTime struct {
 
 	// The average time from reception to delivery in seconds (optional)
 	DeliveryTime *float64 `json:"delivery_time,omitempty"`
+
+	// Number of delivered messages included in the average.
+	Count int64 `json:"count"`
 }
 
 // DeliveryTimeStatistics represents delivery time statistics for a time bucket

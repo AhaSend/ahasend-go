@@ -312,8 +312,9 @@ func (td *IntegrationTestData) CreateDomainRequest(domain string) requests.Creat
 // CreateWebhookRequest generates a test webhook creation request
 func (td *IntegrationTestData) CreateWebhookRequest() requests.CreateWebhookRequest {
 	return requests.CreateWebhookRequest{
-		Name: "Integration Test Webhook",
-		URL:  "https://example.com/webhook",
+		Name:  "Integration Test Webhook",
+		URL:   "https://example.com/webhook",
+		Scope: "global",
 	}
 }
 
