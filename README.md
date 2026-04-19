@@ -35,35 +35,48 @@ package main
 import (
     "context"
     "log"
+    "os"
 
     "github.com/AhaSend/ahasend-go"
+    "github.com/AhaSend/ahasend-go/api"
+    "github.com/AhaSend/ahasend-go/models/common"
+    "github.com/AhaSend/ahasend-go/models/requests"
     "github.com/google/uuid"
 )
 
 func main() {
-    // Create client
-    client := ahasend.NewAPIClient(ahasend.NewConfiguration())
-    ctx := context.WithValue(context.Background(),
-        ahasend.ContextAccessToken, "your-api-key")
+    apiKey := os.Getenv("AHASEND_API_KEY")
+    if apiKey == "" {
+        log.Fatal("AHASEND_API_KEY environment variable is required")
+    }
+
+    accountID, err := uuid.Parse(os.Getenv("AHASEND_ACCOUNT_ID"))
+    if err != nil {
+        log.Fatalf("Invalid AHASEND_ACCOUNT_ID: %v", err)
+    }
+
+    client := api.NewAPIClient(api.WithAPIKey(apiKey))
+    ctx := context.Background()
 
     // Send email
-    message := ahasend.CreateMessageRequest{
-        From: ahasend.SenderAddress{Email: "sender@yourdomain.com"},
-        Recipients: []ahasend.Recipient{
+    message := requests.CreateMessageRequest{
+        From: common.SenderAddress{Email: "sender@yourdomain.com"},
+        Recipients: []common.Recipient{
             {Email: "recipient@example.com"},
         },
         Subject:     "Hello from AhaSend!",
-        HtmlContent: ahasend.PtrString("<h1>Welcome!</h1>"),
-        TextContent: ahasend.PtrString("Welcome!"),
+        HtmlContent: ahasend.String("<h1>Welcome!</h1>"),
+        TextContent: ahasend.String("Welcome!"),
     }
 
-    accountID := uuid.MustParse("your-account-id")
     response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
     if err != nil {
         log.Fatal(err)
     }
 
-    log.Printf("Email sent! Message ID: %s", *response.Data[0].Id)
+    if len(response.Data) > 0 && response.Data[0].ID != nil {
+        log.Printf("Email sent! Message ID: %s", *response.Data[0].ID)
+    }
 }
 ```
 
@@ -77,17 +90,22 @@ All API requests require a Bearer token. There are three ways to authenticate:
 export AHASEND_API_KEY="aha-sk-your-64-character-key"
 ```
 
+```go
+client := api.NewAPIClientFromEnv()
+ctx := context.Background()
+```
+
 ### Client-wide Configuration
 ```go
 // Set API key when creating client
-client := ahasend.NewAPIClient(
+client := api.NewAPIClient(
     api.WithAPIKey(apiKey),
 )
 
 // or:
 // cfg := api.NewConfiguration()
 // cfg.APIKey = "aha-sk-..."
-// client := ahasend.NewAPIClientWithConfig(cfg)
+// client := api.NewAPIClientWithConfig(cfg)
 
 // All subsequent API calls will use this key automatically
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
@@ -97,7 +115,7 @@ response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```go
 // Override API key for specific requests
 ctx := context.WithValue(context.Background(),
-    ahasend.ContextAccessToken, "aha-sk-your-64-character-key")
+    api.ContextAccessToken, "aha-sk-your-64-character-key")
 
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
@@ -133,12 +151,12 @@ Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
 | Service | Description | Key Methods |
 |---------|-------------|-------------|
 | **MessagesAPI** | Send and manage emails | `CreateMessage`, `GetMessage`, `CancelMessage` |
-| **DomainsAPI** | Domain verification & management | `CreateDomain`, `VerifyDomain`, `GetDNSRecords` |
-| **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `TestWebhook` |
-| **StatisticsAPI** | Email analytics | `GetDeliverabilityStats`, `GetBounceStats` |
-| **SuppressionsAPI** | Manage block lists | `CreateSuppression`, `DeleteSuppression` |
+| **DomainsAPI** | Domain verification & management | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
+| **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
+| **StatisticsAPI** | Email analytics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
+| **SuppressionsAPI** | Manage block lists | `CreateSuppression`, `DeleteSuppression`, `GetSuppressions` |
 | **RoutesAPI** | Inbound email handling | `CreateRoute`, `UpdateRoute` |
-| **AccountsAPI** | Account & member management | `GetAccount`, `AddMember` |
+| **AccountsAPI** | Account & member management | `GetAccount`, `AddAccountMember` |
 | **APIKeysAPI** | API key management | `CreateAPIKey`, `UpdateAPIKey` |
 
 ## Examples
@@ -150,6 +168,7 @@ Explore our [comprehensive examples](./examples/):
 - **[batch_send.go](./examples/batch_send.go)** - Bulk email operations
 - **[scheduled_send.go](./examples/scheduled_send.go)** - Schedule future delivery
 - **[webhook_processing.go](./examples/webhook_processing.go)** - Handle webhook events
+- **[webhook_management.go](./examples/webhook_management.go)** - Create and manage webhooks
 - **[domain_management.go](./examples/domain_management.go)** - Domain setup & verification
 - **[statistics.go](./examples/statistics.go)** - Analytics and reporting
 - **[error_handling.go](./examples/error_handling.go)** - Robust error handling
@@ -202,7 +221,7 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 ### Rate Limiting
 ```go
-client := ahasend.NewAPIClient(ahasend.NewConfiguration())
+client := api.NewAPIClient(api.WithAPIKey(apiKey))
 
 // Configure for high-volume sending
 client.SetSendMessageRateLimit(500, 1000) // 500 req/s, 1000 burst
@@ -213,14 +232,18 @@ client.SetStatisticsRateLimit(10, 20) // 10 req/s, 20 burst
 
 ### Retry Configuration
 ```go
-config := &ahasend.RetryConfig{
+retryConfig := api.RetryConfig{
     Enabled:           true,
     MaxRetries:        3,
-    BackoffStrategy:   ahasend.ExponentialBackoff,
+    BackoffStrategy:   api.BackoffExponential,
     BaseDelay:         time.Second,
     MaxDelay:          30 * time.Second,
 }
-client.SetRetryConfig(config)
+
+client := api.NewAPIClient(
+    api.WithAPIKey(apiKey),
+    api.WithRetryConfig(retryConfig),
+)
 ```
 
 ## Development
@@ -254,13 +277,14 @@ make help
 
 - 📚 [API Documentation](https://ahasend.com/docs)
 - 🔗 [Go Package Documentation](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
-- 💬 [Support](mailto:suport@ahasend.com)
+- 💬 [Support](mailto:support@ahasend.com)
 - 🐛 [Issues](https://github.com/AhaSend/ahasend-go/issues)
 
 ## Requirements
 
 - **Go**: 1.18 or later
-- **Dependencies**: Only `github.com/google/uuid` and `github.com/stretchr/testify` (for tests)
+- **Runtime dependencies**: `github.com/google/uuid`
+- **Test dependencies**: `github.com/stretchr/testify`
 
 ## License
 
