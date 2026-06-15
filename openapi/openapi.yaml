@@ -75,6 +75,16 @@ info:
     - `api-keys:write` - Create and update API keys
     - `api-keys:delete` - Delete API keys
 
+    ### Sub-Account Scopes
+    - `sub-accounts:read` - List and read sub accounts under the parent
+    - `sub-accounts:write` - Create and update sub accounts
+    - `sub-accounts:delete` - Soft-delete sub accounts
+    - `sub-accounts:suspend` - Suspend and unsuspend sub accounts
+    - `sub-accounts:usage` - Read per-sub-account usage and allocated cost
+    - `sub-account-api-keys:read` - List and read API keys owned by sub accounts
+    - `sub-account-api-keys:write` - Create and update API keys owned by sub accounts
+    - `sub-account-api-keys:delete` - Delete API keys owned by sub accounts
+
     ## Rate Limiting
     - General API endpoints: 100 requests per second, 200 burst
     - Statistics endpoints: 1 request per second, 1 burst
@@ -91,10 +101,11 @@ info:
     POST requests support idempotency through the optional `Idempotency-Key` header. When provided:
     - The same request can be safely retried multiple times
     - Duplicate requests return the same response with `Idempotent-Replayed: true`
-    - In-progress requests return HTTP 409 with `Idempotent-Replayed: false`
-    - Failed requests return HTTP 412 with `Idempotent-Replayed: false`
-    - Reusing a key with a different request payload returns HTTP 422
-    - Idempotency keys expire after 24 hours
+    - In-progress requests return HTTP 409 with `Idempotent-Replayed: false` and a `Retry-After` header
+    - Completed outcomes (2xx and 4xx) are stored and replayed; server errors (5xx) are not stored, so retrying with the same key re-executes the request
+    - Reusing a key with a different request payload, or against a different endpoint or resource, returns HTTP 422
+    - Idempotency keys for non-secret responses expire after 24 hours
+    - API-key create endpoints return a one-time `secret_key`; their encrypted idempotency replay responses expire after 5 minutes and replay the same `secret_key` during that window
 
   version: "2.0.0"
   contact:
@@ -124,7 +135,8 @@ components:
       required: false
       description: |
         Optional idempotency key for safe request retries. Must be a unique string for each logical request.
-        Requests with the same key will return the same response. Keys expire after 24 hours.
+        Requests with the same key will return the same response. Keys for non-secret responses expire after 24 hours.
+        API-key create responses include a one-time `secret_key`, so their encrypted replay responses expire after 5 minutes.
       schema:
         type: string
         maxLength: 255
@@ -146,24 +158,16 @@ components:
       headers:
         Idempotent-Replayed:
           $ref: '#/components/headers/IdempotentReplayed'
+        Retry-After:
+          description: Number of seconds after which it is safe to retry the request
+          schema:
+            type: integer
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "A request with this idempotency key is already in progress"
-
-    IdempotencyPreconditionFailed:
-      description: Original request failed - the request with this idempotency key previously failed and cannot be retried
-      headers:
-        Idempotent-Replayed:
-          $ref: '#/components/headers/IdempotentReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            message: "The original request with this idempotency key failed and cannot be retried"
 
     IdempotencyPayloadMismatch:
       description: Idempotency key was already used with a different request payload
@@ -204,13 +208,13 @@ components:
       properties:
         has_more:
           type: boolean
-          description: Whether there are more items available
+          description: Whether more items exist after the last item of this page
         next_cursor:
           type: string
-          description: Cursor for the next page of results
+          description: Pass as `after` to fetch the next page
         previous_cursor:
           type: string
-          description: Cursor for the previous page of results
+          description: Pass as `before` to fetch the previous page; absent on a `before` page when the start of the list has been reached
       example:
         has_more: true
         next_cursor: "eyJpZCI6MTIzNH0="
@@ -286,7 +290,7 @@ components:
           description: Public portion of the API key
         secret_key:
           type: string
-          description: Secret key (only returned on creation)
+          description: Secret key. Only returned when an API key is created, including exact idempotent replays of create requests within the 5-minute secret-bearing replay window. Store it immediately; list, get, update, and delete responses omit it.
         scopes:
           type: array
           items:
@@ -310,8 +314,9 @@ components:
       properties:
         label:
           type: string
+          minLength: 1
           maxLength: 255
-          description: Human-readable label for the API key
+          description: Human-readable label for the API key; must not be empty
         scopes:
           type: array
           items:
@@ -328,7 +333,7 @@ components:
         label:
           type: string
           maxLength: 255
-          description: Human-readable label for the API key
+          description: Human-readable label for the API key. Omit to keep the existing label; an empty string is accepted but leaves the existing label unchanged.
         scopes:
           type: array
           items:
@@ -476,9 +481,11 @@ components:
         dkim_private_key:
           type: string
           description: |
-            DKIM Private Key for the domain. Only RSA keys with a minimum key size of 2048 bits are supported.
+            DKIM Private Key for the domain. Only RSA keys with a minimum key size of 1024 bits are supported.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+
+            <Note>Key size of at least 1024 bits is supported; 2048 bit keys are strongly recommended for improved security.</Note>
         tracking_subdomain:
           type: string
           description: Optional custom tracking subdomain. Omit to use the default on create.
@@ -1131,6 +1138,11 @@ components:
           type: string
           format: uuid
           description: Unique identifier for the account
+        parent_account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent account ID when this account is a sub account
         created_at:
           type: string
           format: date-time
@@ -1180,6 +1192,268 @@ components:
         - updated_at
         - name
         - owner_id
+
+    SubAccount:
+      type: object
+      required:
+        - object
+        - id
+        - parent_account_id
+        - name
+        - website
+        - status
+        - monthly_credit
+        - created_at
+        - domain_count
+        - member_count
+        - last_activity_at
+      properties:
+        object:
+          type: string
+          enum: [sub_account]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the sub account
+        parent_account_id:
+          type: string
+          format: uuid
+          description: Parent account ID
+        created_at:
+          type: string
+          format: date-time
+          description: When the sub account was created
+        name:
+          type: string
+          description: Sub account name
+        website:
+          type: string
+          format: fqdn
+          maxLength: 255
+          description: Account website domain
+        status:
+          type: string
+          enum: [active, suspended, parent-suspended, deleted]
+          description: Current sub-account status
+        monthly_credit:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Optional monthly cap; 0 means no cap
+        domain_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of domains owned by the sub account
+        member_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of direct members on the sub account
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Last recorded sub-account email activity
+      example:
+        object: sub_account
+        id: "2f3c5d2a-9ef8-4c91-a5f4-79990c8c1d3a"
+        parent_account_id: "9d0cf9d0-4f5e-4674-bcf1-8ec39968b6e1"
+        name: "Acme Subsidiary"
+        website: "acme.example.com"
+        status: active
+        monthly_credit: 0
+        created_at: "2024-01-01T00:00:00Z"
+        domain_count: 2
+        member_count: 3
+        last_activity_at: "2024-01-15T12:00:00Z"
+
+    CreateSubAccountRequest:
+      type: object
+      required:
+        - name
+        - website
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Human-readable name for the sub account; leading and trailing whitespace is trimmed and the result must not be blank
+        website:
+          type: string
+          format: fqdn
+          maxLength: 255
+          description: Account website domain
+        monthly_credit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          default: 0
+          description: Optional monthly cap; 0 means no cap
+      example:
+        name: "Acme Subsidiary"
+        website: "acme.example.com"
+        monthly_credit: 0
+
+    UpdateSubAccountRequest:
+      type: object
+      required:
+        - website
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Human-readable name for the sub account; leading and trailing whitespace is trimmed and the result must not be blank
+        website:
+          type: string
+          format: fqdn
+          maxLength: 255
+          description: Account website domain
+        monthly_credit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1000000000
+          description: Optional monthly cap; 0 means no cap
+      example:
+        name: "Acme Subsidiary"
+        website: "acme.example.com"
+        monthly_credit: 50000
+
+    SuspendSubAccountRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Reason shown on the sub account suspension record
+      example:
+        reason: "Customer requested temporary pause"
+
+    SubAccountUsageBreakdown:
+      type: object
+      required:
+        - reception_count
+        - allocated_cost
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID for this usage bucket
+        name:
+          type: string
+          description: Sub account name when this bucket is for a sub account
+        reception_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of received messages in the billing period
+        allocated_cost:
+          type: number
+          format: double
+          minimum: 0
+          description: Proportional allocated cost for this usage bucket
+      example:
+        account_id: "2f3c5d2a-9ef8-4c91-a5f4-79990c8c1d3a"
+        name: "Acme Subsidiary"
+        reception_count: 3000000
+        allocated_cost: 60.0
+
+    SubAccountUsageResponse:
+      type: object
+      required:
+        - billing_period
+        - currency
+        - allocation_method
+        - allocation_note
+        - parent
+        - sub_accounts
+        - removed_sub_accounts
+        - total
+      properties:
+        billing_period:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+              description: Billing period start
+            end:
+              type: string
+              format: date-time
+              description: Billing period end
+        currency:
+          type: string
+          description: Currency code used for cost allocation
+        allocation_method:
+          type: string
+          enum: [proportional]
+          description: Method used to allocate the pooled parent invoice cost
+        allocation_note:
+          type: string
+          description: Disclaimer explaining that allocated cost is not standalone sub-account pricing
+        parent:
+          $ref: '#/components/schemas/SubAccountUsageBreakdown'
+        sub_accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubAccountUsageBreakdown'
+          description: Per-sub-account usage and allocated cost
+        removed_sub_accounts:
+          $ref: '#/components/schemas/SubAccountUsageBreakdown'
+          description: Aggregated usage from sub accounts deleted during the period; still billed to the parent and not identified individually
+        total:
+          $ref: '#/components/schemas/SubAccountUsageBreakdown'
+      example:
+        billing_period:
+          start: "2024-01-01T00:00:00Z"
+          end: "2024-02-01T00:00:00Z"
+        currency: usd
+        allocation_method: proportional
+        allocation_note: "allocated_cost is a proportional share of the parent's pooled invoice for the period, not what the sub would pay on its own plan."
+        parent:
+          account_id: "9d0cf9d0-4f5e-4674-bcf1-8ec39968b6e1"
+          reception_count: 1000000
+          allocated_cost: 20.0
+        sub_accounts:
+          - account_id: "2f3c5d2a-9ef8-4c91-a5f4-79990c8c1d3a"
+            name: "Acme Subsidiary"
+            reception_count: 3000000
+            allocated_cost: 60.0
+        removed_sub_accounts:
+          reception_count: 0
+          allocated_cost: 0.0
+        total:
+          reception_count: 4000000
+          allocated_cost: 80.0
+
+    PaginatedSubAccountsResponse:
+      type: object
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubAccount'
+          description: Array of sub accounts
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
 
     UpdateAccountRequest:
       type: object
@@ -2435,8 +2709,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -3012,8 +3284,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -3759,8 +4029,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -3837,8 +4105,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -4247,8 +4513,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -4314,6 +4578,949 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Sub-account endpoints
+  /v2/accounts/{account_id}/sub-accounts:
+    get:
+      summary: List Sub Accounts
+      description: Returns a cursor-paginated list of sub accounts under the parent account. Soft-deleted sub accounts are not included; usage billed for sub accounts deleted during the current period is reported by the usage endpoint's `removed_sub_accounts` aggregate.
+      operationId: listSubAccounts
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Pagination cursor for the next page. Provide the value from `next_cursor` in the response.
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page. Provide the value from `previous_cursor` in the response.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["sub-accounts:read"]
+      responses:
+        '200':
+          description: List of sub accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubAccountsResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parent account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create Sub Account
+      description: Creates a new sub account under the parent account
+      operationId: createSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["sub-accounts:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubAccountRequest'
+      responses:
+        '201':
+          description: Sub account created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parent account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/usage:
+    get:
+      summary: Get Sub-Account Usage
+      description: Returns current billing-period usage and proportional allocated cost for the parent and active sub accounts
+      operationId: getSubAccountsUsage
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:usage"]
+      responses:
+        '200':
+          description: Sub-account usage breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccountUsageResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parent account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}:
+    get:
+      summary: Get Sub Account
+      description: Returns a specific sub account under the parent account
+      operationId: getSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:read"]
+      responses:
+        '200':
+          description: Sub account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update Sub Account
+      description: Updates a sub account's editable settings
+      operationId: updateSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubAccountRequest'
+      responses:
+        '200':
+          description: Sub account updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete Sub Account
+      description: Soft-deletes a sub account under the parent account
+      operationId: deleteSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:delete"]
+      responses:
+        '200':
+          description: Sub account deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/suspend:
+    post:
+      summary: Suspend Sub Account
+      description: Suspends a sub account under the parent account
+      operationId: suspendSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:suspend"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendSubAccountRequest'
+      responses:
+        '200':
+          description: Sub account suspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/unsuspend:
+    post:
+      summary: Unsuspend Sub Account
+      description: Unsuspends a sub account under the parent account
+      operationId: unsuspendSubAccount
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-accounts:suspend"]
+      responses:
+        '200':
+          description: Sub account unsuspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/api-keys:
+    get:
+      summary: List Sub-Account API Keys
+      description: Returns a cursor-paginated list of API keys owned by a sub account. The `secret_key` field is omitted from list responses.
+      operationId: listSubAccountAPIKeys
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Pagination cursor for the next page. Provide the value from `next_cursor` in the response.
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page. Provide the value from `previous_cursor` in the response.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["sub-account-api-keys:read"]
+      responses:
+        '200':
+          description: List of sub-account API keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAPIKeysResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Create Sub-Account API Key
+      description: |
+        Creates an API key owned by the sub account. Parent credentials must belong to the parent account and include `sub-account-api-keys:write`; sub-account credentials cannot manage nested API keys. The returned `secret_key` authenticates as the child account and should be stored immediately.
+
+        Bootstrap example:
+        1. Create the sub account with `POST /v2/accounts/{account_id}/sub-accounts` and a unique `Idempotency-Key`.
+        2. Create the bootstrap child API key with this endpoint and a different unique `Idempotency-Key`.
+        3. Store the one-time `secret_key` from the `201` response. Exact idempotent replays within 5 minutes return the same `secret_key`.
+        4. Use that child secret with the child `sub_account_id` as the `account_id` on ordinary v2 routes.
+      operationId: createSubAccountAPIKey
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["sub-account-api-keys:write"]
+      x-code-samples:
+        - lang: shell
+          label: Bootstrap child API key
+          source: |
+            PARENT_ACCOUNT_ID="9d0cf9d0-4f5e-4674-bcf1-8ec39968b6e1"
+            PARENT_SECRET="aha-sk-parent-64-character-key"
+
+            curl -sS -X POST "https://api.ahasend.com/v2/accounts/${PARENT_ACCOUNT_ID}/sub-accounts" \
+              -H "Authorization: Bearer ${PARENT_SECRET}" \
+              -H "Content-Type: application/json" \
+              -H "Idempotency-Key: subacct-20240101-acme" \
+              -d '{"name":"Acme Subsidiary","website":"acme.example.com"}' \
+              > sub-account.json
+
+            CHILD_ACCOUNT_ID="$(jq -r '.id' sub-account.json)"
+
+            curl -sS -X POST "https://api.ahasend.com/v2/accounts/${PARENT_ACCOUNT_ID}/sub-accounts/${CHILD_ACCOUNT_ID}/api-keys" \
+              -H "Authorization: Bearer ${PARENT_SECRET}" \
+              -H "Content-Type: application/json" \
+              -H "Idempotency-Key: child-bootstrap-key-20240101-acme" \
+              -d '{"label":"Bootstrap key","scopes":["messages:send:all","domains:read"]}' \
+              > child-api-key.json
+
+            CHILD_SECRET="$(jq -r '.secret_key' child-api-key.json)"
+            printf 'Store this one-time child secret securely: %s\n' "${CHILD_SECRET}"
+
+            curl -sS "https://api.ahasend.com/v2/accounts/${CHILD_ACCOUNT_ID}/domains" \
+              -H "Authorization: Bearer ${CHILD_SECRET}"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAPIKeyRequest'
+            example:
+              label: "Bootstrap key"
+              scopes: ["messages:send:all", "domains:read"]
+      responses:
+        '201':
+          description: Sub-account API key created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+              example:
+                object: api_key
+                id: "13b3aa8e-78d3-48a1-92d2-4b8b1228c2dd"
+                created_at: "2024-01-01T00:05:00Z"
+                updated_at: "2024-01-01T00:05:00Z"
+                last_used_at: null
+                account_id: "2f3c5d2a-9ef8-4c91-a5f4-79990c8c1d3a"
+                label: "Bootstrap key"
+                public_key: "aha-pk-child-public-key"
+                secret_key: "aha-sk-child-secret-key"
+                scopes:
+                  - id: "c574470d-76ef-4f74-9b24-70a583a17e03"
+                    created_at: "2024-01-01T00:05:00Z"
+                    updated_at: "2024-01-01T00:05:00Z"
+                    api_key_id: "13b3aa8e-78d3-48a1-92d2-4b8b1228c2dd"
+                    scope: "messages:send:all"
+                    domain_id: null
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/api-keys/{key_id}:
+    get:
+      summary: Get Sub-Account API Key
+      description: Returns a specific API key owned by a sub account. The `secret_key` field is omitted from read responses.
+      operationId: getSubAccountAPIKey
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: key_id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-account-api-keys:read"]
+      responses:
+        '200':
+          description: Sub-account API key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: API key or sub account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Update Sub-Account API Key
+      description: Updates the label and scopes for an API key owned by a sub account. Updated scopes are validated against the child account.
+      operationId: updateSubAccountAPIKey
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: key_id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-account-api-keys:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAPIKeyRequest'
+            example:
+              label: "Updated bootstrap key"
+              scopes: ["messages:send:all", "domains:read"]
+      responses:
+        '200':
+          description: Sub-account API key updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKey'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: API key or sub account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      summary: Delete Sub-Account API Key
+      description: Deletes an API key owned by a sub account.
+      operationId: deleteSubAccountAPIKey
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: key_id
+          in: path
+          required: true
+          description: API key ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["sub-account-api-keys:delete"]
+      responses:
+        '200':
+          description: Sub-account API key deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                message: "api key {id} ({label}) deleted successfully"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: API key or sub account not found
           content:
             application/json:
               schema:
@@ -4596,8 +5803,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -5067,8 +6272,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -5703,8 +6906,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -6273,8 +7474,6 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
-        '412':
-          $ref: '#/components/responses/IdempotencyPreconditionFailed'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
