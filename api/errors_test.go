@@ -128,6 +128,7 @@ func TestDetermineErrorType(t *testing.T) {
 		{http.StatusForbidden, ErrorTypePermission},
 		{http.StatusNotFound, ErrorTypeNotFound},
 		{http.StatusConflict, ErrorTypeConflict},
+		{http.StatusUnprocessableEntity, ErrorTypeIdempotency},
 		{http.StatusPreconditionFailed, ErrorTypeIdempotency},
 		{http.StatusTooManyRequests, ErrorTypeRateLimit},
 		{http.StatusInternalServerError, ErrorTypeServer},

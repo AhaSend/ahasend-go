@@ -50,6 +50,8 @@ func TestEndpointDetection(t *testing.T) {
 		{"GET", "/v2/accounts/123/domains", GeneralAPI},
 		{"POST", "/v2/accounts/123/domains", GeneralAPI},
 		{"GET", "/v2/accounts/123/api-keys", GeneralAPI},
+		{"GET", "/v2/accounts/123/sub-accounts", GeneralAPI},
+		{"POST", "/v2/accounts/123/sub-accounts", GeneralAPI},
 	}
 
 	for _, test := range tests {

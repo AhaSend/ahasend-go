@@ -24,9 +24,14 @@ func TestClientCreation(t *testing.T) {
 	assert.NotNil(t, client.RoutesAPI)
 	assert.NotNil(t, client.SMTPCredentialsAPI)
 	assert.NotNil(t, client.StatisticsAPI)
+	assert.NotNil(t, client.SubAccountsAPI)
 	assert.NotNil(t, client.SuppressionsAPI)
 	assert.NotNil(t, client.UtilityAPI)
 	assert.NotNil(t, client.WebhooksAPI)
+
+	defaultClient := NewAPIClient()
+	require.NotNil(t, defaultClient)
+	assert.NotNil(t, defaultClient.SubAccountsAPI)
 }
 
 // TestUtilityFunctions tests the pointer utility functions

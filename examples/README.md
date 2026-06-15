@@ -13,6 +13,9 @@ Before running these examples, you need:
    export AHASEND_API_KEY="your-api-key-here"
    export AHASEND_ACCOUNT_ID="your-account-id-here"
    ```
+4. For Sub Account management, use parent or partner credentials with the needed granular scopes:
+   `sub-accounts:read`, `sub-accounts:write`, `sub-accounts:delete`, `sub-accounts:suspend`, `sub-accounts:usage`,
+   `sub-account-api-keys:read`, `sub-account-api-keys:write`, and `sub-account-api-keys:delete`
 
 ## Available Examples
 
@@ -38,6 +41,9 @@ Before running these examples, you need:
 
 ### Statistics & Analytics
 - [statistics.go](./statistics.go) - Retrieve delivery statistics and analytics
+
+### Partner & Platform
+- [sub_account_management.go](./sub_account_management.go) - Manage Sub Accounts, usage, and child API keys
 
 ## Running the Examples
 
@@ -97,4 +103,4 @@ go run examples/webhook_processing.go
 
 - [AhaSend API Documentation](https://ahasend.com/docs)
 - [Go SDK Documentation](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
-- [Support](https://ahasend.com/support)
+- [Support](mailto:support@ahasend.com)

@@ -96,6 +96,8 @@ func determineErrorType(statusCode int) ErrorType {
 		return ErrorTypeNotFound
 	case http.StatusConflict:
 		return ErrorTypeConflict
+	case http.StatusUnprocessableEntity:
+		return ErrorTypeIdempotency
 	case http.StatusPreconditionFailed:
 		return ErrorTypeIdempotency
 	case http.StatusTooManyRequests:

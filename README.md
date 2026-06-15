@@ -10,14 +10,14 @@ The official Go SDK for [AhaSend](https://ahasend.com) 🚀 - a powerful transac
 
 ## ✨ Features
 
-- **📦 Complete API Coverage**: Send emails, manage domains, webhooks, routes, suppressions, and more
+- **📦 Complete API Coverage**: Send emails, manage domains, webhooks, routes, suppressions, Sub Accounts, and more
 - **🔒 Type Safety**: Full Go type system with pointer utilities for optional fields
 - **⚡ Built-in Rate Limiting**: Automatic protection against 429 errors with configurable limits
 - **🔄 Intelligent Retries**: Exponential backoff with jitter for failed requests
 - **🔗 Webhook Processing**: Standard Webhooks compliant verification and parsing
 - **📊 Comprehensive Tracking**: Opens, clicks, bounces, deliveries, and more
 - **🛡️ Automatic Idempotency**: Prevent duplicate API calls (including email sends) automatically
-- **📚 Rich Examples**: 11+ production-ready examples covering all major use cases
+- **📚 Rich Examples**: 12+ production-ready examples covering all major use cases
 
 ## Quick Start
 
@@ -122,6 +122,19 @@ response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 
 Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
 
+### Granular Sub-Account Scopes
+
+Parent or partner credentials that manage Sub Accounts need one or more of these exact scopes:
+
+- `sub-accounts:read` - List and read sub accounts under the parent
+- `sub-accounts:write` - Create and update sub accounts
+- `sub-accounts:delete` - Soft-delete sub accounts
+- `sub-accounts:suspend` - Suspend and unsuspend sub accounts
+- `sub-accounts:usage` - Read per-sub-account usage and allocated cost
+- `sub-account-api-keys:read` - List and read API keys owned by sub accounts
+- `sub-account-api-keys:write` - Create and update API keys owned by sub accounts
+- `sub-account-api-keys:delete` - Delete API keys owned by sub accounts
+
 ## Core Functionality
 
 ### Email Operations
@@ -139,6 +152,10 @@ Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
 - **Delivery Statistics**: Track sends, deliveries, bounces, opens, clicks
 - **Real-time Events**: Webhook notifications for all email events
 - **Suppression Management**: Handle bounces and unsubscribes automatically
+
+### Partner & Platform
+- **Sub Account Management**: Create, update, suspend, delete, and review usage for child accounts
+- **Child API Keys**: Issue and manage API keys owned by Sub Accounts
 
 ### Developer Experience
 - **Automatic Rate Limiting**: Three endpoint categories with smart detection
@@ -158,6 +175,7 @@ Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
 | **RoutesAPI** | Inbound email handling | `CreateRoute`, `UpdateRoute` |
 | **AccountsAPI** | Account & member management | `GetAccount`, `AddAccountMember` |
 | **APIKeysAPI** | API key management | `CreateAPIKey`, `UpdateAPIKey` |
+| **SubAccountsAPI** | Parent and partner Sub Account management | `ListSubAccounts`, `CreateSubAccount`, `CreateSubAccountAPIKey`, `GetSubAccountsUsage` |
 
 ## Examples
 
@@ -174,6 +192,7 @@ Explore our [comprehensive examples](./examples/):
 - **[error_handling.go](./examples/error_handling.go)** - Robust error handling
 - **[rate_limiting.go](./examples/rate_limiting.go)** - Rate limit configuration
 - **[idempotency.go](./examples/idempotency.go)** - Prevent duplicate sends
+- **[sub_account_management.go](./examples/sub_account_management.go)** - Manage Sub Accounts, usage, and child API keys
 
 Run any example:
 ```bash

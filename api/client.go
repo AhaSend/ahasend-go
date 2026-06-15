@@ -242,6 +242,8 @@ type APIClient struct {
 
 	StatisticsAPI *StatisticsAPIService
 
+	SubAccountsAPI *SubAccountsAPIService
+
 	SuppressionsAPI *SuppressionsAPIService
 
 	UtilityAPI *UtilityAPIService
@@ -251,6 +253,10 @@ type APIClient struct {
 
 type service struct {
 	client *APIClient
+}
+
+type requestBodyValidator interface {
+	Validate() error
 }
 
 // NewAPIClient creates a new API client with functional options.
@@ -288,6 +294,7 @@ func NewAPIClient(opts ...ClientOption) *APIClient {
 	c.RoutesAPI = (*RoutesAPIService)(&c.common)
 	c.SMTPCredentialsAPI = (*SMTPCredentialsAPIService)(&c.common)
 	c.StatisticsAPI = (*StatisticsAPIService)(&c.common)
+	c.SubAccountsAPI = (*SubAccountsAPIService)(&c.common)
 	c.SuppressionsAPI = (*SuppressionsAPIService)(&c.common)
 	c.UtilityAPI = (*UtilityAPIService)(&c.common)
 	c.WebhooksAPI = (*WebhooksAPIService)(&c.common)
@@ -419,6 +426,15 @@ func (c *APIClient) Execute(ctx context.Context, config RequestConfig) (*http.Re
 	// Step 4: Create the request body
 	var bodyReader io.Reader
 	if config.Body != nil {
+		if validator, ok := config.Body.(requestBodyValidator); ok {
+			if err := validator.Validate(); err != nil {
+				return nil, &APIError{
+					Type:    ErrorTypeValidation,
+					Message: fmt.Sprintf("Invalid request body: %v", err),
+				}
+			}
+		}
+
 		jsonBody, err := json.Marshal(config.Body)
 		if err != nil {
 			return nil, &APIError{

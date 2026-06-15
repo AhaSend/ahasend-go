@@ -8,11 +8,12 @@ import (
 
 // Account represents an AhaSend account
 type Account struct {
-	Object    string    `json:"object"`
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Name      string    `json:"name"`
+	Object          string     `json:"object"`
+	ID              uuid.UUID  `json:"id"`
+	ParentAccountID *uuid.UUID `json:"parent_account_id,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	Name            string     `json:"name"`
 
 	// Optional account information
 	Website *string `json:"website,omitempty"`

@@ -11,3 +11,16 @@ type UpdateAPIKeyRequest struct {
 	Label  *string   `json:"label,omitempty"`
 	Scopes *[]string `json:"scopes,omitempty"`
 }
+
+// Validate checks UpdateAPIKeyRequest client-side constraints.
+func (r UpdateAPIKeyRequest) Validate() error {
+	if err := validateAtLeastOneField(r.Label != nil || r.Scopes != nil); err != nil {
+		return err
+	}
+
+	if err := validateOptionalString("label", r.Label, maxAPIKeyLabelLength); err != nil {
+		return err
+	}
+
+	return validateOptionalNonEmptyStringSlice("scopes", r.Scopes)
+}

@@ -32,6 +32,7 @@ func TestAccount_JSONMarshaling(t *testing.T) {
 		assert.NotContains(t, string(jsonData), "website")
 		assert.NotContains(t, string(jsonData), "about")
 		assert.NotContains(t, string(jsonData), "track_opens")
+		assert.NotContains(t, string(jsonData), "parent_account_id")
 
 		// Unmarshal and verify
 		var decoded Account
@@ -48,6 +49,31 @@ func TestAccount_JSONMarshaling(t *testing.T) {
 		assert.Nil(t, decoded.Website)
 		assert.Nil(t, decoded.About)
 		assert.Nil(t, decoded.TrackOpens)
+		assert.Nil(t, decoded.ParentAccountID)
+	})
+
+	t.Run("child account with parent account id", func(t *testing.T) {
+		parentAccountID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+		account := Account{
+			Object:          "account",
+			ID:              accountID,
+			ParentAccountID: &parentAccountID,
+			Name:            "Child Account",
+			CreatedAt:       createdAt,
+			UpdatedAt:       updatedAt,
+		}
+
+		jsonData, err := json.Marshal(account)
+		require.NoError(t, err)
+
+		assert.Contains(t, string(jsonData), "parent_account_id")
+
+		var decoded Account
+		err = json.Unmarshal(jsonData, &decoded)
+		require.NoError(t, err)
+
+		require.NotNil(t, decoded.ParentAccountID)
+		assert.Equal(t, parentAccountID, *decoded.ParentAccountID)
 	})
 
 	t.Run("complete account with all optional fields", func(t *testing.T) {
