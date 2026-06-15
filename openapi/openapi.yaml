@@ -329,13 +329,26 @@ components:
 
     UpdateAPIKeyRequest:
       type: object
+      description: At least one non-null field must be provided, and at least one provided value must differ from the current value. Omitted or null fields are left unchanged.
+      anyOf:
+        - required: [label]
+          properties:
+            label:
+              type: string
+        - required: [scopes]
+          properties:
+            scopes:
+              type: array
       properties:
         label:
           type: string
+          nullable: true
+          minLength: 1
           maxLength: 255
-          description: Human-readable label for the API key. Omit to keep the existing label; an empty string is accepted but leaves the existing label unchanged.
+          description: Human-readable label for the API key. Omit to keep the existing label.
         scopes:
           type: array
+          nullable: true
           items:
             type: string
           minItems: 1
@@ -1299,21 +1312,36 @@ components:
 
     UpdateSubAccountRequest:
       type: object
-      required:
-        - website
+      description: At least one non-null field must be provided, and at least one provided value must differ from the current value. Omitted or null fields are left unchanged.
+      anyOf:
+        - required: [name]
+          properties:
+            name:
+              type: string
+        - required: [website]
+          properties:
+            website:
+              type: string
+        - required: [monthly_credit]
+          properties:
+            monthly_credit:
+              type: integer
       properties:
         name:
           type: string
+          nullable: true
           minLength: 1
           maxLength: 255
           description: Human-readable name for the sub account; leading and trailing whitespace is trimmed and the result must not be blank
         website:
           type: string
+          nullable: true
           format: fqdn
           maxLength: 255
           description: Account website domain
         monthly_credit:
           type: integer
+          nullable: true
           format: int64
           minimum: 0
           maximum: 1000000000
@@ -4944,7 +4972,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SubAccount'
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                message: "sub account deleted"
         '400':
           description: Bad request
           content:
