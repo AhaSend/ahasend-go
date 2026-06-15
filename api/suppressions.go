@@ -195,14 +195,14 @@ func (a *SuppressionsAPIService) GetSuppressions(
 	}
 	fromTime := params.FromTime
 	if fromTime == nil {
-		fromTime = params.FromDate
+		fromTime = params.FromTime
 	}
 	if fromTime != nil {
 		queryParams.Set("from_time", fromTime.Format(time.RFC3339))
 	}
 	toTime := params.ToTime
 	if toTime == nil {
-		toTime = params.ToDate
+		toTime = params.ToTime
 	}
 	if toTime != nil {
 		queryParams.Set("to_time", toTime.Format(time.RFC3339))
