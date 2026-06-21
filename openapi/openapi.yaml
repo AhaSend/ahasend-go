@@ -107,6 +107,14 @@ info:
     - Idempotency keys for non-secret responses expire after 24 hours
     - API-key create endpoints return a one-time `secret_key`; their encrypted idempotency replay responses expire after 5 minutes and replay the same `secret_key` during that window
 
+    ## IP Allow Lists
+    Each API key can carry an `ip_allow_list`: a set of source IPs that restrict where the key may authenticate from.
+    - Entries are CIDR blocks (e.g. `203.0.113.0/24`) or bare IPv4/IPv6 addresses (stored as a `/32` or `/128`). They are canonicalized and de-duplicated; the allow-all prefixes `0.0.0.0/0` and `::/0` are rejected, and at most 100 entries are allowed after de-duplication (a longer list is rejected with HTTP 400).
+    - An empty list (the default) places no restriction.
+    - When the list is non-empty, any authenticated request whose client IP is not covered by an entry is rejected with HTTP 403 on every v2 endpoint, regardless of the key's scopes.
+    - Manage the list with the `ip_allow_list` field on the API-key create and update endpoints (including the sub-account API-key endpoints).
+    - When a key updates its own `ip_allow_list` to a value that excludes the caller's current IP, the update is rejected with HTTP 409 to prevent self-lockout. Updating a sub-account key from a parent key has no such guard.
+
   version: "2.0.0"
   contact:
     email: support@ahasend.com
@@ -296,6 +304,17 @@ components:
           items:
             $ref: '#/components/schemas/APIKeyScope'
           description: Scopes granted to this API key
+        ip_allow_list:
+          type: array
+          items:
+            type: string
+          description: >-
+            Source IPs allowed to authenticate with this API key, as canonical
+            CIDR blocks (a bare address is stored as a `/32` for IPv4 or `/128`
+            for IPv6). Always present; an empty array means the key may be used
+            from any source IP. When non-empty, an authenticated request whose
+            client IP is not covered by an entry is rejected with HTTP 403 on
+            every v2 endpoint, regardless of the key's scopes.
       required:
         - object
         - id
@@ -305,6 +324,7 @@ components:
         - label
         - public_key
         - scopes
+        - ip_allow_list
 
     CreateAPIKeyRequest:
       type: object
@@ -323,9 +343,22 @@ components:
             type: string
           minItems: 1
           description: Array of scope strings to grant to this API key
+        ip_allow_list:
+          type: array
+          items:
+            type: string
+          description: >-
+            Optional list of source IPs allowed to authenticate with this key.
+            Each entry is a CIDR block (e.g. `203.0.113.0/24`) or a bare
+            IPv4/IPv6 address (stored as a `/32` or `/128`). Entries are
+            canonicalized (host bits are masked) and de-duplicated. The
+            allow-all prefixes `0.0.0.0/0` and `::/0` are rejected, and at most
+            100 entries are allowed after de-duplication. Omit the field or
+            pass an empty array to leave the key usable from any IP.
       example:
         label: "Production API Key"
         scopes: ["messages:send:all", "domains:read"]
+        ip_allow_list: ["203.0.113.0/24", "198.51.100.7"]
 
     UpdateAPIKeyRequest:
       type: object
@@ -338,6 +371,10 @@ components:
         - required: [scopes]
           properties:
             scopes:
+              type: array
+        - required: [ip_allow_list]
+          properties:
+            ip_allow_list:
               type: array
       properties:
         label:
@@ -353,9 +390,22 @@ components:
             type: string
           minItems: 1
           description: Array of scope strings to grant to this API key
+        ip_allow_list:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: >-
+            Replacement list of allowed source IPs (CIDR blocks or bare
+            IPv4/IPv6 addresses; canonicalized and de-duplicated, at most 100
+            entries, allow-all prefixes `0.0.0.0/0` and `::/0` rejected). Omit
+            the field or send null to leave the existing list unchanged; send an
+            empty array to clear it (key usable from any IP); send a non-empty
+            array to replace it.
       example:
         label: "Updated API Key"
         scopes: ["messages:send:{example.com}", "domains:read"]
+        ip_allow_list: ["203.0.113.0/24"]
 
     PaginatedAPIKeysResponse:
       type: object
@@ -628,7 +678,12 @@ components:
           description: The disposition of the attachment
         content_id:
           type: string
-          description: The Content-ID of the attachment for inline images
+          description: |
+            Content-ID that lets you reference this attachment as an inline image from your HTML.
+
+            The value **must be wrapped in angle brackets**, matching the MIME `Content-ID` header format — for example `"<image1@example.com>"`. Reference it from `html_content` **without** the brackets, e.g. `<img src="cid:image1@example.com">`.
+
+            If the angle brackets are omitted, the file is delivered as a regular (downloadable) attachment instead of rendering inline.
         file_name:
           type: string
           description: The filename of the attachment
@@ -720,7 +775,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Attachment'
-          description: File attachments
+          description: File attachments. For inline images, set the attachment's `content_id` to a value wrapped in angle brackets (e.g. `<image1@example.com>`) and reference it from `html_content` with `cid:` (e.g. `<img src="cid:image1@example.com">`).
         headers:
           type: object
           additionalProperties:
@@ -814,7 +869,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Attachment'
-          description: File attachments
+          description: File attachments. For inline images, set the attachment's `content_id` to a value wrapped in angle brackets (e.g. `<image1@example.com>`) and reference it from `html_content` with `cid:` (e.g. `<img src="cid:image1@example.com">`).
         headers:
           type: object
           additionalProperties:
@@ -2674,7 +2729,7 @@ paths:
               // Create context for the API call
               ctx := context.Background()
 
-              // Call the ping endpoint
+              // Create a new API key
               response, httpResp, err := client.APIKeysAPI.CreateAPIKey(
                 ctx,
                 accountID,
@@ -2684,6 +2739,10 @@ paths:
                     "messages:read:all",
                     "domains:read",
                   },
+                  // Optional: restrict this key to specific source IPs (CIDR
+                  // blocks or bare IPv4/IPv6 addresses). Omit or leave empty to
+                  // allow the key to be used from any IP.
+                  IPAllowList: []string{"203.0.113.0/24", "198.51.100.7"},
                 },
               )
               if err != nil {
@@ -2693,8 +2752,10 @@ paths:
               // Check response
               if httpResp.StatusCode == 201 {
                 fmt.Printf("✅ Status: %d\n", httpResp.StatusCode)
-                if response != nil {
-                  fmt.Printf("Created API key, secret key: %s\n", response.SecretKey)
+                // SecretKey is the one-time secret, returned ONLY on create.
+                if response != nil && response.SecretKey != nil {
+                  // Store this value immediately — it cannot be retrieved again later.
+                  fmt.Printf("Created API key, secret key: %s\n", *response.SecretKey)
                 }
               } else {
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
@@ -2905,7 +2966,7 @@ paths:
               // Create context for the API call
               ctx := context.Background()
 
-              // Call the ping endpoint
+              // Update an existing API key
               response, httpResp, err := client.APIKeysAPI.UpdateAPIKey(
                 ctx,
                 accountID,
@@ -2916,6 +2977,10 @@ paths:
                     "messages:read:all",
                     "domains:read",
                   },
+                  // Replace the allowed source IPs. Use &[]string{} to clear the
+                  // list (usable from any IP), or omit the field to leave the
+                  // current list unchanged.
+                  IPAllowList: &[]string{"203.0.113.0/24"},
                 },
               )
               if err != nil {
@@ -2966,6 +3031,16 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            Conflict — the request would lock the calling API key out of its own
+            account. Returned only when a key updates itself with an
+            `ip_allow_list` that does not cover the caller's current source IP.
+            No change is persisted.
           content:
             application/json:
               schema:
@@ -4097,6 +4172,77 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // A conversational message sets the To/CC/BCC headers directly, so
+              // recipients can see each other (BCC excluded). The combined
+              // To + CC + BCC count must not exceed 50. Unlike Create Message,
+              // this endpoint does not support template substitutions.
+              response, httpResp, err := client.MessagesAPI.CreateConversationMessage(
+                ctx,
+                accountID,
+                requests.CreateConversationMessageRequest{
+                  From: common.SenderAddress{
+                    Email: "info@example.com",
+                    Name:  ahasend.String("Example Corp."),
+                  },
+                  To: []common.SenderAddress{
+                    {Email: "john@example.com", Name: ahasend.String("John Smith")},
+                    {Email: "jane@example.com", Name: ahasend.String("Jane Doe")},
+                  },
+                  CC: []common.SenderAddress{
+                    {Email: "hr@example.com", Name: ahasend.String("Example Corp HR")},
+                  },
+                  BCC: []common.SenderAddress{
+                    {Email: "archive@example.com"},
+                  },
+                  Subject:     "Welcome to Example Corp",
+                  HtmlContent: ahasend.String("<h1>Dear John and Jane, welcome to Example Corp!</h1>"),
+                  TextContent: ahasend.String("Dear John and Jane, welcome to Example Corp!"),
+                  Sandbox:     ahasend.Bool(true),
+                },
+              )
+              if err != nil {
+                log.Fatalf("Error sending conversational message: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 202 {
+                fmt.Printf("✅ Send successful! Status: %d\n", httpResp.StatusCode)
+                if response != nil && len(response.Data) > 0 && response.Data[0].ID != nil {
+                  fmt.Printf("Message ID: %s\n", *response.Data[0].ID)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4166,6 +4312,54 @@ paths:
             type: string
       security:
         - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              messageID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Fetch a single message by ID
+              response, httpResp, err := client.MessagesAPI.GetMessage(ctx, accountID, messageID)
+              if err != nil {
+                log.Fatalf("Error getting message: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Message retrieved! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Subject: %s\n", response.Subject)
+                  fmt.Printf("Status: %s\n", response.Status)
+                  fmt.Printf("Sender: %s\n", response.Sender)
+                  fmt.Printf("Recipient: %s\n", response.Recipient)
+                  fmt.Printf("Attempts: %d\n", response.NumAttempts)
+                  fmt.Printf("Opens: %d\n", response.OpenCount)
+                  fmt.Printf("Clicks: %d\n", response.ClickCount)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Message details
@@ -4329,6 +4523,49 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["accounts:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.AccountsAPI.GetAccount(ctx, accountID)
+              if err != nil {
+                log.Fatalf("Error getting account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Account retrieved. Status: %d\n", httpResp.StatusCode)
+                fmt.Printf("ID: %s\n", response.ID)
+                fmt.Printf("Name: %s\n", response.Name)
+                fmt.Printf("Owner ID: %s\n", response.OwnerID)
+                if response.Website != nil {
+                  fmt.Printf("Website: %s\n", *response.Website)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Account details
@@ -4390,6 +4627,57 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["accounts:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Update the account name and open/click tracking settings
+              response, httpResp, err := client.AccountsAPI.UpdateAccount(ctx, accountID, requests.UpdateAccountRequest{
+                Name:        ahasend.String("Acme Corp"),
+                TrackOpens:  ahasend.Bool(true),
+                TrackClicks: ahasend.Bool(true),
+              })
+              if err != nil {
+                log.Fatalf("Error updating account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Account updated! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("ID: %s\n", response.ID)
+                  fmt.Printf("Name: %s\n", response.Name)
+                  if response.TrackOpens != nil {
+                    fmt.Printf("Track Opens: %t\n", *response.TrackOpens)
+                  }
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4451,6 +4739,51 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["accounts:members:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // List the members of the account
+              response, httpResp, err := client.AccountsAPI.GetAccountMembers(ctx, accountID)
+              if err != nil {
+                log.Fatalf("Error listing account members: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Retrieved account members! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d account members\n", len(response.Data))
+                  for _, member := range response.Data {
+                    fmt.Printf("- User: %s, Role: %s\n", member.UserID, member.Role)
+                  }
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: List of account members
@@ -4505,6 +4838,53 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["accounts:members:add"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.AccountsAPI.AddAccountMember(ctx, accountID, requests.AddMemberRequest{
+                Email: "teammate@example.com",
+                Name:  ahasend.String("Jordan Lee"),
+                Role:  "Developer",
+              }, api.WithIdempotencyKey("add-member-20240101-jordan"))
+              if err != nil {
+                log.Fatalf("Error adding account member: %v", err)
+              }
+
+              if httpResp.StatusCode == 201 {
+                fmt.Printf("✅ Member added successfully! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("User ID: %s\n", response.UserID)
+                  fmt.Printf("Role: %s\n", response.Role)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4579,6 +4959,48 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["accounts:members:remove"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              userID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Remove the member from the account by user ID
+              response, httpResp, err := client.AccountsAPI.RemoveAccountMember(ctx, accountID, userID)
+              if err != nil {
+                log.Fatalf("Error removing account member: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Account member removed! Status: %d\n", httpResp.StatusCode)
+                if response != nil && response.Message != "" {
+                  fmt.Printf("Response: %s\n", response.Message)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Member removed successfully
@@ -4653,6 +5075,50 @@ paths:
             type: string
       security:
         - BearerAuth: ["sub-accounts:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // List sub accounts (limit results to 50 per page)
+              response, httpResp, err := client.SubAccountsAPI.ListSubAccounts(ctx, accountID, &common.PaginationParams{Limit: ahasend.Int32(50)})
+              if err != nil {
+                log.Fatalf("Error listing sub accounts: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub accounts listed! Status: %d\n", httpResp.StatusCode)
+                fmt.Printf("Found %d sub accounts\n", len(response.Data))
+                for _, sub := range response.Data {
+                  fmt.Printf("- ID: %s, Name: %s, Status: %s\n", sub.ID, sub.Name, sub.Status)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: List of sub accounts
@@ -4708,6 +5174,55 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["sub-accounts:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Create a sub account with an idempotency key for safe retries
+              response, httpResp, err := client.SubAccountsAPI.CreateSubAccount(ctx, accountID, requests.CreateSubAccountRequest{
+                Name:          "Acme Subsidiary",
+                Website:       "acme.example.com",
+                MonthlyCredit: ahasend.Int64(0),
+              }, api.WithIdempotencyKey("subacct-20240101-acme"))
+              if err != nil {
+                log.Fatalf("Error creating sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 201 {
+                fmt.Printf("✅ Sub account created! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("ID: %s\n", response.ID)
+                  fmt.Printf("Name: %s\n", response.Name)
+                  fmt.Printf("Status: %s\n", response.Status)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4776,6 +5291,54 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:usage"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.SubAccountsAPI.GetSubAccountsUsage(ctx, accountID)
+              if err != nil {
+                log.Fatalf("Error getting sub-accounts usage: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Retrieved sub-accounts usage! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Currency: %s\n", response.Currency)
+                  fmt.Printf("Allocation method: %s\n", response.AllocationMethod)
+                  fmt.Printf("Total reception count: %d\n", response.Total.ReceptionCount)
+                  fmt.Printf("Total allocated cost: %.2f\n", response.Total.AllocatedCost)
+
+                  fmt.Printf("Sub-accounts: %d\n", len(response.SubAccounts))
+                  for i, sub := range response.SubAccounts {
+                    fmt.Printf("  [%d] reception count: %d, allocated cost: %.2f\n", i, sub.ReceptionCount, sub.AllocatedCost)
+                  }
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub-account usage breakdown
@@ -4838,6 +5401,57 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Get a single sub account by ID
+              response, httpResp, err := client.SubAccountsAPI.GetSubAccount(
+                ctx,
+                accountID,
+                subAccountID,
+              )
+              if err != nil {
+                log.Fatalf("Error getting sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Retrieved sub account. Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("ID: %s\n", response.ID)
+                  fmt.Printf("Name: %s\n", response.Name)
+                  fmt.Printf("Website: %s\n", response.Website)
+                  fmt.Printf("Status: %s\n", response.Status)
+                  fmt.Printf("Domain count: %d\n", response.DomainCount)
+                  fmt.Printf("Member count: %d\n", response.MemberCount)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub account details
@@ -4899,6 +5513,51 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.SubAccountsAPI.UpdateSubAccount(ctx, accountID, subAccountID, requests.UpdateSubAccountRequest{Name: ahasend.String("Acme Subsidiary"), MonthlyCredit: ahasend.Int64(50000)})
+              if err != nil {
+                log.Fatalf("Error updating sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub account updated! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("ID: %s\n", response.ID)
+                  fmt.Printf("Name: %s\n", response.Name)
+                  fmt.Printf("MonthlyCredit: %d\n", response.MonthlyCredit)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -4966,6 +5625,48 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:delete"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Soft-delete the sub account
+              response, httpResp, err := client.SubAccountsAPI.DeleteSubAccount(ctx, accountID, subAccountID)
+              if err != nil {
+                log.Fatalf("Error deleting sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub account deleted! Status: %d\n", httpResp.StatusCode)
+                if response != nil && response.Message != "" {
+                  fmt.Printf("Response: %s\n", response.Message)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub account deleted successfully
@@ -5030,6 +5731,49 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:suspend"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.SubAccountsAPI.SuspendSubAccount(ctx, accountID, subAccountID, requests.SuspendSubAccountRequest{
+                Reason: "Customer requested temporary pause",
+              })
+              if err != nil {
+                log.Fatalf("Error suspending sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub account suspended. Status: %d\n", httpResp.StatusCode)
+                fmt.Printf("ID: %s\n", response.ID)
+                fmt.Printf("Status: %s\n", response.Status)
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -5098,6 +5842,49 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-accounts:suspend"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Unsuspend the sub account
+              response, httpResp, err := client.SubAccountsAPI.UnsuspendSubAccount(ctx, accountID, subAccountID)
+              if err != nil {
+                log.Fatalf("Error unsuspending sub account: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub account unsuspended! Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Sub Account ID: %s\n", response.ID)
+                  fmt.Printf("Status: %s\n", response.Status)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub account unsuspended successfully
@@ -5178,6 +5965,59 @@ paths:
             type: string
       security:
         - BearerAuth: ["sub-account-api-keys:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // List a sub-account's API keys (paginated, up to 50 per page).
+              // Note: secret_key is omitted from list responses; only create returns it once.
+              response, httpResp, err := client.SubAccountsAPI.ListSubAccountAPIKeys(
+                ctx,
+                accountID,
+                subAccountID,
+                &common.PaginationParams{Limit: ahasend.Int32(50)},
+              )
+              if err != nil {
+                log.Fatalf("Error listing sub-account API keys: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Listed sub-account API keys. Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Found %d API keys\n", len(response.Data))
+                  for _, key := range response.Data {
+                    fmt.Printf("API key %s: %s\n", key.ID, key.Label)
+                  }
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: List of sub-account API keys
@@ -5248,6 +6088,64 @@ paths:
       security:
         - BearerAuth: ["sub-account-api-keys:write"]
       x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Bootstrap an API key for the sub-account (idempotency key makes retries safe)
+              response, httpResp, err := client.SubAccountsAPI.CreateSubAccountAPIKey(
+                ctx,
+                accountID,
+                subAccountID,
+                requests.CreateAPIKeyRequest{
+                  Label:  "Bootstrap key",
+                  Scopes: []string{"messages:send:all", "domains:read"},
+                  // Optional: restrict the sub-account key to specific source IPs.
+                  IPAllowList: []string{"203.0.113.0/24"},
+                },
+                api.WithIdempotencyKey("child-bootstrap-key-20240101-acme"),
+              )
+              if err != nil {
+                log.Fatalf("Error creating sub-account API key: %v", err)
+              }
+
+              if httpResp.StatusCode == 201 {
+                fmt.Printf("✅ Sub-account API key created. Status: %d\n", httpResp.StatusCode)
+                fmt.Printf("ID: %s\n", response.ID)
+                fmt.Printf("Label: %s\n", response.Label)
+                fmt.Printf("Public key: %s\n", response.PublicKey)
+                // SecretKey is the one-time secret, returned ONLY on create.
+                if response.SecretKey != nil {
+                  // Store this value immediately — it cannot be retrieved again later.
+                  fmt.Printf("Secret key (store this now, shown only once): %s\n", *response.SecretKey)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
         - lang: shell
           label: Bootstrap child API key
           source: |
@@ -5311,6 +6209,7 @@ paths:
                     api_key_id: "13b3aa8e-78d3-48a1-92d2-4b8b1228c2dd"
                     scope: "messages:send:all"
                     domain_id: null
+                ip_allow_list: []
         '400':
           description: Bad request
           content:
@@ -5377,6 +6276,58 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-account-api-keys:read"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+              keyID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // Get a single sub-account API key
+              response, httpResp, err := client.SubAccountsAPI.GetSubAccountAPIKey(
+                ctx,
+                accountID,
+                subAccountID,
+                keyID,
+              )
+              if err != nil {
+                log.Fatalf("Error getting sub-account API key: %v", err)
+              }
+
+              // Check response
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Retrieved sub-account API key. Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("ID: %s\n", response.ID)
+                  fmt.Printf("Label: %s\n", response.Label)
+                  fmt.Printf("PublicKey: %s\n", response.PublicKey)
+                  fmt.Printf("Scopes: %d\n", len(response.Scopes))
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub-account API key details
@@ -5445,6 +6396,52 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-account-api-keys:write"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+              keyID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              // IPAllowList replaces the allowed source IPs; use &[]string{} to
+              // clear it (any IP), or omit it to leave the current list unchanged.
+              response, httpResp, err := client.SubAccountsAPI.UpdateSubAccountAPIKey(ctx, accountID, subAccountID, keyID, requests.UpdateAPIKeyRequest{Label: ahasend.String("Updated bootstrap key"), Scopes: &[]string{"messages:send:all", "domains:read"}, IPAllowList: &[]string{"203.0.113.0/24"}})
+              if err != nil {
+                log.Fatalf("Error updating sub-account API key: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub-account API key updated. Status: %d\n", httpResp.StatusCode)
+                fmt.Printf("ID: %s\n", response.ID)
+                fmt.Printf("Label: %s\n", response.Label)
+                fmt.Printf("Scopes: %d\n", len(response.Scopes))
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       requestBody:
         required: true
         content:
@@ -5522,6 +6519,48 @@ paths:
             format: uuid
       security:
         - BearerAuth: ["sub-account-api-keys:delete"]
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              // Create API client with authentication
+              client := api.NewAPIClient(
+                api.WithAPIKey("aha-sk-your-64-character-key"),
+              )
+
+              accountID := uuid.New()
+              subAccountID := uuid.New()
+              keyID := uuid.New()
+
+              // Create context for the API call
+              ctx := context.Background()
+
+              response, httpResp, err := client.SubAccountsAPI.DeleteSubAccountAPIKey(ctx, accountID, subAccountID, keyID)
+              if err != nil {
+                log.Fatalf("Error deleting sub-account API key: %v", err)
+              }
+
+              if httpResp.StatusCode == 200 {
+                fmt.Printf("✅ Sub-account API key deleted. Status: %d\n", httpResp.StatusCode)
+                if response != nil {
+                  fmt.Printf("Message: %s\n", response.Message)
+                }
+              } else {
+                fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
+              }
+            }
       responses:
         '200':
           description: Sub-account API key deleted successfully
