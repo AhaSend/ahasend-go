@@ -53,35 +53,40 @@ type DomainEventData struct {
 	DNSLastCheckedAt time.Time `json:"dns_last_checked_at"`
 }
 
-// RouteAttachment represents an email attachment in route events
+// RouteAttachment represents a conventional, inline, or inferred email attachment in route events.
 type RouteAttachment struct {
 	Filename    string  `json:"filename"`
 	ContentType string  `json:"content_type"`
 	ContentID   *string `json:"content_id,omitempty"`
-	Data        string  `json:"data"`
+	// Disposition is "attachment", "inline", or empty when the MIME part had no
+	// Content-Disposition header and was inferred from its filename or content type.
+	Disposition string `json:"disposition"`
+	Data        string `json:"data"`
 }
 
 // RouteEventData contains data for route webhook events
 type RouteEventData struct {
-	ID                 string            `json:"id"`
-	From               string            `json:"from"`
-	ReplyTo            *string           `json:"reply_to,omitempty"`
-	To                 string            `json:"to"`
-	Subject            string            `json:"subject"`
-	MessageID          string            `json:"message_id"`
-	Size               int               `json:"size"`
-	SpamScore          *float32          `json:"spam_score,omitempty"`
-	Bounce             bool              `json:"bounce"`
-	CC                 *string           `json:"cc,omitempty"`
-	Date               *string           `json:"date,omitempty"`
-	InReplyTo          *string           `json:"in_reply_to,omitempty"`
-	References         *string           `json:"references,omitempty"`
-	AutoSubmitted      *string           `json:"auto_submitted,omitempty"`
-	HTMLBody           string            `json:"html_body"`
-	PlainBody          string            `json:"plain_body"`
-	ReplyFromPlainBody *string           `json:"reply_from_plain_body,omitempty"`
-	Attachments        []RouteAttachment `json:"attachments,omitempty"`
-	Headers            map[string]string `json:"headers,omitempty"`
+	ID                 string   `json:"id"`
+	From               string   `json:"from"`
+	ReplyTo            *string  `json:"reply_to,omitempty"`
+	To                 string   `json:"to"`
+	Subject            string   `json:"subject"`
+	MessageID          string   `json:"message_id"`
+	Size               int      `json:"size"`
+	SpamScore          *float32 `json:"spam_score,omitempty"`
+	Bounce             bool     `json:"bounce"`
+	CC                 *string  `json:"cc,omitempty"`
+	Date               *string  `json:"date,omitempty"`
+	InReplyTo          *string  `json:"in_reply_to,omitempty"`
+	References         *string  `json:"references,omitempty"`
+	AutoSubmitted      *string  `json:"auto_submitted,omitempty"`
+	HTMLBody           string   `json:"html_body"`
+	PlainBody          string   `json:"plain_body"`
+	ReplyFromPlainBody *string  `json:"reply_from_plain_body,omitempty"`
+	// Attachments includes conventional attachments, inline MIME parts, and
+	// filename-bearing MIME parts without a Content-Disposition header.
+	Attachments []RouteAttachment `json:"attachments,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
 }
 
 // Message Events

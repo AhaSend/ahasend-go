@@ -307,9 +307,9 @@ func TestWebhookParsing(t *testing.T) {
 		assert.Equal(t, false, domainEvent.Data.DMARCValid)
 	})
 
-	t.Run("parse route.message event", func(t *testing.T) {
+	t.Run("parse message.routing event", func(t *testing.T) {
 		payload := `{
-			"type": "route.message",
+			"type": "message.routing",
 			"route_id": "550e8400-e29b-41d4-a716-446655440000",
 			"timestamp": "2024-05-06T13:15:46.404433272Z",
 			"data": {
@@ -332,9 +332,18 @@ func TestWebhookParsing(t *testing.T) {
 				"reply_from_plain_body": "I need help with my account settings.",
 				"attachments": [
 					{
-						"filename": "document.pdf",
-						"content_type": "application/pdf",
-						"data": "base64encodeddata=="
+						"filename": "logo.png",
+						"content_type": "image/png",
+						"content_id": "logo-123",
+						"disposition": "inline",
+						"data": "aW1hZ2UtYnl0ZXM="
+					},
+					{
+						"filename": "articles_data.csv",
+						"content_type": "text/csv",
+						"content_id": "",
+						"disposition": "",
+						"data": "YSxiCjEsMgo="
 					}
 				],
 				"headers": {
@@ -350,14 +359,43 @@ func TestWebhookParsing(t *testing.T) {
 
 		routeEvent, ok := event.(*RouteMessageEvent)
 		require.True(t, ok)
-		assert.Equal(t, "route.message", routeEvent.Type)
+		assert.Equal(t, "message.routing", routeEvent.Type)
 		assert.Equal(t, "route-msg-12345", routeEvent.Data.ID)
 		assert.Equal(t, "customer@gmail.com", routeEvent.Data.From)
 		assert.Equal(t, "support@yourdomain.com", routeEvent.Data.To)
 		assert.Equal(t, "Help with my account", routeEvent.Data.Subject)
-		assert.Equal(t, 1, len(routeEvent.Data.Attachments))
-		assert.Equal(t, "document.pdf", routeEvent.Data.Attachments[0].Filename)
+		require.Len(t, routeEvent.Data.Attachments, 2)
+		assert.Equal(t, "logo.png", routeEvent.Data.Attachments[0].Filename)
+		require.NotNil(t, routeEvent.Data.Attachments[0].ContentID)
+		assert.Equal(t, "logo-123", *routeEvent.Data.Attachments[0].ContentID)
+		assert.Equal(t, "inline", routeEvent.Data.Attachments[0].Disposition)
+		assert.Equal(t, "articles_data.csv", routeEvent.Data.Attachments[1].Filename)
+		assert.Equal(t, "", routeEvent.Data.Attachments[1].Disposition)
 		assert.Equal(t, "Gmail", routeEvent.Data.Headers["X-Mailer"])
+	})
+
+	t.Run("parse legacy route.message event", func(t *testing.T) {
+		payload := `{
+			"type": "route.message",
+			"timestamp": "2024-05-06T13:15:46.404433272Z",
+			"data": {
+				"id": "route-msg-legacy",
+				"from": "customer@gmail.com",
+				"to": "support@yourdomain.com",
+				"subject": "Legacy event",
+				"message_id": "<legacy@gmail.com>",
+				"size": 100,
+				"bounce": false,
+				"html_body": "",
+				"plain_body": ""
+			}
+		}`
+
+		event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+		require.NoError(t, err)
+		routeEvent, ok := event.(*RouteMessageEvent)
+		require.True(t, ok)
+		assert.Equal(t, "route.message", routeEvent.Type)
 	})
 
 	t.Run("parse unknown event type", func(t *testing.T) {

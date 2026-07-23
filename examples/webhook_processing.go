@@ -286,7 +286,7 @@ func handleRouteMessage(event *webhooks.RouteMessageEvent) error {
 	if len(event.Data.Attachments) > 0 {
 		log.Printf("  Attachments: %d", len(event.Data.Attachments))
 		for i, attachment := range event.Data.Attachments {
-			log.Printf("    [%d] %s (%s)", i+1, attachment.Filename, attachment.ContentType)
+			log.Printf("    [%d] %s (%s, disposition: %q)", i+1, attachment.Filename, attachment.ContentType, attachment.Disposition)
 		}
 	}
 

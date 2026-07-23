@@ -207,7 +207,7 @@ func (v *WebhookVerifier) Parse(payload []byte, headers http.Header) (WebhookEve
 		return &event, nil
 
 	// Route events
-	case "route.message":
+	case "message.routing", "route.message":
 		var event RouteMessageEvent
 		if err := json.Unmarshal(payload, &event); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
