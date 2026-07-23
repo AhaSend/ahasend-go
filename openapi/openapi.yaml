@@ -92,20 +92,41 @@ info:
     ## Pagination
     List endpoints use cursor-based pagination with the following parameters:
     - `limit`: Maximum number of items to return (default: 100, max: 100)
-    - `cursor`: Pagination cursor for the next page
+    - `after`: Pass `pagination.next_cursor` to fetch the next page
+    - `before`: Pass `pagination.previous_cursor` to fetch the previous page
+
+    `after` and `before` are mutually exclusive. A legacy `cursor` query may be
+    accepted by parts of the server for backwards compatibility, but it is not
+    part of the v2 public contract.
 
     ## Time Formats
     All timestamps must be in RFC3339 format, e.g., `2023-12-25T10:30:00Z`
 
     ## Idempotency
-    POST requests support idempotency through the optional `Idempotency-Key` header. When provided:
-    - The same request can be safely retried multiple times
-    - Duplicate requests return the same response with `Idempotent-Replayed: true`
-    - In-progress requests return HTTP 409 with `Idempotent-Replayed: false` and a `Retry-After` header
-    - Completed outcomes (2xx and 4xx) are stored and replayed; server errors (5xx) are not stored, so retrying with the same key re-executes the request
-    - Reusing a key with a different request payload, or against a different endpoint or resource, returns HTTP 422
-    - Idempotency keys for non-secret responses expire after 24 hours
-    - API-key create endpoints return a one-time `secret_key`; their encrypted idempotency replay responses expire after 5 minutes and replay the same `secret_key` during that window
+    The operations that explicitly declare the optional `Idempotency-Key`
+    header support idempotency. Other POST operations do not gain idempotency
+    implicitly. When the header is provided:
+    - A fresh execution does not return `Idempotent-Replayed`.
+    - A completed stored response is replayed with its original status and body
+      and `Idempotent-Replayed: true`.
+    - An unexpired in-progress execution returns HTTP 409 with
+      `Idempotent-Replayed: false` and a positive integer `Retry-After` header.
+    - Reusing a key with a different HTTP method, resolved request path, or
+      request body returns HTTP 422. That response has neither
+      `Idempotent-Replayed` nor `Retry-After`.
+    - For ordinary idempotent operations, deterministic 2xx and 4xx outcomes
+      produced after the idempotency middleware are stored and replayed.
+      Authentication and IP-allow-list failures happen before idempotency and
+      are therefore not stored.
+    - The two secret-bearing API-key create operations use manual encrypted
+      completion. They store and replay a successful 201, including the same
+      one-time `secret_key`; a controller-produced 4xx is not stored and leaves
+      the key in progress until its execution lease expires.
+    - Server errors (5xx), handler failures, and panics are not stored. The key
+      is released so retrying the same request with the same key re-executes it.
+      The v2 API does not use an HTTP 412 failed-key tombstone.
+    - Idempotency keys for non-secret responses expire after 24 hours.
+    - Encrypted API-key creation replay responses expire after 5 minutes.
 
     ## IP Allow Lists
     Each API key can carry an `ip_allow_list`: a set of source IPs that restrict where the key may authenticate from.
@@ -134,7 +155,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: "aha-sk-64-CHARACTER-RANDOM-STRING"
-      description: API key for authentication
+      description: |
+        API key for authentication. Non-empty Security Requirement values are
+        AhaSend API-key roles. Roles listed within one requirement object are
+        jointly required; separate requirement objects are alternatives.
 
   parameters:
     IdempotencyKey:
@@ -143,8 +167,10 @@ components:
       required: false
       description: |
         Optional idempotency key for safe request retries. Must be a unique string for each logical request.
-        Requests with the same key will return the same response. Keys for non-secret responses expire after 24 hours.
-        API-key create responses include a one-time `secret_key`, so their encrypted replay responses expire after 5 minutes.
+        An identical request with a completed stored outcome returns the original status and body. An in-progress
+        execution returns 409, a changed method/path/body returns 422, and a released 5xx execution may run again.
+        Keys for non-secret responses expire after 24 hours. API-key create responses include a one-time `secret_key`,
+        so successful encrypted replay responses for those operations expire after 5 minutes.
       schema:
         type: string
         maxLength: 255
@@ -153,23 +179,41 @@ components:
   headers:
     IdempotentReplayed:
       description: |
-        Indicates whether this response is replayed from a previous identical request.
-        - `true`: Response was replayed from cache (duplicate request)
-        - `false`: Response from original processing or error state
+        Indicates that this response is a stored replay of a previous identical request.
+        When this header is absent, the response is not a stored replay. Ordinary fresh
+        responses do not send `false`; that value is reserved for an in-progress 409.
       schema:
         type: string
-        enum: [true, false]
+        enum: ['true']
+
+    IdempotencyInProgress:
+      description: |
+        Identifies an idempotency-key execution that is still in progress. This
+        header is emitted only on the specialized HTTP 409 response.
+      schema:
+        type: string
+        enum: ['false']
+
+    IdempotencyRetryAfter:
+      description: |
+        Positive whole number of seconds after which the in-progress execution
+        lease may be retried with the same key and unchanged request.
+      schema:
+        type: integer
+        minimum: 1
 
   responses:
     IdempotencyConflict:
-      description: Request in progress - a request with this idempotency key is already being processed
+      description: |
+        Request in progress. This response always includes
+        `Idempotent-Replayed: false` and a positive integer `Retry-After`.
+        Clients must use that header tuple, not the human-readable message, to
+        distinguish this retryable idempotency state from other HTTP 409s.
       headers:
         Idempotent-Replayed:
-          $ref: '#/components/headers/IdempotentReplayed'
+          $ref: '#/components/headers/IdempotencyInProgress'
         Retry-After:
-          description: Number of seconds after which it is safe to retry the request
-          schema:
-            type: integer
+          $ref: '#/components/headers/IdempotencyRetryAfter'
       content:
         application/json:
           schema:
@@ -178,7 +222,10 @@ components:
             message: "A request with this idempotency key is already in progress"
 
     IdempotencyPayloadMismatch:
-      description: Idempotency key was already used with a different request payload
+      description: |
+        Idempotency key was already used with a different HTTP method, resolved
+        request path, or request body. This response includes neither
+        `Idempotent-Replayed` nor `Retry-After`.
       content:
         application/json:
           schema:
@@ -189,6 +236,12 @@ components:
   schemas:
     ErrorResponse:
       type: object
+      description: |
+        Human-readable API error. The server currently sends no stable machine
+        error code. In particular, clients must not parse `message` to
+        distinguish IP-allow-list, scope, ownership, plan, self-lockout,
+        suppression-duplicate, or other errors that share an HTTP status.
+      additionalProperties: false
       required:
         - message
       properties:
@@ -251,16 +304,16 @@ components:
           type: string
           description: The scope string
         domain_id:
-          type: string
+          type: [string, 'null']
           format: uuid
-          nullable: true
-          description: Domain ID for domain-specific scopes
+          description: Domain ID for domain-specific scopes; always present and null for non-domain scopes
       required:
         - id
         - created_at
         - updated_at
         - api_key_id
         - scope
+        - domain_id
 
     APIKey:
       type: object
@@ -282,9 +335,8 @@ components:
           format: date-time
           description: When the API key was last updated
         last_used_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: When the API key was last used (updates every 5-10 minutes)
         account_id:
           type: string
@@ -296,9 +348,6 @@ components:
         public_key:
           type: string
           description: Public portion of the API key
-        secret_key:
-          type: string
-          description: Secret key. Only returned when an API key is created, including exact idempotent replays of create requests within the 5-minute secret-bearing replay window. Store it immediately; list, get, update, and delete responses omit it.
         scopes:
           type: array
           items:
@@ -320,6 +369,7 @@ components:
         - id
         - created_at
         - updated_at
+        - last_used_at
         - account_id
         - label
         - public_key
@@ -378,21 +428,18 @@ components:
               type: array
       properties:
         label:
-          type: string
-          nullable: true
+          type: [string, 'null']
           minLength: 1
           maxLength: 255
           description: Human-readable label for the API key. Omit to keep the existing label.
         scopes:
-          type: array
-          nullable: true
+          type: [array, 'null']
           items:
             type: string
           minItems: 1
           description: Array of scope strings to grant to this API key
         ip_allow_list:
-          type: array
-          nullable: true
+          type: [array, 'null']
           items:
             type: string
           description: >-
@@ -435,7 +482,6 @@ components:
           description: DNS record type (e.g., CNAME, TXT, MX)
         label:
           type: string
-          nullable: true
           description: Human-readable DNS record label
         host:
           type: string
@@ -488,39 +534,38 @@ components:
             $ref: '#/components/schemas/DNSRecord'
           description: DNS records required for domain verification
         last_dns_check_at:
-          type: string
-          nullable: true
+          type: [string, 'null']
           format: date-time
           description: When DNS records were last checked
         dns_valid:
           type: boolean
           description: Whether all required DNS records are properly configured
         tracking_subdomain:
-          type: string
-          nullable: true
-          description: Custom tracking subdomain. Null means the account or product default is used.
+          type: [string, 'null']
+          description: Custom tracking subdomain. Null means the account or product default is used. Applies to both manual-DNS and managed-DNS domains.
         return_path_subdomain:
-          type: string
-          nullable: true
-          description: Custom return-path subdomain. Null means the account or product default is used.
+          type: [string, 'null']
+          description: Custom return-path subdomain. Null means the account or product default is used. Applies to both manual-DNS and managed-DNS domains.
         subscription_subdomain:
-          type: string
-          nullable: true
-          description: Custom subscription management subdomain. Null means the account or product default is used.
+          type: [string, 'null']
+          description: Custom subscription management subdomain. Null means the account or product default is used. Applies to both manual-DNS and managed-DNS domains.
         media_subdomain:
-          type: string
-          nullable: true
-          description: Custom media subdomain. Null means the account or product default is used.
+          type: [string, 'null']
+          description: Custom media subdomain. Null means the account or product default is used. Applies to both manual-DNS and managed-DNS domains.
         dkim_rotation_interval_days:
-          type: integer
-          nullable: true
-          description: Custom DKIM rotation interval in days. Null means the account default is used.
+          type: [integer, 'null']
+          description: Custom DKIM rotation interval in days. Null means the account default is used. Only supported for managed DNS domains.
+        dkim_selector:
+          type: [string, 'null']
+          description: |
+            Per-domain DKIM selector override. Null means no per-domain override is set.
+
+            This reports the configured per-domain override only, not the effective selector used for DKIM signing. The effective selector is resolved separately and can differ — for example, a selector locked after DNS verification takes precedence over this override.
         rotation_ready:
           type: boolean
           description: Whether the standby DKIM slot is ready for rotation.
         dsn_recipient:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: Optional recipient address for delivery status notifications.
       required:
         - object
@@ -530,7 +575,16 @@ components:
         - domain
         - account_id
         - dns_records
+        - last_dns_check_at
         - dns_valid
+        - tracking_subdomain
+        - return_path_subdomain
+        - subscription_subdomain
+        - media_subdomain
+        - dkim_rotation_interval_days
+        - dkim_selector
+        - rotation_ready
+        - dsn_recipient
 
     CreateDomainRequest:
       type: object
@@ -551,19 +605,27 @@ components:
             <Note>Key size of at least 1024 bits is supported; 2048 bit keys are strongly recommended for improved security.</Note>
         tracking_subdomain:
           type: string
-          description: Optional custom tracking subdomain. Omit to use the default on create.
+          description: Optional custom tracking subdomain. Omit to use the default on create. Applies to both manual-DNS and managed-DNS domains.
         return_path_subdomain:
           type: string
-          description: Optional custom return-path subdomain. Omit to use the default on create.
+          description: Optional custom return-path subdomain. Omit to use the default on create. Applies to both manual-DNS and managed-DNS domains.
         subscription_subdomain:
           type: string
-          description: Optional custom subscription management subdomain. Omit to use the default on create.
+          description: Optional custom subscription management subdomain. Omit to use the default on create. Applies to both manual-DNS and managed-DNS domains.
         media_subdomain:
           type: string
-          description: Optional custom media subdomain. Omit to use the default on create.
+          description: Optional custom media subdomain. Omit to use the default on create. Applies to both manual-DNS and managed-DNS domains.
         dkim_rotation_interval_days:
           type: integer
           description: Optional custom DKIM rotation interval in days. Only supported for managed DNS domains on eligible plans.
+        dkim_selector:
+          type: [string, 'null']
+          description: |
+            Optional custom DKIM selector for the domain. Omit, send null, or send an empty or whitespace-only string to use the default selector (no per-domain override); the value is trimmed before it is interpreted, so whitespace-only input is treated as empty.
+
+            When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen.
+
+            **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
       example:
         domain: "example.com"
         tracking_subdomain: "click"
@@ -577,19 +639,27 @@ components:
       properties:
         tracking_subdomain:
           type: string
-          description: Optional custom tracking subdomain. Omit to leave the current value unchanged.
+          description: Optional custom tracking subdomain. Omit to leave the current value unchanged. Applies to both manual-DNS and managed-DNS domains.
         return_path_subdomain:
           type: string
-          description: Optional custom return-path subdomain. Omit to leave the current value unchanged.
+          description: Optional custom return-path subdomain. Omit to leave the current value unchanged. Applies to both manual-DNS and managed-DNS domains.
         subscription_subdomain:
           type: string
-          description: Optional custom subscription management subdomain. Omit to leave the current value unchanged.
+          description: Optional custom subscription management subdomain. Omit to leave the current value unchanged. Applies to both manual-DNS and managed-DNS domains.
         media_subdomain:
           type: string
-          description: Optional custom media subdomain. Omit to leave the current value unchanged.
+          description: Optional custom media subdomain. Omit to leave the current value unchanged. Applies to both manual-DNS and managed-DNS domains.
         dkim_rotation_interval_days:
           type: integer
           description: Optional custom DKIM rotation interval in days. Omit to leave the current value unchanged. Only supported for managed DNS domains on eligible plans.
+        dkim_selector:
+          type: [string, 'null']
+          description: |
+            Optional custom DKIM selector for the domain. Omit or send null to leave the current value unchanged; send an empty or whitespace-only string to clear the override and revert to the default selector. The value is trimmed before it is interpreted, so whitespace-only input clears the override just like an empty string.
+
+            When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen. It cannot be changed once the selector locks after DNS verification or while a DKIM key rotation is in progress.
+
+            **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
       example:
         tracking_subdomain: "click"
         return_path_subdomain: "mail"
@@ -694,34 +764,28 @@ components:
         file_name: "pixel.png"
 
     Tracking:
-      type: object
-      nullable: true
+      type: [object, 'null']
       properties:
         open:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to track opens
         click:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to track clicks
       example:
         open: true
         click: true
 
     Retention:
-      type: object
-      nullable: true
+      type: [object, 'null']
       properties:
         metadata:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: Number of days to retain metadata
           minimum: 1
           maximum: 30
         data:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: Number of days to retain data
           minimum: 0
           maximum: 30
@@ -920,27 +984,31 @@ components:
       type: object
       required:
         - object
+        - id
         - recipient
         - status
+        - error
       properties:
         object:
           type: string
           enum: [message]
           description: Object type identifier
         id:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: Message ID (null if the message was not sent)
           example: <uuid@example.com>
         recipient:
-          $ref: '#/components/schemas/Recipient'
+          allOf:
+            - $ref: '#/components/schemas/Recipient'
+            - type: object
+              required:
+                - name
         status:
           type: string
           enum: [queued, scheduled, error]
           description: Status of the message
         error:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: Error message if the message was not sent
         schedule:
           $ref: '#/components/schemas/MessageSchedule'
@@ -1011,12 +1079,12 @@ components:
         content_id:
           type: string
           description: Content-ID for inline attachments
-          nullable: true
           example: "image001@example.com"
       required:
         - filename
         - content
         - content_type
+        - content_id
 
     MessageContentParsed:
       type: object
@@ -1063,14 +1131,12 @@ components:
           format: date-time
           description: When the message was last updated
         sent_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: When the message was sent
         delivered_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: When the message was delivered
         retain_until:
           type: string
@@ -1095,7 +1161,7 @@ components:
           type: string
           description: Message-ID header value
         id:
-          type: string
+          type: [string, 'null']
           format: uuid
           description: API-generated message ID
         subject:
@@ -1127,9 +1193,8 @@ components:
           type: integer
           description: Number of opens tracked for this message
         reference_message_id:
-          type: integer
+          type: [integer, 'null']
           format: int64
-          nullable: true
           description: ID of the original message (for bounce messages)
         domain_id:
           type: string
@@ -1143,9 +1208,12 @@ components:
         - object
         - created_at
         - updated_at
+        - sent_at
+        - delivered_at
         - retain_until
         - direction
         - is_bounce_notification
+        - bounce_classification
         - delivery_attempts
         - message_id
         - id
@@ -1157,6 +1225,7 @@ components:
         - num_attempts
         - click_count
         - open_count
+        - reference_message_id
         - domain_id
         - account_id
 
@@ -1168,11 +1237,10 @@ components:
           properties:
             content:
               type: string
-              nullable: true
-              description: Original, raw email content (RFC822 format) - may be null if the message content is not available.
+              description: Original raw email content in RFC822 format. Omitted when message content is unavailable.
             content_parsed:
               $ref: '#/components/schemas/MessageContentParsed'
-              description: Parsed and structured message content including parts, attachments, and headers - may be null if the message content is not available.
+              description: Parsed message content. Omitted when message content is unavailable.
 
     # Update the paginated response to use the lighter schema
     PaginatedMessagesResponse:
@@ -1207,9 +1275,8 @@ components:
           format: uuid
           description: Unique identifier for the account
         parent_account_id:
-          type: string
+          type: [string, 'null']
           format: uuid
-          nullable: true
           description: Parent account ID when this account is a sub account
         created_at:
           type: string
@@ -1225,11 +1292,9 @@ components:
         website:
           type: string
           format: uri
-          nullable: true
           description: Account website URL
         about:
           type: string
-          nullable: true
           description: Account description
         track_opens:
           type: boolean
@@ -1256,9 +1321,18 @@ components:
       required:
         - object
         - id
+        - parent_account_id
         - created_at
         - updated_at
         - name
+        - website
+        - about
+        - track_opens
+        - track_clicks
+        - reject_bad_recipients
+        - reject_mistyped_recipients
+        - message_metadata_retention
+        - message_data_retention
         - owner_id
 
     SubAccount:
@@ -1320,9 +1394,8 @@ components:
           minimum: 0
           description: Number of direct members on the sub account
         last_activity_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: Last recorded sub-account email activity
       example:
         object: sub_account
@@ -1383,20 +1456,17 @@ components:
               type: integer
       properties:
         name:
-          type: string
-          nullable: true
+          type: [string, 'null']
           minLength: 1
           maxLength: 255
           description: Human-readable name for the sub account; leading and trailing whitespace is trimmed and the result must not be blank
         website:
-          type: string
-          nullable: true
+          type: [string, 'null']
           format: fqdn
           maxLength: 255
           description: Account website domain
         monthly_credit:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           format: int64
           minimum: 0
           maximum: 1000000000
@@ -1485,11 +1555,20 @@ components:
           type: string
           description: Disclaimer explaining that allocated cost is not standalone sub-account pricing
         parent:
-          $ref: '#/components/schemas/SubAccountUsageBreakdown'
+          allOf:
+            - $ref: '#/components/schemas/SubAccountUsageBreakdown'
+            - type: object
+              required:
+                - account_id
         sub_accounts:
           type: array
           items:
-            $ref: '#/components/schemas/SubAccountUsageBreakdown'
+            allOf:
+              - $ref: '#/components/schemas/SubAccountUsageBreakdown'
+              - type: object
+                required:
+                  - account_id
+                  - name
           description: Per-sub-account usage and allocated cost
         removed_sub_accounts:
           $ref: '#/components/schemas/SubAccountUsageBreakdown'
@@ -1669,11 +1748,9 @@ components:
           description: Suppressed email address
         domain:
           type: string
-          nullable: true
           description: Domain for which the email is suppressed
         reason:
           type: string
-          nullable: true
           description: Reason for suppression
         expires_at:
           type: string
@@ -1684,6 +1761,8 @@ components:
         - id
         - created_at
         - email
+        - domain
+        - reason
         - expires_at
 
     CreateSuppressionResponse:
@@ -1778,8 +1857,7 @@ components:
           description: Webhook URL for the route
         recipient:
           type: string
-          nullable: true
-          description: Recipient filter
+          description: Recipient filter; an empty string means no recipient filter
         attachments:
           type: boolean
           description: Whether to include attachments in route payload
@@ -1805,9 +1883,8 @@ components:
           type: integer
           description: Number of consecutive failed calls
         last_request_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: When the route was last called
       required:
         - object
@@ -1816,7 +1893,16 @@ components:
         - updated_at
         - name
         - url
+        - recipient
+        - attachments
+        - headers
+        - group_by_message_id
+        - strip_replies
         - enabled
+        - success_count
+        - error_count
+        - errors_since_last_success
+        - last_request_at
 
     CreatedRoute:
       allOf:
@@ -1878,39 +1964,31 @@ components:
       type: object
       properties:
         name:
-          type: string
+          type: [string, 'null']
           maxLength: 255
-          nullable: true
           description: Route name
         url:
-          type: string
+          type: [string, 'null']
           format: uri
-          nullable: true
           description: Webhook URL for the route
         recipient:
-          type: string
+          type: [string, 'null']
           maxLength: 255
-          nullable: true
           description: Recipient filter
         attachments:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to include attachments in webhooks
         headers:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to include headers in webhooks
         group_by_message_id:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to group by message ID
         strip_replies:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether to strip reply content
         enabled:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether the route is enabled
       example:
         name: "Updated Support Route"
@@ -2003,7 +2081,7 @@ components:
           type: array
           items:
             type: string
-          description: Domains this webhook applies to
+          description: Domains this webhook applies to. Always present; global webhooks return an empty array.
         success_count:
           type: integer
           description: Number of successful calls
@@ -2014,9 +2092,8 @@ components:
           type: integer
           description: Number of consecutive failed calls
         last_request_at:
-          type: string
+          type: [string, 'null']
           format: date-time
-          nullable: true
           description: When the webhook was last called
       required:
         - object
@@ -2026,6 +2103,22 @@ components:
         - name
         - url
         - enabled
+        - on_reception
+        - on_delivered
+        - on_transient_error
+        - on_failed
+        - on_bounced
+        - on_suppressed
+        - on_opened
+        - on_clicked
+        - on_suppression_created
+        - on_dns_error
+        - scope
+        - domains
+        - success_count
+        - error_count
+        - errors_since_last_success
+        - last_request_at
 
     CreatedWebhook:
       allOf:
@@ -2102,11 +2195,27 @@ components:
           enum: [global, scoped]
           description: Webhook scope
         domains:
-          type: array
+          type: [array, 'null']
           items:
             type: string
-          nullable: true
-          description: Domains this webhook applies to
+          description: |
+            For `scoped`, a non-empty array is required. For `global`, this may
+            be omitted, null, empty, or non-empty; supplied values are accepted
+            but ignored.
+      allOf:
+        - if:
+            properties:
+              scope:
+                const: scoped
+            required: [scope]
+          then:
+            required: [domains]
+            properties:
+              domains:
+                type: array
+                minItems: 1
+                items:
+                  type: string
       example:
         name: "Delivery Webhook"
         url: "https://example.com/webhook"
@@ -2116,72 +2225,67 @@ components:
 
     UpdateWebhookRequest:
       type: object
+      description: |
+        Partial update. Omitted and null scalar fields leave their stored values
+        unchanged. Domain transition rules depend on the webhook's existing
+        scope and are described on `domains`.
       properties:
         name:
-          type: string
+          type: [string, 'null']
           maxLength: 255
-          nullable: true
           description: Webhook name
         url:
-          type: string
+          type: [string, 'null']
           format: uri
-          nullable: true
           description: Webhook URL
         enabled:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Whether the webhook is enabled
         on_reception:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on message reception
         on_delivered:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on message delivery
         on_transient_error:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on transient errors
         on_failed:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on permanent failures
         on_bounced:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on bounces
         on_suppressed:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on suppressions
         on_opened:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on opens
         on_clicked:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on clicks
         on_suppression_created:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on suppression creation
         on_dns_error:
-          type: boolean
-          nullable: true
+          type: [boolean, 'null']
           description: Trigger on DNS errors
         scope:
-          type: string
-          enum: [global, scoped]
-          nullable: true
-          description: Webhook scope
+          type: [string, 'null']
+          enum: [global, scoped, null]
+          description: Webhook scope. Omit or send null to keep the current scope.
         domains:
-          type: array
-          nullable: true
+          type: [array, 'null']
           items:
             type: string
-          description: Domains this webhook applies to
+          description: |
+            Omit or send null to leave domain associations unchanged. An array
+            replaces associations when the resulting scope is `scoped`; `[]`
+            explicitly clears them. Changing a global webhook to `scoped`
+            requires a non-empty array in the same request and otherwise
+            returns HTTP 400. Changing to `global` clears all associations;
+            supplied domains are ignored when the resulting scope is global.
 
     PaginatedWebhooksResponse:
       type: object
@@ -2239,7 +2343,7 @@ components:
           type: array
           items:
             type: string
-          description: Domains this credential can send from
+          description: Domains this credential can send from. Always present; global credentials return an empty array.
       required:
         - object
         - id
@@ -2249,6 +2353,7 @@ components:
         - username
         - sandbox
         - scope
+        - domains
 
     CreatedSMTPCredential:
       allOf:
@@ -2280,10 +2385,27 @@ components:
           enum: [global, scoped]
           description: Credential scope - "global" or "scoped"
         domains:
-          type: array
+          type: [array, 'null']
           items:
             type: string
-          description: Required if scope is "scoped"
+          description: |
+            For `scoped`, a non-empty array is required. For `global`, this may
+            be omitted, null, empty, or non-empty; supplied values are accepted
+            but ignored.
+      allOf:
+        - if:
+            properties:
+              scope:
+                const: scoped
+            required: [scope]
+          then:
+            required: [domains]
+            properties:
+              domains:
+                type: array
+                minItems: 1
+                items:
+                  type: string
       example:
         name: "Production SMTP"
         scope: "global"
@@ -2346,6 +2468,14 @@ components:
       required:
         - from_timestamp
         - to_timestamp
+        - reception_count
+        - delivered_count
+        - deferred_count
+        - bounced_count
+        - failed_count
+        - suppressed_count
+        - opened_count
+        - clicked_count
 
     DeliverabilityStatisticsResponse:
       type: object
@@ -2440,6 +2570,7 @@ components:
         - to_timestamp
         - avg_delivery_time
         - delivered_count
+        - delivery_times
 
     DeliveryTime:
       type: object
@@ -2456,6 +2587,10 @@ components:
           type: integer
           format: int64
           description: Number of delivered messages included in the average
+      required:
+        - recipient_domain
+        - delivery_time
+        - count
 
 
     DeliveryTimeStatisticsResponse:
@@ -2777,7 +2912,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIKey'
+                allOf:
+                  - $ref: '#/components/schemas/APIKey'
+                  - type: object
+                    required:
+                      - secret_key
+                    properties:
+                      secret_key:
+                        type: string
+                        readOnly: true
+                        description: |
+                          One-time secret key. Store it immediately. Exact
+                          successful idempotent replays return the same secret
+                          during the 5-minute encrypted replay window.
         '400':
           description: Bad request
           content:
@@ -3040,7 +3187,8 @@ paths:
             Conflict — the request would lock the calling API key out of its own
             account. Returned only when a key updates itself with an
             `ip_allow_list` that does not cover the caller's current source IP.
-            No change is persisted.
+            No change is persisted. This is a terminal message-only conflict;
+            it has no server error code or idempotency headers.
           content:
             application/json:
               schema:
@@ -3181,8 +3329,7 @@ paths:
           in: query
           description: Filter results by DNS validation status
           schema:
-            type: boolean
-            nullable: true
+            type: [boolean, 'null']
         - name: limit
           in: query
           description: Maximum number of items to return (1-100)
@@ -3639,7 +3786,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["domains:delete:{domain}", "domains:delete:all"]
+        - BearerAuth: ["domains:delete:{domain}"]
+        - BearerAuth: ["domains:delete:all"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -3835,6 +3983,9 @@ paths:
       description: |
         Returns a list of message summaries for the account. Can be filtered by various parameters.
 
+        `messages:read:all` can read across the account. Domain-scoped keys see
+        only messages for domains authorized by their matching read roles.
+
       operationId: getMessages
       tags:
         - Messages
@@ -3917,7 +4068,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
+        - BearerAuth: ["messages:read:all"]
+        - BearerAuth: ["messages:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -4018,6 +4170,10 @@ paths:
         - Schedule times must be in RFC3339 format
         - `schedule.first_attempt` must be in the future and within 7 days of the request
         - `schedule.expires` must be in the future and within 8 days of the request
+
+        Authorization uses the domain in `from.email`: either
+        `messages:send:all` or the matching domain-specific send role is
+        sufficient.
       operationId: createMessage
       tags:
         - Messages
@@ -4031,7 +4187,8 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
-        - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
+        - BearerAuth: ["messages:send:all"]
+        - BearerAuth: ["messages:send:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -4158,6 +4315,10 @@ paths:
         - Schedule times must be in RFC3339 format
         - `schedule.first_attempt` must be in the future and within 7 days of the request
         - `schedule.expires` must be in the future and within 8 days of the request
+
+        Authorization uses the domain in `from.email`: either
+        `messages:send:all` or the matching domain-specific send role is
+        sufficient.
       operationId: createConversationMessage
       tags:
         - Messages
@@ -4171,7 +4332,8 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
-        - BearerAuth: ["messages:send:all", "messages:send:{domain}"]
+        - BearerAuth: ["messages:send:all"]
+        - BearerAuth: ["messages:send:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -4293,6 +4455,8 @@ paths:
       summary: Get Message
       description: |
         Returns the complete message by its ID, including raw content and parsed content structure.
+        Access requires `messages:read:all` or a read role matching the
+        message's sender domain.
       operationId: getMessage
       tags:
         - Messages
@@ -4311,7 +4475,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["messages:read:all", "messages:read:{domain}"]
+        - BearerAuth: ["messages:read:all"]
+        - BearerAuth: ["messages:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -4401,7 +4566,9 @@ paths:
   /v2/accounts/{account_id}/messages/{message_id}/cancel:
     delete:
       summary: Cancel Message
-      description: Cancels a scheduled message
+      description: |
+        Cancels a scheduled message. Access requires `messages:cancel:all` or a
+        cancel role matching the message's sender domain.
       operationId: cancelMessage
       tags:
         - Messages
@@ -4420,7 +4587,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["messages:cancel:all", "messages:cancel:{domain}"]
+        - BearerAuth: ["messages:cancel:all"]
+        - BearerAuth: ["messages:cancel:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -6191,7 +6359,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/APIKey'
+                allOf:
+                  - $ref: '#/components/schemas/APIKey'
+                  - type: object
+                    required:
+                      - secret_key
+                    properties:
+                      secret_key:
+                        type: string
+                        readOnly: true
+                        description: |
+                          One-time secret key. Store it immediately. Exact
+                          successful idempotent replays return the same secret
+                          during the 5-minute encrypted replay window.
               example:
                 object: api_key
                 id: "13b3aa8e-78d3-48a1-92d2-4b8b1228c2dd"
@@ -6614,7 +6794,8 @@ paths:
         - `from_time`: Filter suppressions created after this time (RFC3339 format, optional)
         - `to_time`: Filter suppressions created before this time (RFC3339 format, optional)
         - `limit`: Maximum number of items to return (1-100, default: 100)
-        - `cursor`: Pagination cursor for the next page
+        - `after`: Pagination cursor for the next page
+        - `before`: Pagination cursor for the previous page
       operationId: getSuppressions
       tags:
         - Suppressions
@@ -6867,7 +7048,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Suppression already exists or idempotency conflict
+          description: |
+            Either the suppression already exists or the idempotency-key
+            execution is in progress. The in-progress case is identified only
+            by `Idempotent-Replayed: false` plus a positive integer
+            `Retry-After`. A new duplicate-suppression response has neither
+            header; a stored replay of that response has
+            `Idempotent-Replayed: true`. The message is not a stable
+            discriminator.
+          headers:
+            Idempotent-Replayed:
+              description: |
+                `false` with a positive `Retry-After` means an execution is in
+                progress. `true` means a stored duplicate-suppression 409 was
+                replayed. Absent means a fresh duplicate-suppression conflict.
+              schema:
+                type: string
+                enum: ['true', 'false']
+            Retry-After:
+              $ref: '#/components/headers/IdempotencyRetryAfter'
           content:
             application/json:
               schema:
@@ -7115,7 +7314,10 @@ paths:
   /v2/accounts/{account_id}/routes:
     get:
       summary: Get Routes
-      description: Returns a list of routes for the account
+      description: |
+        Returns a list of routes for the account. A domain-scoped key must
+        provide the matching `domain` query parameter; the global read role can
+        list without that filter.
       operationId: getRoutes
       tags:
         - Routes
@@ -7151,7 +7353,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["routes:read:all", "routes:read:{domain}"]
+        - BearerAuth: ["routes:read:all"]
+        - BearerAuth: ["routes:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7234,7 +7437,10 @@ paths:
 
     post:
       summary: Create Route
-      description: Creates a new route for inbound email routing
+      description: |
+        Creates a new route for inbound email routing. Authorization uses the
+        domain in `recipient`: the global write role or its matching
+        domain-specific write role is sufficient.
       operationId: createRoute
       tags:
         - Routes
@@ -7248,7 +7454,8 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
-        - BearerAuth: ["routes:write:all", "routes:write:{domain}"]
+        - BearerAuth: ["routes:write:all"]
+        - BearerAuth: ["routes:write:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7353,7 +7560,9 @@ paths:
   /v2/accounts/{account_id}/routes/{route_id}:
     get:
       summary: Get Route
-      description: Returns a specific route by ID
+      description: |
+        Returns a specific route by ID. Access requires the global read role or
+        a read role matching the route's recipient domain.
       operationId: getRoute
       tags:
         - Routes
@@ -7373,7 +7582,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["routes:read:all", "routes:read:{domain}"]
+        - BearerAuth: ["routes:read:all"]
+        - BearerAuth: ["routes:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7460,7 +7670,10 @@ paths:
 
     put:
       summary: Update Route
-      description: Updates an existing route
+      description: |
+        Updates an existing route. A domain-scoped key must authorize the
+        existing recipient domain and, when `recipient` changes, the new domain;
+        `routes:write:all` satisfies both checks.
       operationId: updateRoute
       tags:
         - Routes
@@ -7480,7 +7693,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["routes:write:all", "routes:write:{domain}"]
+        - BearerAuth: ["routes:write:all"]
+        - BearerAuth: ["routes:write:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7580,7 +7794,9 @@ paths:
 
     delete:
       summary: Delete Route
-      description: Deletes a route
+      description: |
+        Deletes a route. Access requires the global delete role or a delete role
+        matching the route's recipient domain.
       operationId: deleteRoute
       tags:
         - Routes
@@ -7600,7 +7816,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["routes:delete:all", "routes:delete:{domain}"]
+        - BearerAuth: ["routes:delete:all"]
+        - BearerAuth: ["routes:delete:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7693,11 +7910,15 @@ paths:
       description: |
         Returns a list of webhooks for the account
 
+        The global read role sees all webhooks. Domain-scoped read roles return
+        only webhooks associated with at least one authorized domain.
+
         **Query Parameters:**
         - `enabled`: Filter by enabled status
         - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_suppression_created`, `on_dns_error`
         - `limit`: Maximum number of items to return (1-100, default: 100)
-        - `cursor`: Pagination cursor for the next page
+        - `after`: Pagination cursor for the next page
+        - `before`: Pagination cursor for the previous page
       operationId: getWebhooks
       tags:
         - Webhooks
@@ -7783,7 +8004,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["webhooks:read:all", "webhooks:read:{domain}"]
+        - BearerAuth: ["webhooks:read:all"]
+        - BearerAuth: ["webhooks:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7868,7 +8090,12 @@ paths:
 
     post:
       summary: Create Webhook
-      description: Creates a new webhook for event notifications
+      description: |
+        Creates a new webhook for event notifications. A `scoped` webhook
+        requires at least one domain and the key must have write permission for
+        every supplied domain. A `global` webhook requires
+        `webhooks:write:all`; supplied domains are accepted but ignored, and
+        the response contains `domains: []`.
       operationId: createWebhook
       tags:
         - Webhooks
@@ -7882,7 +8109,8 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
-        - BearerAuth: ["webhooks:write:all", "webhooks:write:{domain}"]
+        - BearerAuth: ["webhooks:write:all"]
+        - BearerAuth: ["webhooks:write:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -7987,7 +8215,9 @@ paths:
   /v2/accounts/{account_id}/webhooks/{webhook_id}:
     get:
       summary: Get Webhook
-      description: Returns a specific webhook by ID
+      description: |
+        Returns a specific webhook by ID. Access requires the global read role
+        or a read role matching at least one associated domain.
       operationId: getWebhook
       tags:
         - Webhooks
@@ -8007,7 +8237,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["webhooks:read:all", "webhooks:read:{domain}"]
+        - BearerAuth: ["webhooks:read:all"]
+        - BearerAuth: ["webhooks:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8096,7 +8327,15 @@ paths:
     put:
       summary: Update Webhook
       description: |
-        Updates an existing webhook
+        Updates an existing webhook. Omitted or null fields are unchanged.
+        Omitted/null `domains` preserves associations, while `[]` clears the
+        associations of a resulting-scoped webhook. Moving from global to
+        scoped requires a non-empty `domains` array in the same request. Moving
+        to global clears associations and ignores supplied domains.
+
+        A domain-scoped key must be authorized for the existing webhook and
+        every newly supplied domain; changing to global requires
+        `webhooks:write:all`.
 
         **Note:** The webhook secret is not updatable
       operationId: updateWebhook
@@ -8118,7 +8357,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["webhooks:write:all", "webhooks:write:{domain}"]
+        - BearerAuth: ["webhooks:write:all"]
+        - BearerAuth: ["webhooks:write:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8219,7 +8459,9 @@ paths:
 
     delete:
       summary: Delete Webhook
-      description: Deletes a webhook
+      description: |
+        Deletes a webhook. Access requires the global delete role or a delete
+        role matching at least one associated domain.
       operationId: deleteWebhook
       tags:
         - Webhooks
@@ -8239,7 +8481,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["webhooks:delete:all", "webhooks:delete:{domain}"]
+        - BearerAuth: ["webhooks:delete:all"]
+        - BearerAuth: ["webhooks:delete:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8328,7 +8571,10 @@ paths:
   /v2/accounts/{account_id}/smtp-credentials:
     get:
       summary: Get SMTP Credentials
-      description: Returns a list of SMTP credentials for the account
+      description: |
+        Returns a list of SMTP credentials for the account. The global read role
+        sees all credentials; domain-scoped roles return credentials associated
+        with at least one authorized domain.
       operationId: getSMTPCredentials
       tags:
         - SMTP Credentials
@@ -8359,7 +8605,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["smtp-credentials:read:all", "smtp-credentials:read:{domain}"]
+        - BearerAuth: ["smtp-credentials:read:all"]
+        - BearerAuth: ["smtp-credentials:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8441,7 +8688,13 @@ paths:
 
     post:
       summary: Create SMTP Credential
-      description: Creates a new SMTP credential for SMTP authentication
+      description: |
+        Creates a new SMTP credential for SMTP authentication. A `scoped`
+        credential requires at least one domain and the key must have write
+        permission for every supplied domain. A `global` credential requires
+        `smtp-credentials:write:all`; supplied domains are accepted but ignored,
+        and the response contains `domains: []`. SMTP credentials have no
+        update endpoint.
       operationId: createSMTPCredential
       tags:
         - SMTP Credentials
@@ -8455,7 +8708,8 @@ paths:
             format: uuid
         - $ref: '#/components/parameters/IdempotencyKey'
       security:
-        - BearerAuth: ["smtp-credentials:write:all", "smtp-credentials:write:{domain}"]
+        - BearerAuth: ["smtp-credentials:write:all"]
+        - BearerAuth: ["smtp-credentials:write:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8555,7 +8809,9 @@ paths:
   /v2/accounts/{account_id}/smtp-credentials/{smtp_credential_id}:
     get:
       summary: Get SMTP Credential
-      description: Returns a specific SMTP credential by ID
+      description: |
+        Returns a specific SMTP credential by ID. Access requires the global
+        read role or a read role matching at least one associated domain.
       operationId: getSMTPCredential
       tags:
         - SMTP Credentials
@@ -8575,7 +8831,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["smtp-credentials:read:all", "smtp-credentials:read:{domain}"]
+        - BearerAuth: ["smtp-credentials:read:all"]
+        - BearerAuth: ["smtp-credentials:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8663,7 +8920,9 @@ paths:
 
     delete:
       summary: Delete SMTP Credential
-      description: Deletes an SMTP credential
+      description: |
+        Deletes an SMTP credential. Access requires the global delete role or a
+        delete role matching at least one associated domain.
       operationId: deleteSMTPCredential
       tags:
         - SMTP Credentials
@@ -8683,7 +8942,8 @@ paths:
             type: string
             format: uuid
       security:
-        - BearerAuth: ["smtp-credentials:delete:all", "smtp-credentials:delete:{domain}"]
+        - BearerAuth: ["smtp-credentials:delete:all"]
+        - BearerAuth: ["smtp-credentials:delete:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8776,6 +9036,10 @@ paths:
       description: |
         Returns transactional deliverability statistics grouped by status
 
+        The global statistics role can query all sender domains. A
+        domain-scoped key is limited to authorized domains and must authorize
+        every comma-separated value supplied in `sender_domain`.
+
         **Query Parameters:**
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
@@ -8808,7 +9072,7 @@ paths:
             format: date-time
         - name: sender_domain
           in: query
-          description: Filter by sender domain
+          description: Comma-separated sender domains; the key must authorize every requested domain
           schema:
             type: string
         - name: recipient_domains
@@ -8830,7 +9094,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics-transactional:read:all"]
+        - BearerAuth: ["statistics-transactional:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8930,6 +9195,10 @@ paths:
       description: |
         Returns transactional bounce statistics grouped by classification
 
+        The global statistics role can query all sender domains. A
+        domain-scoped key is limited to authorized domains and must authorize
+        every comma-separated value supplied in `sender_domain`.
+
         **Query Parameters:**
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
@@ -8962,7 +9231,7 @@ paths:
             format: date-time
         - name: sender_domain
           in: query
-          description: Filter by sender domain
+          description: Comma-separated sender domains; the key must authorize every requested domain
           schema:
             type: string
         - name: recipient_domains
@@ -8984,7 +9253,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics-transactional:read:all"]
+        - BearerAuth: ["statistics-transactional:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -9084,6 +9354,10 @@ paths:
       description: |
         Returns transactional delivery time statistics grouped by recipient domain
 
+        The global statistics role can query all sender domains. A
+        domain-scoped key is limited to authorized domains and must authorize
+        every comma-separated value supplied in `sender_domain`.
+
         **Query Parameters:**
         - `from_time`: Filter statistics after this date (RFC3339 format)
         - `to_time`: Filter statistics before this date (RFC3339 format)
@@ -9116,7 +9390,7 @@ paths:
             format: date-time
         - name: sender_domain
           in: query
-          description: Filter by sender domain
+          description: Comma-separated sender domains; the key must authorize every requested domain
           schema:
             type: string
         - name: recipient_domains
@@ -9138,7 +9412,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all", "statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics-transactional:read:all"]
+        - BearerAuth: ["statistics-transactional:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
