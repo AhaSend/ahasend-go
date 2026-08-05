@@ -4,6 +4,8 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // ErrorType represents the category of error
@@ -17,9 +19,15 @@ const (
 	ErrorTypeConflict       ErrorType = "conflict"
 	ErrorTypeRateLimit      ErrorType = "rate_limit"
 	ErrorTypeIdempotency    ErrorType = "idempotency"
-	ErrorTypeServer         ErrorType = "server"
-	ErrorTypeNetwork        ErrorType = "network"
-	ErrorTypeUnknown        ErrorType = "unknown"
+	// ErrorTypeIdempotencyConflict is the one retryable 409: an earlier
+	// request with the same idempotency key is still in flight, so the API
+	// has not decided the outcome yet. Retry after APIError.RetryAfter
+	// seconds and the replayed result comes back. Every other 409 is a
+	// terminal conflict (ErrorTypeConflict).
+	ErrorTypeIdempotencyConflict ErrorType = "idempotency_conflict"
+	ErrorTypeServer              ErrorType = "server"
+	ErrorTypeNetwork             ErrorType = "network"
+	ErrorTypeUnknown             ErrorType = "unknown"
 )
 
 // APIError represents an error from the AhaSend API
@@ -41,10 +49,15 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s error (HTTP %d): %s", e.Type, e.StatusCode, e.Message)
 }
 
-// IsRetryable returns true if the error is retryable
+// IsRetryable returns true if the error is retryable.
+//
+// Note that the SDK's transport never retries a 4xx on its own, so an
+// ErrorTypeIdempotencyConflict is reported as retryable but is not retried
+// automatically: retrying it is the caller's decision, after waiting
+// RetryAfter seconds.
 func (e *APIError) IsRetryable() bool {
 	switch e.Type {
-	case ErrorTypeRateLimit, ErrorTypeServer, ErrorTypeNetwork:
+	case ErrorTypeRateLimit, ErrorTypeServer, ErrorTypeNetwork, ErrorTypeIdempotencyConflict:
 		return true
 	default:
 		return false
@@ -55,7 +68,7 @@ func (e *APIError) IsRetryable() bool {
 func ParseAPIError(resp *http.Response, body []byte) *APIError {
 	apiErr := &APIError{
 		StatusCode: resp.StatusCode,
-		Type:       determineErrorType(resp.StatusCode),
+		Type:       classifyErrorType(resp),
 		Raw:        body,
 	}
 
@@ -64,14 +77,7 @@ func ParseAPIError(resp *http.Response, body []byte) *APIError {
 		apiErr.RequestID = reqID
 	}
 
-	// Extract retry-after for rate limit errors
-	if apiErr.Type == ErrorTypeRateLimit {
-		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-			var seconds int
-			fmt.Sscanf(retryAfter, "%d", &seconds)
-			apiErr.RetryAfter = seconds
-		}
-	}
+	apiErr.RetryAfter = retryAfterSeconds(resp, apiErr.Type)
 
 	// Set a basic message - let the API response provide the details
 	apiErr.Message = http.StatusText(resp.StatusCode)
@@ -81,6 +87,58 @@ func ParseAPIError(resp *http.Response, body []byte) *APIError {
 	}
 
 	return apiErr
+}
+
+// classifyErrorType maps an HTTP response to an error type. It is
+// determineErrorType plus the refinements a bare status code cannot express.
+func classifyErrorType(resp *http.Response) ErrorType {
+	if resp.StatusCode == http.StatusConflict {
+		if _, ok := idempotencyInProgressRetryAfter(resp); ok {
+			return ErrorTypeIdempotencyConflict
+		}
+	}
+	return determineErrorType(resp.StatusCode)
+}
+
+// retryAfterSeconds returns the Retry-After value in seconds for the error
+// types that carry one, and 0 otherwise.
+func retryAfterSeconds(resp *http.Response, errType ErrorType) int {
+	switch errType {
+	case ErrorTypeRateLimit:
+		if seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil {
+			return seconds
+		}
+	case ErrorTypeIdempotencyConflict:
+		if seconds, ok := idempotencyInProgressRetryAfter(resp); ok {
+			return seconds
+		}
+	}
+	return 0
+}
+
+// idempotencyInProgressRetryAfter reports whether a 409 response describes an
+// idempotent request that is still in flight, and if so how many seconds to
+// wait before retrying.
+//
+// The API marks that state with two headers together: `Idempotent-Replayed:
+// false`, meaning no stored result was returned, and a positive integer
+// `Retry-After`. A duplicate-resource 409 carries neither, and a replayed
+// success carries `Idempotent-Replayed: true`. The request must also have
+// carried an idempotency key, since the state only exists per key - checked
+// when the response still references its request, which is always the case
+// for responses produced by an http.Client.
+func idempotencyInProgressRetryAfter(resp *http.Response) (int, bool) {
+	if resp.Request != nil && resp.Request.Header.Get("Idempotency-Key") == "" {
+		return 0, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(resp.Header.Get("Idempotent-Replayed")), "false") {
+		return 0, false
+	}
+	seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+	if err != nil || seconds <= 0 {
+		return 0, false
+	}
+	return seconds, true
 }
 
 // determineErrorType maps HTTP status codes to error types
