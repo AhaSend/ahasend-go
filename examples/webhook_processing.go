@@ -211,9 +211,7 @@ func handleMessageOpened(event *webhooks.MessageOpenedEvent) error {
 	if event.Data.IP != nil {
 		log.Printf("  IP: %s", *event.Data.IP)
 	}
-	if event.Data.IsBot != nil {
-		log.Printf("  Is Bot: %s", *event.Data.IsBot)
-	}
+	log.Printf("  Is Bot: %v", event.Data.IsBot)
 
 	// TODO: Add your business logic here
 	// For example, track engagement metrics

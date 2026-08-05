@@ -15,7 +15,12 @@ type MessageEventData struct {
 	ID              string  `json:"id"`
 	UserAgent       *string `json:"user_agent,omitempty"`
 	IP              *string `json:"ip,omitempty"`
-	IsBot           *string `json:"is_bot,omitempty"`
+	// IsBot reports whether the open was attributed to an automated client.
+	// Bot detection runs on every open and always yields a definite true or
+	// false, so there is no unknown state; the field is only meaningful for
+	// message.opened and is false on every other message event. Deliveries
+	// predating the always-present field omit it and decode to false.
+	IsBot bool `json:"is_bot"`
 }
 
 // MessageClickedEventData contains data specific to message clicked events
@@ -58,8 +63,16 @@ type RouteAttachment struct {
 	Filename    string  `json:"filename"`
 	ContentType string  `json:"content_type"`
 	ContentID   *string `json:"content_id,omitempty"`
-	// Disposition is "attachment", "inline", or empty when the MIME part had no
-	// Content-Disposition header and was inferred from its filename or content type.
+	// Disposition is the Content-Disposition type of the MIME part, usually
+	// "attachment" or "inline", and "" when the part carried no
+	// Content-Disposition header. The value is deliberately unconstrained —
+	// it is whatever token the sending mail server wrote, lowercased and
+	// trimmed of parameters — so tokens other than "attachment" and "inline"
+	// do arrive in practice. Do not validate it against a fixed list; treat
+	// an unrecognized value as "attachment". Note that "" does not mean "not
+	// inline": embedded images from Gmail and Outlook arrive with an empty
+	// disposition and a populated ContentID, which is what separates them
+	// from real attachments.
 	Disposition string `json:"disposition"`
 	Data        string `json:"data"`
 }
@@ -171,6 +184,7 @@ func (e *MessageOpenedEvent) GetTimestamp() time.Time { return e.Timestamp }
 // MessageClickedEvent is triggered when the recipient clicks a tracked link in your email
 type MessageClickedEvent struct {
 	Type      string                  `json:"type"`
+	WebhookID *string                 `json:"webhook_id,omitempty"`
 	Timestamp time.Time               `json:"timestamp"`
 	Data      MessageClickedEventData `json:"data"`
 }
@@ -183,6 +197,7 @@ func (e *MessageClickedEvent) GetTimestamp() time.Time { return e.Timestamp }
 // SuppressionCreatedEvent is triggered when a suppression is created for an email address
 type SuppressionCreatedEvent struct {
 	Type      string               `json:"type"`
+	WebhookID *string              `json:"webhook_id,omitempty"`
 	Timestamp time.Time            `json:"timestamp"`
 	Data      SuppressionEventData `json:"data"`
 }

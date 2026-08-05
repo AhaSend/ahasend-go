@@ -146,6 +146,69 @@ func TestWebhookVerification(t *testing.T) {
 		// Reset tolerance
 		verifier.SetTolerance(5 * time.Minute)
 	})
+
+	t.Run("tolerance applies in both directions", func(t *testing.T) {
+		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{}}`
+
+		boundaryVerifier, err := NewWebhookVerifier(testWebhookSecret)
+		require.NoError(t, err)
+		boundaryVerifier.SetTolerance(1 * time.Minute)
+
+		testCases := []struct {
+			name    string
+			offset  time.Duration
+			wantErr error
+		}{
+			{name: "recent past inside tolerance", offset: -30 * time.Second},
+			{name: "near future inside tolerance", offset: 30 * time.Second},
+			{name: "past beyond tolerance", offset: -2 * time.Minute, wantErr: ErrExpiredTimestamp},
+			// A future timestamp is as much a replay signal as a stale one, and
+			// Standard Webhooks requires rejecting it.
+			{name: "future beyond tolerance", offset: 2 * time.Minute, wantErr: ErrExpiredTimestamp},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				timestamp := fmt.Sprintf("%d", time.Now().Add(tc.offset).Unix())
+
+				headers := http.Header{}
+				headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
+				headers.Set("webhook-timestamp", timestamp)
+				headers.Set("webhook-signature", signWithSecret(t, testWebhookSecret, headers.Get("webhook-id"), timestamp, payload))
+
+				err := boundaryVerifier.Verify([]byte(payload), headers)
+				if tc.wantErr != nil {
+					assert.ErrorIs(t, err, tc.wantErr)
+					return
+				}
+				assert.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("signature computed with the complete prefixed secret", func(t *testing.T) {
+		// The HMAC key is the literal secret as issued, prefix included: it is
+		// neither base64-decoded nor stripped of its prefix before signing.
+		prefixedSecret := "aha-whsec-" + testWebhookSecret
+
+		prefixedVerifier, err := NewWebhookVerifier(prefixedSecret)
+		require.NoError(t, err)
+
+		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{}}`
+		timestamp := fmt.Sprintf("%d", time.Now().Unix())
+
+		headers := http.Header{}
+		headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
+		headers.Set("webhook-timestamp", timestamp)
+		headers.Set("webhook-signature", signWithSecret(t, prefixedSecret, headers.Get("webhook-id"), timestamp, payload))
+
+		assert.NoError(t, prefixedVerifier.Verify([]byte(payload), headers))
+
+		// A signature computed over the secret with its prefix stripped - what a
+		// library that strips prefixes would produce - must not verify.
+		headers.Set("webhook-signature", signWithSecret(t, testWebhookSecret, headers.Get("webhook-id"), timestamp, payload))
+		assert.ErrorIs(t, prefixedVerifier.Verify([]byte(payload), headers), ErrInvalidSignature)
+	})
 }
 
 func TestWebhookParsing(t *testing.T) {
@@ -203,7 +266,7 @@ func TestWebhookParsing(t *testing.T) {
 				"id": "407926766d2711f09b30960002cafe7c",
 				"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 				"ip": "192.168.1.100",
-				"is_bot": "false"
+				"is_bot": true
 			}
 		}`
 
@@ -218,13 +281,59 @@ func TestWebhookParsing(t *testing.T) {
 		assert.Equal(t, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", *openedEvent.Data.UserAgent)
 		assert.NotNil(t, openedEvent.Data.IP)
 		assert.Equal(t, "192.168.1.100", *openedEvent.Data.IP)
-		assert.NotNil(t, openedEvent.Data.IsBot)
-		assert.Equal(t, "false", *openedEvent.Data.IsBot)
+		assert.True(t, openedEvent.Data.IsBot)
+	})
+
+	t.Run("message.opened is_bot decodes as a boolean", func(t *testing.T) {
+		openedPayload := func(isBotField string) string {
+			return fmt.Sprintf(`{
+				"type": "message.opened",
+				"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
+				"timestamp": "2024-05-06T10:15:16.687031577Z",
+				"data": {
+					"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+					"event": "on_opened",
+					"from": "sender@example.com",
+					"recipient": "recipient@example.com",
+					"subject": "Welcome to our service",
+					"message_id_header": "<message-id-12345@localhost>",
+					"id": "407926766d2711f09b30960002cafe7c"%s
+				}
+			}`, isBotField)
+		}
+
+		testCases := []struct {
+			name      string
+			field     string
+			wantIsBot bool
+		}{
+			{name: "true", field: `,"is_bot": true`, wantIsBot: true},
+			{name: "false", field: `,"is_bot": false`, wantIsBot: false},
+			// Deliveries predating the always-present field omit it. There is no
+			// unknown state to represent, so absence decodes as false.
+			{name: "absent", field: "", wantIsBot: false},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				payload := openedPayload(tc.field)
+
+				event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+				require.NoError(t, err)
+
+				openedEvent, ok := event.(*MessageOpenedEvent)
+				require.True(t, ok)
+				assert.Equal(t, tc.wantIsBot, openedEvent.Data.IsBot)
+				require.NotNil(t, openedEvent.WebhookID)
+				assert.Equal(t, "abe11757-2886-4b55-96f1-0e0afc95795a", *openedEvent.WebhookID)
+			})
+		}
 	})
 
 	t.Run("parse message.clicked event", func(t *testing.T) {
 		payload := `{
 			"type": "message.clicked",
+			"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
 			"timestamp": "2024-05-06T10:20:16.687031577Z",
 			"data": {
 				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
@@ -251,11 +360,42 @@ func TestWebhookParsing(t *testing.T) {
 		assert.Equal(t, "https://example.com/link", clickedEvent.Data.URL)
 		assert.Equal(t, "Mozilla/5.0", clickedEvent.Data.UserAgent)
 		assert.Equal(t, false, clickedEvent.Data.IsBot)
+		require.NotNil(t, clickedEvent.WebhookID)
+		assert.Equal(t, "abe11757-2886-4b55-96f1-0e0afc95795a", *clickedEvent.WebhookID)
+	})
+
+	t.Run("parse message.clicked event flagged as a bot", func(t *testing.T) {
+		payload := `{
+			"type": "message.clicked",
+			"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
+			"timestamp": "2024-05-06T10:20:16.687031577Z",
+			"data": {
+				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+				"event": "on_clicked",
+				"from": "sender@example.com",
+				"recipient": "recipient@example.com",
+				"subject": "Welcome to our service",
+				"message_id_header": "<message-id-12345@localhost>",
+				"id": "407926766d2711f09b30960002cafe7c",
+				"url": "https://example.com/link",
+				"user_agent": "Mozilla/5.0",
+				"ip": "192.168.1.100",
+				"is_bot": true
+			}
+		}`
+
+		event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+		require.NoError(t, err)
+
+		clickedEvent, ok := event.(*MessageClickedEvent)
+		require.True(t, ok)
+		assert.True(t, clickedEvent.Data.IsBot)
 	})
 
 	t.Run("parse suppression.created event", func(t *testing.T) {
 		payload := `{
 			"type": "suppression.created",
+			"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
 			"timestamp": "2024-05-06T12:57:06.451529527Z",
 			"data": {
 				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
@@ -277,6 +417,8 @@ func TestWebhookParsing(t *testing.T) {
 		assert.Equal(t, "bounced@example.com", suppressionEvent.Data.Recipient)
 		assert.Equal(t, "Too many hard bounces", suppressionEvent.Data.Reason)
 		assert.Equal(t, "your-domain.com", suppressionEvent.Data.SendingDomain)
+		require.NotNil(t, suppressionEvent.WebhookID)
+		assert.Equal(t, "abe11757-2886-4b55-96f1-0e0afc95795a", *suppressionEvent.WebhookID)
 	})
 
 	t.Run("parse domain.dns_error event", func(t *testing.T) {
@@ -489,11 +631,18 @@ func TestWebhookHelperFunctions(t *testing.T) {
 func generateSignature(t *testing.T, verifier *WebhookVerifier, msgID, timestamp, payload string) string {
 	t.Helper()
 
-	// Use the secret as-is (no base64 decoding) - matches the new webhook implementation
-	secret := []byte(testWebhookSecret)
+	return signWithSecret(t, testWebhookSecret, msgID, timestamp, payload)
+}
+
+// signWithSecret signs a payload with the literal bytes of the given secret,
+// with no base64 decoding and no prefix stripping - which is what the server
+// does and what the verifier must match.
+func signWithSecret(t *testing.T, secret, msgID, timestamp, payload string) string {
+	t.Helper()
+
 	signedContent := fmt.Sprintf("%s.%s.%s", msgID, timestamp, payload)
 
-	h := hmac.New(sha256.New, secret)
+	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(signedContent))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 

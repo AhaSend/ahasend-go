@@ -78,8 +78,14 @@ func (v *WebhookVerifier) Verify(payload []byte, headers http.Header) error {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
 
+	// Standard Webhooks requires the timestamp to be within tolerance of now in
+	// either direction, so a far-future timestamp is rejected just like a stale one.
 	webhookTime := time.Unix(timestamp, 0)
-	if time.Since(webhookTime) > v.tolerance {
+	drift := time.Since(webhookTime)
+	if drift < 0 {
+		drift = -drift
+	}
+	if drift > v.tolerance {
 		return ErrExpiredTimestamp
 	}
 
