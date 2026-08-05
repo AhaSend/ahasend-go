@@ -120,9 +120,8 @@ mock-server: ## Start Prism mock server (for manual testing)
 	@echo "$(YELLOW)Press Ctrl+C to stop the server$(RESET)"
 	prism mock openapi/openapi.yaml --host 0.0.0.0 --port 4010 --dynamic
 
-mock-server-validate: ## Validate OpenAPI spec with Prism
+mock-server-validate: ## Validate the OpenAPI spec
 	@echo "$(BLUE)Validating OpenAPI spec...$(RESET)"
-	@which prism > /dev/null || (echo "$(RED)Prism CLI is required$(RESET)" && exit 1)
 	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at openapi/openapi.yaml$(RESET)" && exit 1)
 	npx --yes @redocly/cli lint openapi/openapi.yaml
 	@echo "$(GREEN)OpenAPI spec is valid!$(RESET)"

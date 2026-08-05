@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -182,6 +184,38 @@ func TestWebhookVerification(t *testing.T) {
 					return
 				}
 				assert.NoError(t, err)
+			})
+		}
+	})
+
+	t.Run("timestamps beyond the duration range are rejected", func(t *testing.T) {
+		// now-webhookTime saturates once it exceeds the ~292 year range of a
+		// time.Duration, so these are exactly the values a signed-duration
+		// tolerance check lets through.
+		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{}}`
+
+		testCases := []struct {
+			name      string
+			timestamp string
+		}{
+			{name: "year 2603", timestamp: "20000000000"},
+			{name: "year 5138", timestamp: "99999999999"},
+			{name: "max int64 seconds", timestamp: strconv.FormatInt(math.MaxInt64, 10)},
+			{name: "min int64 seconds", timestamp: strconv.FormatInt(math.MinInt64, 10)},
+			{name: "unix epoch", timestamp: "0"},
+			{name: "negative", timestamp: "-9000000000"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				headers := http.Header{}
+				headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
+				headers.Set("webhook-timestamp", tc.timestamp)
+				// Signed correctly for that timestamp: only the tolerance check
+				// can reject it.
+				headers.Set("webhook-signature", signWithSecret(t, testWebhookSecret, headers.Get("webhook-id"), tc.timestamp, payload))
+
+				assert.ErrorIs(t, verifier.Verify([]byte(payload), headers), ErrExpiredTimestamp)
 			})
 		}
 	})

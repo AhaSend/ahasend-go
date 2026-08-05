@@ -21,8 +21,10 @@ const (
 	ErrorTypeIdempotency    ErrorType = "idempotency"
 	// ErrorTypeIdempotencyConflict is the one retryable 409: an earlier
 	// request with the same idempotency key is still in flight, so the API
-	// has not decided the outcome yet. Retry after APIError.RetryAfter
-	// seconds and the replayed result comes back. Every other 409 is a
+	// has not decided the outcome yet. APIError.RetryAfter is what remains of
+	// that request's execution lease; retrying with the same key after it
+	// elapses replays the stored result if the original finished, and
+	// otherwise takes the lease over and executes again. Every other 409 is a
 	// terminal conflict (ErrorTypeConflict).
 	ErrorTypeIdempotencyConflict ErrorType = "idempotency_conflict"
 	ErrorTypeServer              ErrorType = "server"
