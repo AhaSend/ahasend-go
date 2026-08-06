@@ -1875,13 +1875,18 @@ components:
           description: Whether the route is enabled
         success_count:
           type: integer
+          minimum: 0
           description: Number of successful calls
         error_count:
           type: integer
+          minimum: 0
           description: Number of unsuccessful calls
         errors_since_last_success:
           type: integer
-          description: Number of consecutive failed calls
+          minimum: 0
+          description: |
+            Number of consecutive failed calls. Reset to zero by the next
+            successful call.
         last_request_at:
           type: [string, 'null']
           format: date-time
@@ -2084,13 +2089,18 @@ components:
           description: Domains this webhook applies to. Always present; global webhooks return an empty array.
         success_count:
           type: integer
+          minimum: 0
           description: Number of successful calls
         error_count:
           type: integer
+          minimum: 0
           description: Number of unsuccessful calls
         errors_since_last_success:
           type: integer
-          description: Number of consecutive failed calls
+          minimum: 0
+          description: |
+            Number of consecutive failed calls. Reset to zero by the next
+            successful call.
         last_request_at:
           type: [string, 'null']
           format: date-time

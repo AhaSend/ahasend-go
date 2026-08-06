@@ -74,9 +74,7 @@ func (a *StatisticsAPIService) GetBounceStatistics(
 		Result:      &result,
 	}
 
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -142,9 +140,7 @@ func (a *StatisticsAPIService) GetDeliverabilityStatistics(
 		Result:      &result,
 	}
 
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -210,9 +206,7 @@ func (a *StatisticsAPIService) GetDeliveryTimeStatistics(
 		Result:      &result,
 	}
 
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

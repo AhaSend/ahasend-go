@@ -56,7 +56,7 @@ func GetDefaults() ConfigurationDefaults {
 		DefaultScheme: "https",
 
 		// Client Configuration
-		DefaultUserAgent:   "AhaSend-Go-SDK/1.0",
+		DefaultUserAgent:   UserAgent,
 		DefaultDebug:       false,
 		DefaultTimeout:     30 * time.Second,
 		DefaultIdleTimeout: 90 * time.Second,

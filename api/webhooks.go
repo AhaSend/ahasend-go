@@ -50,9 +50,7 @@ func (a *WebhooksAPIService) CreateWebhook(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -88,9 +86,7 @@ func (a *WebhooksAPIService) DeleteWebhook(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -126,9 +122,7 @@ func (a *WebhooksAPIService) GetWebhook(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -237,9 +231,7 @@ func (a *WebhooksAPIService) GetWebhooks(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -280,9 +272,7 @@ func (a *WebhooksAPIService) UpdateWebhook(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

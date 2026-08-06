@@ -100,6 +100,19 @@ type RequestConfig struct {
 // RequestOption allows modifying RequestConfig using functional options pattern
 type RequestOption func(*RequestConfig)
 
+// applyRequestOptions applies each option to the request configuration. A nil
+// option is ignored rather than dereferenced: options frequently arrive from a
+// slice or a conditional expression, and a library has no business panicking
+// on one that happens to be nil.
+func applyRequestOptions(config *RequestConfig, opts []RequestOption) {
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(config)
+	}
+}
+
 // WithTimeout sets a custom timeout for this specific request
 func WithTimeout(timeout time.Duration) RequestOption {
 	return func(rc *RequestConfig) {
@@ -263,6 +276,9 @@ type requestBodyValidator interface {
 func NewAPIClient(opts ...ClientOption) *APIClient {
 	cfg := NewConfiguration()
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(cfg)
 	}
 	if cfg.HTTPClient == nil {

@@ -49,9 +49,7 @@ func (a *SMTPCredentialsAPIService) CreateSMTPCredential(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -87,9 +85,7 @@ func (a *SMTPCredentialsAPIService) DeleteSMTPCredential(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -125,9 +121,7 @@ func (a *SMTPCredentialsAPIService) GetSMTPCredential(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -186,9 +180,7 @@ func (a *SMTPCredentialsAPIService) GetSMTPCredentials(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

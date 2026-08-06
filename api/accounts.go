@@ -47,9 +47,7 @@ func (a *AccountsAPIService) AddAccountMember(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -82,9 +80,7 @@ func (a *AccountsAPIService) GetAccount(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -117,9 +113,7 @@ func (a *AccountsAPIService) GetAccountMembers(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -155,9 +149,7 @@ func (a *AccountsAPIService) RemoveAccountMember(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -193,9 +185,7 @@ func (a *AccountsAPIService) UpdateAccount(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

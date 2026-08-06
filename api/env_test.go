@@ -45,7 +45,7 @@ func TestConfigFromEnv(t *testing.T) {
 
 		// Should have default values
 		assert.False(t, cfg.Debug, "Debug should default to false")
-		assert.Equal(t, "AhaSend-Go-SDK/1.0", cfg.UserAgent, "Should have default user agent")
+		assert.Equal(t, UserAgent, cfg.UserAgent, "Should have default user agent")
 		assert.True(t, cfg.EnableRateLimit, "Should enable rate limiting by default")
 		assert.Equal(t, 3, cfg.RetryConfig.MaxRetries, "Should have default max retries")
 		assert.True(t, cfg.IdempotencyConfig.AutoGenerate, "Should auto-generate idempotency keys by default")
