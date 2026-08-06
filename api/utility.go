@@ -35,9 +35,7 @@ func (a *UtilityAPIService) Ping(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

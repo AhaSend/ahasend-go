@@ -50,9 +50,7 @@ func (a *RoutesAPIService) CreateRoute(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -88,9 +86,7 @@ func (a *RoutesAPIService) DeleteRoute(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -126,9 +122,7 @@ func (a *RoutesAPIService) GetRoute(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -200,9 +194,7 @@ func (a *RoutesAPIService) GetRoutesWithParams(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err
@@ -241,9 +233,7 @@ func (a *RoutesAPIService) UpdateRoute(
 	}
 
 	// Apply options
-	for _, opt := range opts {
-		opt(&config)
-	}
+	applyRequestOptions(&config, opts)
 
 	resp, err := a.client.Execute(ctx, config)
 	return &result, resp, err

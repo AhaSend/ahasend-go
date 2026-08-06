@@ -5,9 +5,17 @@ on:
     tags:
       - 'v*.*.*'  # Trigger on version tags like v1.0.0
 
-# Read-only by default; the two jobs that write declare what they need.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Read-only by default; the one job that writes declares what it needs.
 permissions:
   contents: read
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '20'
 
 jobs:
   # Validate the release
@@ -17,14 +25,15 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.21'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Validate tag format
         run: |
@@ -39,8 +48,31 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run tests
-        run: go test -v ./...
+      # The SDK advertises its version in the User-Agent from a constant: a Go
+      # library is compiled from source by its consumers, so a release cannot
+      # stamp it in at build time. Refuse a tag that disagrees with it.
+      - name: Verify the version constant matches the tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          CONSTANT="v$(go run ./internal/cmd/sdkversion)"
+          if [ "$CONSTANT" != "$TAG" ]; then
+            echo "Tag $TAG does not match api.Version ($CONSTANT)."
+            echo "Update the Version constant in api/version.go and re-tag."
+            exit 1
+          fi
+
+      - name: Verify the tagged commit is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "The tagged commit is not an ancestor of origin/main."
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: go test -short -race ./...
+        env:
+          SKIP_INTEGRATION_TESTS: true
 
       - name: Build SDK
         run: go build -v ./...
@@ -57,7 +89,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       version_number: ${{ steps.version.outputs.version_number }}
 
-  # Run full test suite including integration tests
+  # Run the full test suite, including the specification-driven tests
   test-release:
     name: Release Tests
     runs-on: ubuntu-latest
@@ -65,17 +97,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.21'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Prism CLI
         run: npm install -g @stoplight/prism-cli@5
@@ -84,19 +118,23 @@ jobs:
         run: go mod download
 
       - name: Run unit tests
-        run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -short -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          SKIP_INTEGRATION_TESTS: true
 
-      - name: Run integration tests
-        run: |
-          go test -v -timeout=10m -tags=integration ./test/
+      # The mock-backed tests start Prism themselves. AHASEND_REQUIRE_PRISM
+      # turns a mock that fails to start into a release failure rather than a
+      # skip, so this gate cannot pass by running nothing.
+      - name: Run integration tests against the mocked specification
+        run: go test -v -timeout=15m ./api/ ./test/
         env:
           SKIP_INTEGRATION_TESTS: false
+          AHASEND_REQUIRE_PRISM: true
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
-          file: ./coverage.out
+          files: ./coverage.out
           flags: release
           name: release-coverage
 
@@ -104,125 +142,61 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    # actions/create-release publishes the GitHub release.
+    needs: [validate, test-release]
+    # Publishing the GitHub release is the only write this workflow performs.
     permissions:
       contents: write
-    needs: [validate, test-release]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.21'
-
-      - name: Generate changelog
-        id: changelog
+      - name: Write the installation and documentation notes
         run: |
-          # Get the previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           CURRENT_TAG=${{ needs.validate.outputs.version }}
+          cat > RELEASE_NOTES.md <<NOTES
+          ## Installation
 
-          echo "## What's Changed" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
+          \`\`\`bash
+          go get github.com/AhaSend/ahasend-go@$CURRENT_TAG
+          \`\`\`
 
-          if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Changes since $PREVIOUS_TAG:" >> RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
+          ## Documentation
 
-            # Generate commit log
-            git log --pretty=format:"* %s (%h)" "$PREVIOUS_TAG"..HEAD >> RELEASE_NOTES.md
-          else
-            echo "* Initial release" >> RELEASE_NOTES.md
-          fi
+          - [API Documentation](https://ahasend.com/docs)
+          - [SDK Documentation](./README.md)
+          - [Environment Variables](./ENV.md)
+          - [Idempotency Guide](./IDEMPOTENCY.md)
+          NOTES
 
-          echo "" >> RELEASE_NOTES.md
-          echo "## Installation" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "\`\`\`bash" >> RELEASE_NOTES.md
-          echo "go get github.com/AhaSend/ahasend-go@$CURRENT_TAG" >> RELEASE_NOTES.md
-          echo "\`\`\`" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "## Documentation" >> RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
-          echo "- [API Documentation](https://ahasend.com/docs)" >> RELEASE_NOTES.md
-          echo "- [SDK Documentation](./README.md)" >> RELEASE_NOTES.md
-          echo "- [Environment Variables](./ENV.md)" >> RELEASE_NOTES.md
-          echo "- [Idempotency Guide](./IDEMPOTENCY.md)" >> RELEASE_NOTES.md
-
-      - name: Read changelog
-        id: read_changelog
-        run: |
-          {
-            echo 'CHANGELOG<<EOF'
-            cat RELEASE_NOTES.md
-            echo EOF
-          } >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: actions/create-release@v1
+      - name: Publish the release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.validate.outputs.version }}
-          release_name: AhaSend Go SDK ${{ needs.validate.outputs.version }}
-          body: ${{ steps.read_changelog.outputs.CHANGELOG }}
-          draft: false
-          prerelease: false
-
-      - name: Trigger documentation update
-        if: success()
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Release ${{ needs.validate.outputs.version }} created successfully!"
-          echo "Documentation and examples should be updated to reflect the new version."
+          gh release create "${{ needs.validate.outputs.version }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "AhaSend Go SDK ${{ needs.validate.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md \
+            --generate-notes
 
   # Post-release tasks
   post-release:
     name: Post Release
     runs-on: ubuntu-latest
     needs: [validate, release]
-    # actions/github-script opens the follow-up documentation issue.
-    permissions:
-      contents: read
-      issues: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Update Go module index
+      - name: Prime the Go module proxy
         run: |
-          # The Go module proxy will automatically index the new version
-          # when it's first requested, but we can trigger it explicitly
+          # The proxy indexes a version on first request, so asking for it here
+          # means the first real consumer does not pay for that.
           VERSION=${{ needs.validate.outputs.version }}
-          curl -f "https://proxy.golang.org/github.com/AhaSend/ahasend-go/@v/$VERSION.info" || echo "Module indexing will happen on first use"
-
-      - name: Create follow-up issues
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const version = '${{ needs.validate.outputs.version }}';
-
-            // Create issue for documentation update
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Update documentation for release ${version}`,
-              body: `## Post-Release Documentation Tasks
-
-              - [ ] Update version references in README.md
-              - [ ] Update installation examples with new version
-              - [ ] Review and update API documentation
-              - [ ] Update examples/ directory if needed
-              - [ ] Consider updating CHANGELOG.md format for future releases
-
-              Released in: ${version}`,
-              labels: ['documentation', 'post-release']
-            });
+          curl -f "https://proxy.golang.org/github.com/!aha!send/ahasend-go/@v/$VERSION.info" \
+            || echo "Module indexing will happen on first use"
 
       - name: Notify team
         run: |

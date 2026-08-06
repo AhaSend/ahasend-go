@@ -12,7 +12,7 @@ func TestConfigurationDefaults(t *testing.T) {
 
 	assert.Equal(t, "api.ahasend.com", defaults.DefaultHost)
 	assert.Equal(t, "https", defaults.DefaultScheme)
-	assert.Equal(t, "AhaSend-Go-SDK/1.0", defaults.DefaultUserAgent)
+	assert.Equal(t, UserAgent, defaults.DefaultUserAgent)
 	assert.False(t, defaults.DefaultDebug)
 	assert.Equal(t, 30*time.Second, defaults.DefaultTimeout)
 	assert.True(t, defaults.DefaultEnableRateLimit)
@@ -125,7 +125,7 @@ func TestApplyDefaults(t *testing.T) {
 
 		assert.Equal(t, "api.ahasend.com", cfg.Host)
 		assert.Equal(t, "https", cfg.Scheme)
-		assert.Equal(t, "AhaSend-Go-SDK/1.0", cfg.UserAgent)
+		assert.Equal(t, UserAgent, cfg.UserAgent)
 		assert.NotNil(t, cfg.DefaultGeneralRateLimit)
 		assert.NotNil(t, cfg.DefaultStatisticsRateLimit)
 		assert.NotNil(t, cfg.DefaultSendMessageRateLimit)
@@ -186,7 +186,7 @@ func TestGetConfigurationSummary(t *testing.T) {
 	summary := GetConfigurationSummary(cfg)
 
 	assert.Equal(t, "https://api.ahasend.com", summary.ServerURL)
-	assert.Equal(t, "AhaSend-Go-SDK/1.0", summary.UserAgent)
+	assert.Equal(t, UserAgent, summary.UserAgent)
 	assert.False(t, summary.Debug)
 	assert.Equal(t, 3, summary.MaxRetries)
 	assert.True(t, summary.RateLimitEnabled)
