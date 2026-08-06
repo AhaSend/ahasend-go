@@ -13,9 +13,9 @@ info:
     - **Domain Events**: DNS configuration issues
     - **Route Events**: Inbound email processing
 
-    ## Standard Webhooks Compliance
+    ## Standard Webhooks Compatibility
 
-    AhaSend webhooks are fully compatible with the [Standard Webhooks specification](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md), ensuring consistent and secure webhook delivery.
+    AhaSend webhook deliveries use the Standard Webhooks header names, signed-content format, HMAC-SHA256 algorithm, and signature format. Secret handling is intentionally different from the encoded-secret convention assumed by some Standard Webhooks libraries, so compatibility with stock libraries is not unconditional.
 
     ### Security Headers
 
@@ -23,35 +23,15 @@ info:
 
     - `webhook-id`: Unique identifier for the webhook event (used as idempotency key)
     - `webhook-timestamp`: Unix timestamp when the webhook was sent
-    - `webhook-signature`: HMAC signature of the payload using your webhook secret
+    - `webhook-signature`: HMAC-SHA256 signature of the payload using the resource secret
 
     ### Verification
 
-    Use the [Standard Webhooks libraries](https://github.com/standard-webhooks/standard-webhooks) to verify webhook authenticity:
+    The HMAC key is the literal UTF-8 bytes of the `secret` returned when the webhook or route resource is created. Use the complete returned string, including any prefix. Do not Base64-decode it and do not strip a prefix.
 
-    ```go
-    import (
-        standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
-    )
-    wh, err := standardwebhooks.NewWebhookRaw(webhookSecret)
-    err = wh.Verify(payload, headers)
-    ```
+    Use the AhaSend SDK verifier, or a verifier that explicitly accepts raw key bytes. A stock Standard Webhooks library is compatible only if it has a raw-secret/raw-key mode that preserves these literal UTF-8 bytes. Constructors that decode an encoded Standard Webhooks secret will derive a different key and reject valid AhaSend deliveries.
 
-    ```javascript
-    import { Webhook } from 'standardwebhooks';
-
-    const wh = new Webhook(webhookSecret);
-    wh.verify(payload, headers);
-    ```
-
-    ```python
-    from standardwebhooks.webhooks import Webhook
-
-    wh = Webhook(webhook_secret)
-    wh.verify(payload, headers)
-    ```
-
-    See the [verification documentation](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md#verifying-webhook-authenticity) for more implementation details.
+    The signed content is the unmodified `webhook-id`, `webhook-timestamp`, and raw request body joined with periods. See the [Standard Webhooks verification algorithm](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md#verifying-webhook-authenticity) for the shared protocol details, subject to the AhaSend secret-handling boundary above.
 
     ### Retry Policy
 
@@ -78,7 +58,7 @@ info:
 
     1. **Configure a webhook** in your AhaSend dashboard
     2. **Choose which events** you want to receive
-    3. **Verify webhook signatures** using Standard Webhooks libraries
+    3. **Verify webhook signatures** using the literal resource secret as described above
     4. **Handle the events** in your application
 
     For more information, visit the [AhaSend webhook documentation](https://ahasend.com/help/integrations/webhooks).
@@ -722,6 +702,7 @@ components:
       type: object
       required:
         - type
+        - webhook_id
         - timestamp
         - data
       properties:
@@ -730,6 +711,10 @@ components:
           enum:
             - message.clicked
           description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
         timestamp:
           type: string
           format: date-time
@@ -789,7 +774,15 @@ components:
           description: IP address (only for opened/clicked events)
         is_bot:
           type: boolean
-          description: Whether the action was performed by a bot
+          description: |
+            Whether the action was performed by a bot.
+
+            Bot detection runs on every open and click and always yields a definite
+            true or false. Current deliveries include the field on every message
+            event; it is meaningful for `message.opened` and always `false`
+            elsewhere. Older deliveries may omit it — absence carries no signal, so
+            do not infer `false` from a missing field and never reject a delivery
+            because of it.
 
     MessageClickedWebhookData:
       type: object
@@ -804,7 +797,6 @@ components:
         - user_agent
         - ip
         - id
-        - is_bot
       properties:
         account_id:
           type: string
@@ -841,12 +833,19 @@ components:
           description: Internal AhaSend message ID
         is_bot:
           type: boolean
-          description: Whether the click was performed by a bot
+          description: |
+            Whether the click was performed by a bot.
+
+            Bot detection runs on every click, so the field is always present with a
+            definite true or false. It stays optional in this schema for tolerance:
+            if it were ever absent, do not infer `false` and do not reject the
+            delivery.
 
     SuppressionWebhookPayload:
       type: object
       required:
         - type
+        - webhook_id
         - timestamp
         - data
       properties:
@@ -854,6 +853,10 @@ components:
           type: string
           enum: [suppression.created]
           description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
         timestamp:
           type: string
           format: date-time
@@ -898,8 +901,8 @@ components:
       type: object
       required:
         - type
-        - timestamp
         - webhook_id
+        - timestamp
         - data
       properties:
         type:
@@ -958,8 +961,9 @@ components:
       properties:
         type:
           type: string
-          enum: [message.routing]
-          description: The event type
+          enum: [message.routing, route.message]
+          x-deprecated-values: [route.message]
+          description: The event type. `message.routing` is canonical; legacy `route.message` remains accepted as deprecated input.
         timestamp:
           type: string
           format: date-time
@@ -973,24 +977,34 @@ components:
 
     RouteWebhookData:
       type: object
+      # Mirrors the producer's struct tags: every field except `headers`
+      # carries no `omitempty`, so Go emits it on every delivery.
       required:
         - id
         - from
+        - reply_to
         - to
         - subject
         - message_id
         - size
+        - spam_score
         - bounce
+        - cc
+        - date
+        - in_reply_to
+        - references
+        - auto_submitted
         - html_body
         - plain_body
+        - reply_from_plain_body
+        - attachments
       properties:
         id:
           type: string
           description: Unique route message ID
         from:
           type: string
-          format: email
-          description: Sender email address
+          description: Sender mailbox text
         reply_to:
           type: string
           format: email
@@ -1059,6 +1073,7 @@ components:
       required:
         - filename
         - content_type
+        - content_id
         - disposition
         - data
       properties:
@@ -1070,14 +1085,34 @@ components:
           description: MIME content type
         content_id:
           type: string
-          description: Content-ID for inline attachments
+          description: |
+            Content-ID with the angle brackets stripped and the remainder
+            percent-decoded, so `<a+b%40x>` arrives as `a b@x`. Empty when the part had
+            no Content-ID header — the key is always present.
+
+            This is what distinguishes an embedded part from a real attachment, not
+            `disposition`: an image referenced by a `cid:` URL commonly arrives with no
+            Content-Disposition header at all.
         disposition:
           type: string
-          enum: [attachment, inline, ""]
           description: |
-            Parsed Content-Disposition value. An empty string indicates that the MIME part
-            had no Content-Disposition header and was recognized as an attachment by its
-            filename or content type.
+            Content-Disposition type of the MIME part, usually `attachment` or `inline`,
+            and `""` when the part carried no Content-Disposition header.
+
+            Note that `""` does not mean "not inline". An embedded image sent as a
+            `multipart/related` part with a Content-ID and no Content-Disposition — what
+            Gmail and Outlook produce — arrives with `disposition: ""` and a populated
+            `content_id`. Use `content_id` to separate embedded parts from real
+            attachments.
+
+            The key is always present, and the value is deliberately unconstrained: it
+            is whatever token the sending mail server wrote, merely lowercased and
+            trimmed of parameters, so tokens other than `attachment` and `inline` (for
+            example `form-data`) do arrive in practice.
+
+            Do not validate this field against a fixed list of values — an arbitrary
+            sender could then make your receiver fail, and repeated delivery failures
+            can disable the webhook. Treat an unrecognized value as `attachment`.
         data:
           type: string
           description: Base64-encoded attachment data

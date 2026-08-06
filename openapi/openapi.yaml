@@ -2662,6 +2662,15 @@ paths:
 
 
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const health = await client.ping();
+            console.log("AhaSend API is reachable.", { message: health.message });
+
       responses:
         '200':
           description: Pong response
@@ -2788,6 +2797,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.apiKeys.list({ limit: 20 });
+            console.log("API keys listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of API keys
@@ -2896,6 +2914,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const apiKey = await client.apiKeys.create(
+              { label: "Production API key", scopes: ["messages:send:all"] },
+              { idempotencyKey: "sdk-sample-create-api-key" },
+            );
+            console.log("API key created.", { id: apiKey.id, label: apiKey.label });
 
       requestBody:
         required: true
@@ -3024,6 +3054,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const keyId = "00000000-0000-4000-8000-000000000001";
+            const apiKey = await client.apiKeys.get(keyId);
+            console.log("API key found.", { id: apiKey.id, label: apiKey.label });
+
       responses:
         '200':
           description: API key details
@@ -3144,6 +3184,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const keyId = "00000000-0000-4000-8000-000000000001";
+            const apiKey = await client.apiKeys.update(keyId, { label: "Renamed API key" });
+            console.log("API key updated.", { id: apiKey.id, label: apiKey.label });
 
       requestBody:
         required: true
@@ -3269,6 +3319,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const keyId = "00000000-0000-4000-8000-000000000001";
+            const result = await client.apiKeys.delete(keyId);
+            console.log("API key deleted.", { message: result.message });
+
       responses:
         '200':
           description: API key deleted successfully
@@ -3399,6 +3459,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.domains.list({ limit: 20 });
+            console.log("Domains listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of domains
@@ -3498,6 +3567,18 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const domain = await client.domains.create(
+              { domain: "example.com" },
+              { idempotencyKey: "sdk-sample-create-domain" },
+            );
+            console.log("Domain created.", { id: domain.id, domain: domain.domain });
+
       requestBody:
         required: true
         content:
@@ -3533,7 +3614,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          description: |
+            Either the domain already exists on the account or the idempotency-key
+            execution is in progress. The in-progress case is identified only
+            by `Idempotent-Replayed: false` plus a positive integer
+            `Retry-After`. A new duplicate-domain response has neither
+            header; a stored replay of that response has
+            `Idempotent-Replayed: true`. The message is not a stable
+            discriminator.
+          headers:
+            Idempotent-Replayed:
+              description: |
+                `false` with a positive `Retry-After` means an execution is in
+                progress. `true` means a stored duplicate-domain 409 was
+                replayed. Absent means a fresh duplicate-domain conflict.
+              schema:
+                type: string
+                enum: ['true', 'false']
+            Retry-After:
+              $ref: '#/components/headers/IdempotencyRetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -3564,6 +3667,7 @@ paths:
           description: Domain name
           schema:
             type: string
+            format: hostname
       security:
         - BearerAuth: ["domains:read"]
       x-code-samples:
@@ -3612,6 +3716,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const domainName = "example.com";
+            const domain = await client.domains.get(domainName);
+            console.log("Domain found.", { domain: domain.domain, dnsValid: domain.dns_valid });
+
       responses:
         '200':
           description: Domain details
@@ -3670,6 +3784,7 @@ paths:
           description: Domain name
           schema:
             type: string
+            format: hostname
       security:
         - BearerAuth: ["domains:write"]
       x-code-samples:
@@ -3720,6 +3835,16 @@ paths:
                 fmt.Printf("Updated domain: %s\n", response.Domain)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const domainName = "example.com";
+            const domain = await client.domains.update(domainName, { tracking_subdomain: "click" });
+            console.log("Domain updated.", { domain: domain.domain });
 
       requestBody:
         required: true
@@ -3785,6 +3910,7 @@ paths:
           description: Domain name
           schema:
             type: string
+            format: hostname
       security:
         - BearerAuth: ["domains:delete:{domain}"]
         - BearerAuth: ["domains:delete:all"]
@@ -3834,6 +3960,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const domainName = "example.com";
+            const result = await client.domains.delete(domainName);
+            console.log("Domain deleted.", { message: result.message });
 
       responses:
         '200':
@@ -3894,6 +4030,7 @@ paths:
           description: Domain name
           schema:
             type: string
+            format: hostname
       security:
         - BearerAuth: ["domains:write"]
       x-code-samples:
@@ -3937,6 +4074,16 @@ paths:
                 fmt.Printf("DNS valid: %t\n", response.DNSValid)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const domainName = "example.com";
+            const domain = await client.domains.checkDns(domainName);
+            console.log("DNS check completed.", { domain: domain.domain, dnsValid: domain.dns_valid });
 
       responses:
         '200':
@@ -4123,6 +4270,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.messages.list({ limit: 20 });
+            console.log("Messages listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of messages
@@ -4252,6 +4408,24 @@ paths:
               }
             }
 
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const result = await client.messages.send(
+              {
+                from: { email: "sender@example.com", name: "Example" },
+                recipients: [{ email: "recipient@example.net" }],
+                subject: "Hello from AhaSend",
+                html_content: "<p>Hello!</p>",
+                sandbox: true,
+              },
+              { idempotencyKey: "sdk-sample-send-message" },
+            );
+            console.log("Sandbox message accepted.", { count: result.data.length });
 
       requestBody:
         required: true
@@ -4405,6 +4579,24 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const result = await client.messages.sendConversation(
+              {
+                from: { email: "sender@example.com", name: "Example" },
+                to: [{ email: "recipient@example.net" }],
+                subject: "Hello from AhaSend",
+                html_content: "<p>Hello!</p>",
+                sandbox: true,
+              },
+              { idempotencyKey: "sdk-sample-send-conversation" },
+            );
+            console.log("Sandbox conversation accepted.", { count: result.data.length });
+
       requestBody:
         required: true
         content:
@@ -4525,6 +4717,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const messageId = "00000000-0000-4000-8000-000000000002";
+            const message = await client.messages.get(messageId);
+            console.log("Message found.", { id: message.id, status: message.status });
+
       responses:
         '200':
           description: Message details
@@ -4635,6 +4837,16 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const messageId = "00000000-0000-4000-8000-000000000002";
+            const result = await client.messages.cancel(messageId);
+            console.log("Message cancellation requested.", { message: result.message });
+
       responses:
         '200':
           description: Scheduled message is cancelled
@@ -4734,6 +4946,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const account = await client.accounts.get();
+            console.log("Account found.", { id: account.id, name: account.name });
+
       responses:
         '200':
           description: Account details
@@ -4846,6 +5067,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const account = await client.accounts.update({ name: "Example, Inc." });
+            console.log("Account updated.", { id: account.id, name: account.name });
+
       requestBody:
         required: true
         content:
@@ -4952,6 +5182,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const members = await client.accounts.listMembers();
+            console.log("Account members listed.", { count: members.data.length });
+
       responses:
         '200':
           description: List of account members
@@ -5053,6 +5292,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const member = await client.accounts.addMember(
+              { email: "developer@example.com", role: "Developer" },
+              { idempotencyKey: "sdk-sample-add-account-member" },
+            );
+            console.log("Account member added.", { userId: member.user_id, role: member.role });
+
       requestBody:
         required: true
         content:
@@ -5088,7 +5339,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          description: |
+            Either the user is already a member of the account or the idempotency-key
+            execution is in progress. The in-progress case is identified only
+            by `Idempotent-Replayed: false` plus a positive integer
+            `Retry-After`. A new duplicate-member response has neither
+            header; a stored replay of that response has
+            `Idempotent-Replayed: true`. The message is not a stable
+            discriminator.
+          headers:
+            Idempotent-Replayed:
+              description: |
+                `false` with a positive `Retry-After` means an execution is in
+                progress. `true` means a stored duplicate-member 409 was
+                replayed. Absent means a fresh duplicate-member conflict.
+              schema:
+                type: string
+                enum: ['true', 'false']
+            Retry-After:
+              $ref: '#/components/headers/IdempotencyRetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '500':
@@ -5169,6 +5442,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const userId = "00000000-0000-4000-8000-000000000003";
+            const result = await client.accounts.removeMember(userId);
+            console.log("Account member removed.", { message: result.message });
+
       responses:
         '200':
           description: Member removed successfully
@@ -5287,6 +5570,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.subAccounts.list({ limit: 20 });
+            console.log("Sub-accounts listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of sub accounts
@@ -5391,6 +5683,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccount = await client.subAccounts.create(
+              { name: "Example subsidiary", website: "subsidiary.example.com" },
+              { idempotencyKey: "sdk-sample-create-sub-account" },
+            );
+            console.log("Sub-account created.", { id: subAccount.id, status: subAccount.status });
+
       requestBody:
         required: true
         content:
@@ -5507,6 +5811,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const usage = await client.subAccounts.usage();
+            console.log("Sub-account usage loaded.", {
+              currency: usage.currency,
+              subAccountCount: usage.sub_accounts.length,
+            });
+
       responses:
         '200':
           description: Sub-account usage breakdown
@@ -5620,6 +5936,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const subAccount = await client.subAccounts.get(subAccountId);
+            console.log("Sub-account found.", { id: subAccount.id, status: subAccount.status });
+
       responses:
         '200':
           description: Sub account details
@@ -5726,6 +6052,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const subAccount = await client.subAccounts.update(subAccountId, {
+              name: "Renamed subsidiary",
+            });
+            console.log("Sub-account updated.", { id: subAccount.id, status: subAccount.status });
+
       requestBody:
         required: true
         content:
@@ -5835,6 +6173,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const result = await client.subAccounts.delete(subAccountId);
+            console.log("Sub-account deleted.", { message: result.message });
+
       responses:
         '200':
           description: Sub account deleted successfully
@@ -5942,6 +6290,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const subAccount = await client.subAccounts.suspend(subAccountId, {
+              reason: "Requested by account administrator",
+            });
+            console.log("Sub-account suspended.", { id: subAccount.id, status: subAccount.status });
+
       requestBody:
         required: true
         content:
@@ -6053,6 +6413,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const subAccount = await client.subAccounts.unsuspend(subAccountId);
+            console.log("Sub-account unsuspended.", { id: subAccount.id, status: subAccount.status });
+
       responses:
         '200':
           description: Sub account unsuspended successfully
@@ -6186,6 +6556,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const page = await client.subAccounts.apiKeys.list(subAccountId, { limit: 20 });
+            console.log("Sub-account API keys listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of sub-account API keys
@@ -6341,6 +6721,20 @@ paths:
 
             curl -sS "https://api.ahasend.com/v2/accounts/${CHILD_ACCOUNT_ID}/domains" \
               -H "Authorization: Bearer ${CHILD_SECRET}"
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const apiKey = await client.subAccounts.apiKeys.create(
+              subAccountId,
+              { label: "Bootstrap key", scopes: ["messages:send:all"] },
+              { idempotencyKey: "sdk-sample-create-sub-account-api-key" },
+            );
+            console.log("Sub-account API key created.", { id: apiKey.id, label: apiKey.label });
+
       requestBody:
         required: true
         content:
@@ -6508,6 +6902,17 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const keyId = "00000000-0000-4000-8000-000000000005";
+            const apiKey = await client.subAccounts.apiKeys.get(subAccountId, keyId);
+            console.log("Sub-account API key found.", { id: apiKey.id, label: apiKey.label });
+
       responses:
         '200':
           description: Sub-account API key details
@@ -6622,6 +7027,19 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const keyId = "00000000-0000-4000-8000-000000000005";
+            const apiKey = await client.subAccounts.apiKeys.update(subAccountId, keyId, {
+              label: "Renamed bootstrap key",
+            });
+            console.log("Sub-account API key updated.", { id: apiKey.id, label: apiKey.label });
+
       requestBody:
         required: true
         content:
@@ -6741,6 +7159,17 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const keyId = "00000000-0000-4000-8000-000000000005";
+            const result = await client.subAccounts.apiKeys.delete(subAccountId, keyId);
+            console.log("Sub-account API key deleted.", { message: result.message });
+
       responses:
         '200':
           description: Sub-account API key deleted successfully
@@ -6899,6 +7328,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.suppressions.list({ limit: 20 });
+            console.log("Suppressions listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of suppressions
@@ -7013,6 +7451,22 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const result = await client.suppressions.create(
+              {
+                email: "recipient@example.net",
+                reason: "User requested removal",
+                expires_at: "2030-01-01T00:00:00Z",
+              },
+              { idempotencyKey: "sdk-sample-create-suppression" },
+            );
+            console.log("Suppression created.", { count: result.data.length });
+
       requestBody:
         required: true
         content:
@@ -7161,6 +7615,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const result = await client.suppressions.delete({ email: "recipient@example.net" });
+            console.log("Suppression deleted.", { message: result.message });
+
       responses:
         '200':
           description: Suppression deleted successfully
@@ -7271,6 +7734,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const result = await client.suppressions.wipe({ domain: "example.com" });
+            console.log("Domain suppressions deleted.", { message: result.message });
 
       responses:
         '200':
@@ -7403,6 +7875,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.routes.list({ domain: "example.com", limit: 20 });
+            console.log("Routes listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of routes
@@ -7511,6 +7992,22 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const route = await client.routes.create(
+              {
+                name: "Inbound messages",
+                url: "https://example.com/inbound",
+                recipient: "inbound@example.com",
+              },
+              { idempotencyKey: "sdk-sample-create-route" },
+            );
+            console.log("Route created.", { id: route.id, name: route.name });
 
       requestBody:
         required: true
@@ -7630,6 +8127,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const routeId = "00000000-0000-4000-8000-000000000006";
+            const route = await client.routes.get(routeId);
+            console.log("Route found.", { id: route.id, name: route.name });
+
       responses:
         '200':
           description: Route details
@@ -7748,6 +8255,18 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const routeId = "00000000-0000-4000-8000-000000000006";
+            const route = await client.routes.update(routeId, {
+              url: "https://example.com/inbound-v2",
+            });
+            console.log("Route updated.", { id: route.id, name: route.name });
+
       requestBody:
         required: true
         content:
@@ -7864,6 +8383,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const routeId = "00000000-0000-4000-8000-000000000006";
+            const result = await client.routes.delete(routeId);
+            console.log("Route deleted.", { message: result.message });
 
       responses:
         '200':
@@ -8056,6 +8585,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.webhooks.list({ limit: 20 });
+            console.log("Webhooks listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of webhooks
@@ -8167,6 +8705,23 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const webhook = await client.webhooks.create(
+              {
+                name: "Delivery events",
+                url: "https://example.com/webhooks/ahasend",
+                scope: "global",
+                on_delivered: true,
+              },
+              { idempotencyKey: "sdk-sample-create-webhook" },
+            );
+            console.log("Webhook created.", { id: webhook.id, name: webhook.name });
+
       requestBody:
         required: true
         content:
@@ -8286,6 +8841,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const webhookId = "00000000-0000-4000-8000-000000000007";
+            const webhook = await client.webhooks.get(webhookId);
+            console.log("Webhook found.", { id: webhook.id, name: webhook.name });
+
       responses:
         '200':
           description: Webhook details
@@ -8413,6 +8978,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const webhookId = "00000000-0000-4000-8000-000000000007";
+            const webhook = await client.webhooks.update(webhookId, {
+              name: "Transactional delivery events",
+            });
+            console.log("Webhook updated.", { id: webhook.id, name: webhook.name });
+
       requestBody:
         required: true
         content:
@@ -8529,6 +9106,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const webhookId = "00000000-0000-4000-8000-000000000007";
+            const result = await client.webhooks.delete(webhookId);
+            console.log("Webhook deleted.", { message: result.message });
+
       responses:
         '200':
           description: Webhook deleted successfully
@@ -8654,6 +9241,15 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.smtpCredentials.list({ limit: 20 });
+            console.log("SMTP credentials listed.", { count: page.data.length });
+
       responses:
         '200':
           description: List of SMTP credentials
@@ -8761,6 +9357,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const credential = await client.smtpCredentials.create(
+              { name: "Production SMTP", scope: "global" },
+              { idempotencyKey: "sdk-sample-create-smtp-credential" },
+            );
+            console.log("SMTP credential created.", { id: credential.id, name: credential.name });
+
       requestBody:
         required: true
         content:
@@ -8880,6 +9488,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const credentialId = "00000000-0000-4000-8000-000000000008";
+            const credential = await client.smtpCredentials.get(credentialId);
+            console.log("SMTP credential found.", { id: credential.id, name: credential.name });
+
       responses:
         '200':
           description: SMTP credential details
@@ -8991,6 +9609,16 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const credentialId = "00000000-0000-4000-8000-000000000008";
+            const result = await client.smtpCredentials.delete(credentialId);
+            console.log("SMTP credential deleted.", { message: result.message });
+
       responses:
         '200':
           description: SMTP credential deleted successfully
@@ -9151,6 +9779,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const statistics = await client.statistics.deliverability({
+              from_time: "2026-01-01T00:00:00Z",
+              to_time: "2026-01-02T00:00:00Z",
+            });
+            console.log("Deliverability statistics loaded.", { buckets: statistics.data.length });
+
       responses:
         '200':
           description: Deliverability statistics
@@ -9310,6 +9950,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const statistics = await client.statistics.bounces({
+              from_time: "2026-01-01T00:00:00Z",
+              to_time: "2026-01-02T00:00:00Z",
+            });
+            console.log("Bounce statistics loaded.", { buckets: statistics.data.length });
+
       responses:
         '200':
           description: Bounce statistics
@@ -9469,6 +10121,18 @@ paths:
                 fmt.Printf("❌ Unexpected status code: %d\n", httpResp.StatusCode)
               }
             }
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const statistics = await client.statistics.deliveryTimes({
+              from_time: "2026-01-01T00:00:00Z",
+              to_time: "2026-01-02T00:00:00Z",
+            });
+            console.log("Delivery-time statistics loaded.", { buckets: statistics.data.length });
+
       responses:
         '200':
           description: Delivery time statistics

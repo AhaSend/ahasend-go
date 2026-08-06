@@ -57,6 +57,7 @@ func TestAPIError_IsRetryable(t *testing.T) {
 		{"Permission", ErrorTypePermission, false},
 		{"NotFound", ErrorTypeNotFound, false},
 		{"Conflict", ErrorTypeConflict, false},
+		{"IdempotencyConflict", ErrorTypeIdempotencyConflict, true},
 		{"Idempotency", ErrorTypeIdempotency, false},
 		{"Unknown", ErrorTypeUnknown, false},
 	}

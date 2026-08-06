@@ -50,7 +50,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -703,7 +702,7 @@ func (c *APIClient) handleErrorResponse(resp *http.Response, body []byte, method
 	// Create base API error
 	apiErr := &APIError{
 		StatusCode: resp.StatusCode,
-		Type:       determineErrorType(resp.StatusCode),
+		Type:       classifyErrorType(resp),
 		Raw:        body,
 	}
 
@@ -712,14 +711,8 @@ func (c *APIClient) handleErrorResponse(resp *http.Response, body []byte, method
 		apiErr.RequestID = reqID
 	}
 
-	// Extract retry-after for rate limit errors
-	if apiErr.Type == ErrorTypeRateLimit {
-		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-			if seconds, err := strconv.Atoi(retryAfter); err == nil {
-				apiErr.RetryAfter = seconds
-			}
-		}
-	}
+	// Extract retry-after for the error types that carry one
+	apiErr.RetryAfter = retryAfterSeconds(resp, apiErr.Type)
 
 	// Try to parse error response body
 	var errorResp common.ErrorResponse

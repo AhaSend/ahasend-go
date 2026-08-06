@@ -10,6 +10,7 @@ The AhaSend Go SDK provides comprehensive idempotency support to ensure safe req
 - [Basic Usage](#basic-usage)
 - [Advanced Features](#advanced-features)
 - [API Reference](#api-reference)
+- [Handling a Request Still in Flight](#handling-a-request-still-in-flight)
 - [Best Practices](#best-practices)
 - [Examples](#examples)
 - [Environment Configuration](#environment-configuration)
@@ -276,6 +277,52 @@ func (c *APIClient) SetIdempotencyConfig(config IdempotencyConfig)
 // Create builder with client configuration
 func (c *APIClient) NewIdempotencyKeyBuilder(baseKey ...string) *IdempotencyKeyBuilder
 ```
+
+## Handling a Request Still in Flight
+
+Reusing a key while the original request is still being processed returns
+`409 Conflict` — but so does creating a resource that already exists, and the
+two need opposite reactions. The API distinguishes them with headers: the
+in-flight response carries `Idempotent-Replayed: false` together with a
+positive integer `Retry-After`, while a duplicate-resource conflict carries
+neither and a replayed result carries `Idempotent-Replayed: true`.
+
+The SDK classifies that for you. Only the in-flight conflict gets
+`ErrorTypeIdempotencyConflict`, and only it reports `IsRetryable() == true`;
+every other 409 stays a terminal `ErrorTypeConflict`.
+
+```go
+_, httpResp, err := client.DomainsAPI.CreateDomain(ctx, accountID, request)
+
+var apiErr *api.APIError
+if errors.As(err, &apiErr) && apiErr.Type == api.ErrorTypeIdempotencyConflict {
+    // The original request is still running. Wait, then retry with the same key.
+    time.Sleep(time.Duration(apiErr.RetryAfter) * time.Second)
+    // ... retry with the same idempotency key
+}
+```
+
+`RetryAfter` is what remains of the original request's execution lease, so a
+retry lands at the moment the lease expires. If the original finished, you get
+its stored result replayed. If it did not — the handler outran its lease, or
+crashed before its result was recorded — the retry takes the lease over and
+executes again, which for a side-effecting operation means the effect can happen
+twice. Retrying is safe to automate for reads; for sends, decide whether a
+possible duplicate is worse than a possible miss.
+
+The SDK's transport never retries a 4xx on its own, so this conflict is
+reported but not retried automatically — waiting and retrying is your
+decision.
+
+The same information is on the wire, readable from the `*http.Response` that
+every method returns alongside the error:
+
+```go
+replayed := httpResp.Header.Get("Idempotent-Replayed")  // "false" while in flight
+```
+
+The error type is the durable form of that signal once the response has gone
+out of scope.
 
 ## Best Practices
 

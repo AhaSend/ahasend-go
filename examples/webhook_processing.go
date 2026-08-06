@@ -211,9 +211,7 @@ func handleMessageOpened(event *webhooks.MessageOpenedEvent) error {
 	if event.Data.IP != nil {
 		log.Printf("  IP: %s", *event.Data.IP)
 	}
-	if event.Data.IsBot != nil {
-		log.Printf("  Is Bot: %s", *event.Data.IsBot)
-	}
+	log.Printf("  Is Bot: %v", event.Data.IsBot)
 
 	// TODO: Add your business logic here
 	// For example, track engagement metrics
@@ -339,8 +337,10 @@ func exampleAdvancedWebhookHandler(verifier *webhooks.WebhookVerifier) http.Hand
 			// Return appropriate status codes
 			switch err {
 			case webhooks.ErrExpiredTimestamp:
-				// Still process but log the delay
-				log.Printf("[%s] WARNING: Processing expired webhook (timestamp too old)", requestID)
+				// Still process but log the drift. A timestamp outside tolerance
+				// is usually clock skew on either side, but it can also be a
+				// replay probe - this check runs before signature verification.
+				log.Printf("[%s] WARNING: Processing webhook with an out-of-tolerance timestamp", requestID)
 				// You might still want to process it depending on your use case
 			case webhooks.ErrInvalidSignature, webhooks.ErrMissingHeaders:
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)

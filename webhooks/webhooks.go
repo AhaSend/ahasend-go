@@ -34,8 +34,9 @@ var (
 	ErrMissingHeaders = errors.New("missing required webhook headers")
 	// ErrInvalidSignature is returned when the webhook signature is invalid
 	ErrInvalidSignature = errors.New("invalid webhook signature")
-	// ErrExpiredTimestamp is returned when the webhook timestamp is too old
-	ErrExpiredTimestamp = errors.New("webhook timestamp expired")
+	// ErrExpiredTimestamp is returned when the webhook timestamp is outside the
+	// tolerance window, in either direction: too old, or too far in the future
+	ErrExpiredTimestamp = errors.New("webhook timestamp outside tolerance")
 	// ErrInvalidPayload is returned when the webhook payload cannot be parsed
 	ErrInvalidPayload = errors.New("invalid webhook payload")
 	// ErrUnknownEventType is returned when the webhook event type is not recognized
@@ -78,8 +79,15 @@ func (v *WebhookVerifier) Verify(payload []byte, headers http.Header) error {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
 
+	// Standard Webhooks requires the timestamp to be within tolerance of now in
+	// either direction, so a far-future timestamp is rejected just like a stale
+	// one. The bounds are compared as instants rather than as a signed duration:
+	// a duration saturates for timestamps beyond its ~292 year range, and
+	// negating a saturated minimum wraps back to itself, which would let the
+	// far future through.
 	webhookTime := time.Unix(timestamp, 0)
-	if time.Since(webhookTime) > v.tolerance {
+	now := time.Now()
+	if webhookTime.Before(now.Add(-v.tolerance)) || webhookTime.After(now.Add(v.tolerance)) {
 		return ErrExpiredTimestamp
 	}
 

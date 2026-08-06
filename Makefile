@@ -77,7 +77,7 @@ test-unit: ## Run unit tests
 test-integration: ## Run integration tests (requires Prism)
 	@echo "$(BLUE)Running integration tests...$(RESET)"
 	@which prism > /dev/null || (echo "$(RED)Prism CLI is required for integration tests$(RESET)" && echo "$(YELLOW)Install with: npm install -g @stoplight/prism-cli$(RESET)" && exit 1)
-	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at api/openapi.yaml$(RESET)" && exit 1)
+	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at openapi/openapi.yaml$(RESET)" && exit 1)
 	SKIP_INTEGRATION_TESTS=false go test -v -timeout=10m -tags=integration ./test/
 
 test-coverage: ## Run tests with coverage
@@ -115,16 +115,15 @@ clean: ## Clean build artifacts and test files
 mock-server: ## Start Prism mock server (for manual testing)
 	@echo "$(BLUE)Starting Prism mock server...$(RESET)"
 	@which prism > /dev/null || (echo "$(RED)Prism CLI is required$(RESET)" && echo "$(YELLOW)Install with: npm install -g @stoplight/prism-cli$(RESET)" && exit 1)
-	@test -f api/openapi.yaml || (echo "$(RED)OpenAPI spec not found at api/openapi.yaml$(RESET)" && exit 1)
+	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at openapi/openapi.yaml$(RESET)" && exit 1)
 	@echo "$(GREEN)Mock server will start on http://localhost:4010$(RESET)"
 	@echo "$(YELLOW)Press Ctrl+C to stop the server$(RESET)"
-	prism mock api/openapi.yaml --host 0.0.0.0 --port 4010 --dynamic
+	prism mock openapi/openapi.yaml --host 0.0.0.0 --port 4010 --dynamic
 
-mock-server-validate: ## Validate OpenAPI spec with Prism
+mock-server-validate: ## Validate the OpenAPI spec
 	@echo "$(BLUE)Validating OpenAPI spec...$(RESET)"
-	@which prism > /dev/null || (echo "$(RED)Prism CLI is required$(RESET)" && exit 1)
-	@test -f api/openapi.yaml || (echo "$(RED)OpenAPI spec not found at api/openapi.yaml$(RESET)" && exit 1)
-	npx @apidevtools/swagger-parser validate api/openapi.yaml
+	@test -f openapi/openapi.yaml || (echo "$(RED)OpenAPI spec not found at openapi/openapi.yaml$(RESET)" && exit 1)
+	npx --yes @redocly/cli lint openapi/openapi.yaml
 	@echo "$(GREEN)OpenAPI spec is valid!$(RESET)"
 
 # Development workflow
