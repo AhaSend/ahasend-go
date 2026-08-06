@@ -13,6 +13,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/AhaSend/ahasend-go/internal/prismmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ func Test_ahasend_UtilityAPIService(t *testing.T) {
 
 	// Create configuration for Prism mock server
 	configuration := NewConfiguration()
-	configuration.Host = "localhost:4010" // Point to Prism mock server
+	configuration.Host = prismmock.Addr() // Point to the Prism mock server
 	configuration.Scheme = "http"         // Use HTTP for mock server
 	configuration.APIKey = "test-api-key"
 	apiClient := NewAPIClientWithConfig(configuration)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/internal/prismmock"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,7 +22,7 @@ func TestBasicIntegrationInfrastructure(t *testing.T) {
 	t.Run("Client creation and configuration", func(t *testing.T) {
 		// Test that we can create a client with test configuration
 		cfg := api.NewConfiguration()
-		cfg.Host = "localhost:4010"
+		cfg.Host = prismmock.Addr()
 		cfg.Scheme = "http"
 		cfg.EnableRateLimit = false
 		cfg.Debug = false
@@ -30,7 +31,7 @@ func TestBasicIntegrationInfrastructure(t *testing.T) {
 		assert.NotNil(t, client)
 
 		// Verify configuration
-		assert.Equal(t, "localhost:4010", client.GetConfig().Host)
+		assert.Equal(t, prismmock.Addr(), client.GetConfig().Host)
 		assert.Equal(t, "http", client.GetConfig().Scheme)
 		assert.False(t, client.GetConfig().EnableRateLimit)
 	})

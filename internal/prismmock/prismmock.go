@@ -8,16 +8,37 @@ package prismmock
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
 
-// DefaultPort is the port the mock server listens on.
-const DefaultPort = "4010"
+// fallbackAddr is what Addr reports when no mock server is running, so that
+// tests which only inspect a client's configuration still have a stable value
+// to compare against.
+const fallbackAddr = "127.0.0.1:4010"
+
+// addr is the address of the mock server started for this test binary.
+//
+// Every test binary gets its own port. `go test ./api/ ./test/` runs the two
+// packages concurrently, and on a fixed port the second server fails to bind
+// while the readiness probe still succeeds against the first - so the packages
+// silently share one server, and whichever finishes first kills it underneath
+// the other.
+var addr string
+
+// Addr returns the host:port of the mock server for this test binary.
+func Addr() string {
+	if addr == "" {
+		return fallbackAddr
+	}
+	return addr
+}
 
 // skipEnv disables the Prism-backed tests. Each test reads it directly, so
 // setting it here is how an unavailable mock turns into a skip.
@@ -37,15 +58,20 @@ type Server struct {
 	port string
 }
 
-// Start launches Prism against this module's OpenAPI specification and waits
-// until it answers requests.
+// Start launches Prism against this module's OpenAPI specification on a free
+// port and waits until it answers requests.
 //
 // The mock runs in static mode. Prism's --dynamic mode invents a fresh value
 // for every field on every request, including values the specification permits
 // but the API never emits, which makes it a generator of spurious failures
 // rather than a contract check.
-func Start(port string) (*Server, error) {
+func Start() (*Server, error) {
 	specPath, err := findSpec()
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := freePort()
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +100,7 @@ func Start(port string) (*Server, error) {
 	deadline := time.Now().Add(startTimeout)
 	for time.Now().Before(deadline) {
 		if server.ready() {
+			addr = server.Addr()
 			return server, nil
 		}
 		time.Sleep(time.Second)
@@ -95,9 +122,11 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// Addr is the host:port the mock server listens on.
+// Addr is the host:port the mock server listens on. It is the loopback
+// address rather than "localhost" so that a host resolving localhost to ::1
+// first cannot change which interface the tests reach.
 func (s *Server) Addr() string {
-	return "localhost:" + s.port
+	return "127.0.0.1:" + s.port
 }
 
 // ready reports whether the mock answers. An unauthenticated request is
@@ -120,13 +149,13 @@ func (s *Server) ready() bool {
 // without Prism. Setting AHASEND_REQUIRE_PRISM=true turns that skip into a
 // failure, which is what the release pipeline wants: a gate that cannot pass
 // by running nothing.
-func RunTests(m *testing.M, port string) int {
+func RunTests(m *testing.M) int {
 	if os.Getenv(skipEnv) == "true" {
 		fmt.Printf("prismmock: %s=true, running without the mock server\n", skipEnv)
 		return m.Run()
 	}
 
-	server, err := Start(port)
+	server, err := Start()
 	if err != nil {
 		if os.Getenv(requireEnv) == "true" {
 			fmt.Printf("prismmock: %s=true and the mock server could not start: %v\n", requireEnv, err)
@@ -146,6 +175,21 @@ func RunTests(m *testing.M, port string) int {
 		fmt.Printf("prismmock: failed to stop the mock server: %v\n", stopErr)
 	}
 	return code
+}
+
+// freePort asks the kernel for an unused port and releases it again. Prism
+// needs to be told a port, so there is an unavoidable gap between choosing one
+// and Prism binding it; nothing else on a test machine is racing for ports in
+// that window.
+func freePort() (string, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", fmt.Errorf("failed to reserve a port for the mock server: %w", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	return strconv.Itoa(port), nil
 }
 
 // findSpec walks up from the working directory to the module root and returns

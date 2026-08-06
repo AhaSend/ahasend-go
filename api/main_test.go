@@ -15,5 +15,5 @@ import (
 // a plain `go test ./api/` failed with connection errors. See prismmock for
 // how an unavailable mock is handled.
 func TestMain(m *testing.M) {
-	os.Exit(prismmock.RunTests(m, prismmock.DefaultPort))
+	os.Exit(prismmock.RunTests(m))
 }

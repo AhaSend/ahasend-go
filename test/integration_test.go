@@ -18,11 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	prismPort    = "4010"
-	prismBaseURL = "http://localhost:" + prismPort
-	testAPIKey   = "aha-sk-test-key-for-integration-testing-12345678901234567890"
-)
+const testAPIKey = "aha-sk-test-key-for-integration-testing-12345678901234567890"
+
+// prismBaseURL addresses the mock server started for this test binary. The
+// port is chosen per binary, so it is only known once the server is up.
+func prismBaseURL() string { return "http://" + prismmock.Addr() }
 
 var (
 	testAccountID = uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
@@ -30,13 +30,13 @@ var (
 
 // TestMain starts the Prism mock server the tests in this package run against.
 func TestMain(m *testing.M) {
-	os.Exit(prismmock.RunTests(m, prismPort))
+	os.Exit(prismmock.RunTests(m))
 }
 
 // createTestClient creates a test client configured for the mock server
 func createTestClient() *api.APIClient {
 	cfg := api.NewConfiguration()
-	cfg.Host = "localhost:" + prismPort
+	cfg.Host = prismmock.Addr()
 	cfg.Scheme = "http"
 	cfg.EnableRateLimit = false // Disable rate limiting for tests
 	cfg.APIKey = testAPIKey     // Set client-level authentication
@@ -245,7 +245,7 @@ func TestRateLimiting(t *testing.T) {
 
 	// Create client with rate limiting enabled
 	cfg := api.NewConfiguration()
-	cfg.Host = "localhost:" + prismPort
+	cfg.Host = prismmock.Addr()
 	cfg.Scheme = "http"
 	cfg.EnableRateLimit = true
 	cfg.RetryConfig.MaxRetries = 1
