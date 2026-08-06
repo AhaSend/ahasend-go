@@ -13,6 +13,11 @@ env:
   GO_VERSION: '1.21'
   NODE_VERSION: '18'
 
+# The repository default is a read/write token. Nothing in this workflow
+# writes to the repository, so every job here reads and nothing more.
+permissions:
+  contents: read
+
 jobs:
   # Lint and format check
   lint:

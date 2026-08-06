@@ -5,10 +5,9 @@ on:
     tags:
       - 'v*.*.*'  # Trigger on version tags like v1.0.0
 
+# Read-only by default; the two jobs that write declare what they need.
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   # Validate the release
@@ -105,6 +104,9 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    # actions/create-release publishes the GitHub release.
+    permissions:
+      contents: write
     needs: [validate, test-release]
 
     steps:
@@ -183,6 +185,10 @@ jobs:
     name: Post Release
     runs-on: ubuntu-latest
     needs: [validate, release]
+    # actions/github-script opens the follow-up documentation issue.
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Checkout code
