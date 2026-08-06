@@ -20,10 +20,6 @@ import (
 
 const testAPIKey = "aha-sk-test-key-for-integration-testing-12345678901234567890"
 
-// prismBaseURL addresses the mock server started for this test binary. The
-// port is chosen per binary, so it is only known once the server is up.
-func prismBaseURL() string { return "http://" + prismmock.Addr() }
-
 var (
 	testAccountID = uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
 )
@@ -46,7 +42,7 @@ func createTestClient() *api.APIClient {
 
 // createAuthContext creates a context with test authentication
 func createAuthContext() context.Context {
-	return CreateTestAuthContext(testAPIKey)
+	return context.WithValue(context.Background(), api.ContextAccessToken, testAPIKey)
 }
 
 // TestPingEndpoint tests the basic connectivity with the mock server
