@@ -18,7 +18,7 @@ func TestMessage_JSONMarshaling(t *testing.T) {
 	apiID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 	deliveredAt := now.Add(5 * time.Minute)
-	bounceClass := "hard"
+	bounceClass := "InvalidRecipient"
 	refMsgID := int64(789)
 	msg := Message{
 		Object:               "message",
@@ -68,7 +68,7 @@ func TestMessage_JSONMarshaling(t *testing.T) {
 	assert.True(t, unmarshaled.SentAt.Equal(now))
 
 	assert.NotNil(t, unmarshaled.BounceClassification)
-	assert.Equal(t, "hard", *unmarshaled.BounceClassification)
+	assert.Equal(t, "InvalidRecipient", *unmarshaled.BounceClassification)
 
 	assert.NotNil(t, unmarshaled.ReferenceMessageID)
 	assert.Equal(t, int64(789), *unmarshaled.ReferenceMessageID)
@@ -190,7 +190,7 @@ func TestMessage_OptionalFields_JSONMarshaling(t *testing.T) {
 
 	t.Run("complete message with all optional fields", func(t *testing.T) {
 		now := time.Now().Truncate(time.Second)
-		bounceClass := "soft"
+		bounceClass := "QuotaIssues"
 		refID := int64(12345)
 
 		msg := Message{
@@ -235,7 +235,7 @@ func TestMessage_OptionalFields_JSONMarshaling(t *testing.T) {
 		assert.Equal(t, msg.Status, unmarshaled.Status)
 		assert.Equal(t, msg.IsBounceNotification, unmarshaled.IsBounceNotification)
 		assert.NotNil(t, unmarshaled.BounceClassification)
-		assert.Equal(t, "soft", *unmarshaled.BounceClassification)
+		assert.Equal(t, "QuotaIssues", *unmarshaled.BounceClassification)
 		assert.NotNil(t, unmarshaled.ReferenceMessageID)
 		assert.Equal(t, int64(12345), *unmarshaled.ReferenceMessageID)
 	})

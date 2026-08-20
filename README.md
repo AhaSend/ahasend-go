@@ -209,30 +209,59 @@ go run examples/send_email.go
 The SDK includes Standard Webhooks compliant processing with HMAC-SHA256 verification:
 
 ```go
-import "github.com/AhaSend/ahasend-go/webhooks"
+package main
 
-// Create verifier
-verifier, _ := webhooks.NewWebhookVerifier("your-webhook-secret")
+import (
+    "log"
+    "net/http"
 
-// In your HTTP handler
-func webhookHandler(w http.ResponseWriter, r *http.Request) {
-    event, err := verifier.ParseRequest(r)
+    "github.com/AhaSend/ahasend-go/webhooks"
+)
+
+func main() {
+    verifier, err := webhooks.NewWebhookVerifier("your-webhook-secret")
     if err != nil {
-        http.Error(w, "Invalid webhook", 400)
-        return
+        log.Fatal(err)
     }
 
-    // Handle different event types
-    switch e := event.(type) {
-    case *webhooks.MessageDeliveredEvent:
-        log.Printf("Email delivered to %s", e.Data.Recipient)
-    case *webhooks.MessageBouncedEvent:
-        log.Printf("Email bounced: %s", e.Data.Reason)
-    }
+    http.HandleFunc("/webhooks", func(w http.ResponseWriter, r *http.Request) {
+        event, err := verifier.ParseRequest(r)
+        if err != nil {
+            http.Error(w, "Invalid webhook", http.StatusBadRequest)
+            return
+        }
 
-    w.WriteHeader(200)
+        // Handle different event types
+        switch e := event.(type) {
+        case *webhooks.MessageDeliveredEvent:
+            log.Printf("Email delivered to %s", e.Data.Recipient)
+        case *webhooks.MessageBouncedEvent:
+            // DeliveryAttempt is optional and nil when no SMTP attempt was
+            // recorded, so check before reading. Log the codes and the
+            // classification; Response and Description are free-form text that
+            // routinely embeds the recipient and message content.
+            if a := e.Data.DeliveryAttempt; a != nil {
+                log.Printf("Email bounced with SMTP code %d", a.SMTPCode)
+                if a.Classification != nil {
+                    log.Printf("  classification: %s", *a.Classification)
+                }
+            } else {
+                log.Printf("Email bounced, no delivery attempt recorded")
+            }
+        }
+
+        w.WriteHeader(http.StatusOK)
+    })
+
+    log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
+
+The bucket in `DeliveryAttempt.Classification` is an open set — new values can
+appear at any time — so switch on the `webhooks.Classification*` constants you
+handle and keep a `default` branch for the rest. Never reject a delivery
+because the value is unfamiliar: an endpoint that answers 400 is disabled after
+100 consecutive failures.
 
 **Supported Events**: `message.*` (delivered, bounced, opened, clicked), `suppression.*`, `domain.*`, `route.*`
 

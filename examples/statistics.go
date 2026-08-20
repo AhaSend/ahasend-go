@@ -13,6 +13,7 @@ import (
 	"github.com/AhaSend/ahasend-go/api"
 	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
+	"github.com/AhaSend/ahasend-go/webhooks"
 	"github.com/google/uuid"
 )
 
@@ -186,14 +187,27 @@ func getBounceStats(ctx context.Context, client *api.APIClient, accountID uuid.U
 			}
 		}
 
-		// Common bounce reasons
+		// Common bounce reasons. These are the buckets the webhook
+		// delivery_attempt object carries, which the webhooks package exports as
+		// constants — see webhooks.DeliveryAttemptClassification. Statistics can
+		// additionally report "Administrative" for a bounce raised
+		// administratively rather than by a destination; no webhook constant
+		// covers it, so match it as a plain string if you need it. Neither list is
+		// pinned by a specification in this repository, and the set is open, so
+		// treat anything not listed here as a bucket rather than as an error.
 		fmt.Println("\n  Common Bounce Classifications:")
-		fmt.Println("    • hard: Invalid email, domain doesn't exist")
-		fmt.Println("    • soft: Mailbox full, server temporarily unavailable")
-		fmt.Println("    • admin: Blocked by admin policies")
+		fmt.Println("    • InvalidRecipient: The address does not exist")
+		fmt.Println("    • BadDomain: The recipient domain does not resolve or accept mail")
+		fmt.Println("    • InactiveMailbox: The mailbox is disabled or no longer in use")
+		fmt.Println("    • QuotaIssues: Mailbox full")
+		fmt.Println("    • PolicyRelated: Blocked by the destination's policy")
+		fmt.Println("    • Administrative: Bounced administratively, not by the destination")
 
-		if bouncesByClassification["hard"] > 0 {
-			fmt.Println("\n  ⚠️  Action Required: Review and remove hard bounced emails from your list")
+		permanent := bouncesByClassification[string(webhooks.ClassificationInvalidRecipient)] +
+			bouncesByClassification[string(webhooks.ClassificationBadDomain)] +
+			bouncesByClassification[string(webhooks.ClassificationInactiveMailbox)]
+		if permanent > 0 {
+			fmt.Println("\n  ⚠️  Action Required: Review and remove permanently bounced addresses from your list")
 		}
 	} else {
 		fmt.Println("  No bounce statistics available for this period.")

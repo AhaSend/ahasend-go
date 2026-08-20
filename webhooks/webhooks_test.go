@@ -250,11 +250,7 @@ func TestWebhookParsing(t *testing.T) {
 	require.NoError(t, err)
 
 	createValidHeaders := func(payload string) http.Header {
-		headers := http.Header{}
-		headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
-		headers.Set("webhook-timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-		headers.Set("webhook-signature", generateSignature(t, verifier, headers.Get("webhook-id"), headers.Get("webhook-timestamp"), payload))
-		return headers
+		return signedHeaders(t, verifier, payload)
 	}
 
 	t.Run("parse message.delivered event", func(t *testing.T) {
@@ -319,23 +315,6 @@ func TestWebhookParsing(t *testing.T) {
 	})
 
 	t.Run("message.opened is_bot decodes as a boolean", func(t *testing.T) {
-		openedPayload := func(isBotField string) string {
-			return fmt.Sprintf(`{
-				"type": "message.opened",
-				"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
-				"timestamp": "2024-05-06T10:15:16.687031577Z",
-				"data": {
-					"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
-					"event": "on_opened",
-					"from": "sender@example.com",
-					"recipient": "recipient@example.com",
-					"subject": "Welcome to our service",
-					"message_id_header": "<message-id-12345@localhost>",
-					"id": "407926766d2711f09b30960002cafe7c"%s
-				}
-			}`, isBotField)
-		}
-
 		testCases := []struct {
 			name      string
 			field     string
@@ -350,7 +329,7 @@ func TestWebhookParsing(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				payload := openedPayload(tc.field)
+				payload := messageEventPayload("message.opened", "on_opened", tc.field)
 
 				event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
 				require.NoError(t, err)
@@ -659,6 +638,38 @@ func TestWebhookHelperFunctions(t *testing.T) {
 		data = GetMessageEventData(clickedEvent)
 		assert.Nil(t, data)
 	})
+}
+
+// messageEventPayload renders a message webhook payload of the given type with
+// the supplied JSON fragment spliced into its data object. The fragment carries
+// its own leading comma, so "" produces a payload with no extra fields.
+func messageEventPayload(eventType, eventName, fragment string) string {
+	return fmt.Sprintf(`{
+		"type": %q,
+		"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
+		"timestamp": "2024-05-06T09:50:16.687031577Z",
+		"data": {
+			"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+			"event": %q,
+			"from": "sender@example.com",
+			"recipient": "recipient@example.com",
+			"subject": "Welcome to our service",
+			"message_id_header": "<message-id-12345@localhost>",
+			"id": "407926766d2711f09b30960002cafe7c"%s
+		}
+	}`, eventType, eventName, fragment)
+}
+
+// signedHeaders builds the Standard Webhooks headers for a payload, signed with
+// the given verifier's secret and stamped with the current time. It is package
+// scope so that a test outside TestWebhookParsing can sign a payload too.
+func signedHeaders(t *testing.T, verifier *WebhookVerifier, payload string) http.Header {
+	t.Helper()
+	headers := http.Header{}
+	headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
+	headers.Set("webhook-timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+	headers.Set("webhook-signature", generateSignature(t, verifier, headers.Get("webhook-id"), headers.Get("webhook-timestamp"), payload))
+	return headers
 }
 
 // Helper function to generate a valid signature for testing
