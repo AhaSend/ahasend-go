@@ -15,7 +15,7 @@ const modulePath = "github.com/AhaSend/ahasend-go"
 // compile it from source, so linker flags set during a release never reach
 // them. This constant is therefore the source of truth, and the release
 // workflow refuses to publish a tag that does not match it.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 // UserAgent is the User-Agent header sent when the caller has not set one.
 var UserAgent = "AhaSend-Go-SDK/" + resolveVersion()
