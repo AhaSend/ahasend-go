@@ -183,6 +183,37 @@ func handleMessageBounced(event *webhooks.MessageBouncedEvent) error {
 	log.Printf("  To: %s", event.Data.Recipient)
 	log.Printf("  Subject: %s", event.Data.Subject)
 
+	// The delivery attempt is optional and nil more often than not: no object
+	// is sent when no SMTP attempt was recorded, and an explicit null means the
+	// same as a missing field. Never treat the absence as an error.
+	if attempt := event.Data.DeliveryAttempt; attempt != nil {
+		// 0 is a real code — it means response content was recorded without an
+		// SMTP code — so report it rather than testing for truthiness.
+		log.Printf("  SMTP code: %d", attempt.SMTPCode)
+		if attempt.EnhancedStatusCode != nil {
+			log.Printf("  Enhanced status code: %s", *attempt.EnhancedStatusCode)
+		}
+
+		// The set of classifications is open, so handle the buckets you care
+		// about and keep a fallback for values this SDK predates.
+		if attempt.Classification != nil {
+			switch *attempt.Classification {
+			case webhooks.ClassificationInvalidRecipient, webhooks.ClassificationBadDomain:
+				log.Printf("  Permanent addressing failure — stop sending to this address")
+			case webhooks.ClassificationQuotaIssues:
+				log.Printf("  Mailbox is full — worth retrying later")
+			default:
+				log.Printf("  Classification: %s", *attempt.Classification)
+			}
+		}
+
+		// Response and Description are deliberately not logged: they are
+		// free-form diagnostic text that routinely embeds the recipient and
+		// parts of the message. Branch on the codes and the classification.
+	} else {
+		log.Printf("  No delivery attempt was recorded for this bounce")
+	}
+
 	// TODO: Add your business logic here
 	// For example, mark email address as invalid
 

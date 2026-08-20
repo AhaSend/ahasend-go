@@ -47,7 +47,7 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 	})
 
 	t.Run("BounceStatistics uses from_timestamp and to_timestamp", func(t *testing.T) {
-		bounces := []responses.Bounce{{Classification: "hard", Count: 10}}
+		bounces := []responses.Bounce{{Classification: "InvalidRecipient", Count: 10}}
 		stats := responses.BounceStatistics{
 			FromTimestamp: fromTime,
 			ToTimestamp:   toTime,
@@ -58,7 +58,7 @@ func TestStatisticsModelsUpdatedFields(t *testing.T) {
 		assert.Equal(t, fromTime, stats.FromTimestamp)
 		assert.Equal(t, toTime, stats.ToTimestamp)
 		assert.Equal(t, bounces, stats.Bounces)
-		assert.Equal(t, "hard", stats.Bounces[0].Classification)
+		assert.Equal(t, "InvalidRecipient", stats.Bounces[0].Classification)
 		assert.Equal(t, 10, stats.Bounces[0].Count)
 
 		// Test JSON serialization contains correct fields
@@ -136,8 +136,8 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 			"from_timestamp": "2024-01-01T12:00:00Z",
 			"to_timestamp": "2024-01-01T13:00:00Z",
 			"bounces": [
-				{"classification": "hard", "count": 10},
-				{"classification": "soft", "count": 5}
+				{"classification": "InvalidRecipient", "count": 10},
+				{"classification": "QuotaIssues", "count": 5}
 			]
 		}`
 
@@ -147,9 +147,9 @@ func TestStatisticsModelsJSONDeserialization(t *testing.T) {
 
 		bounces := stats.Bounces
 		assert.Len(t, bounces, 2)
-		assert.Equal(t, "hard", bounces[0].Classification)
+		assert.Equal(t, "InvalidRecipient", bounces[0].Classification)
 		assert.Equal(t, 10, bounces[0].Count)
-		assert.Equal(t, "soft", bounces[1].Classification)
+		assert.Equal(t, "QuotaIssues", bounces[1].Classification)
 		assert.Equal(t, 5, bounces[1].Count)
 	})
 

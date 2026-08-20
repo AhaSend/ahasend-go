@@ -27,7 +27,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          # Pinned rather than `stable`, and pinned together with the
+          # golangci-lint version below. golangci-lint typechecks the standard
+          # library with the go/types it was built against, so a toolchain
+          # newer than the linter fails on language features that linter cannot
+          # parse: v2.12.2 against Go 1.27 reports `could not import
+          # math/rand/v2 (method must have no type parameters)` for stdlib
+          # source this repository never touches. `stable` made that a time
+          # bomb — the same commit linted clean on 1.26.6 and failed on 1.27.0
+          # hours later, with no change here. Raise both pins together.
+          go-version: '1.26.x'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:

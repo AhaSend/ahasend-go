@@ -47,12 +47,16 @@ info:
     ```json
     {
       "type": "event.type",
+      "webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
       "timestamp": "2024-05-06T09:49:16.687031577Z",
       "data": {
         // Event-specific data
       }
     }
     ```
+
+    Message, suppression, and domain webhooks use `webhook_id`. Route
+    webhooks use `route_id` instead.
 
     ## Getting Started
 
@@ -149,6 +153,11 @@ webhooks:
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
                 id: "407926766d2711f09b30960002cafe7c"
+                delivery_attempt:
+                  smtp_code: 250
+                  enhanced_status_code: "2.0.0"
+                  response: "OK: queued"
+                  command: "DATA"
       responses:
         '200':
           description: Webhook received successfully
@@ -193,6 +202,12 @@ webhooks:
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
                 id: "407926766d2711f09b30960002cafe7c"
+                delivery_attempt:
+                  classification: "QuotaIssues"
+                  smtp_code: 452
+                  enhanced_status_code: "4.2.2"
+                  response: "The recipient's inbox is out of storage space"
+                  command: "RCPT TO"
       responses:
         '200':
           description: Webhook received successfully
@@ -209,12 +224,9 @@ webhooks:
       description: |
         &nbsp;
 
-        Triggered when an email cannot be delivered due to repeated failures.
+        Triggered when an email exhausts its retry window without being delivered.
 
-        This is a permanent failure (hard bounce). No more delivery attempts will be made. Common causes include:
-        - Invalid email address
-        - Recipient's domain doesn't exist
-        - Recipient's mail server permanently rejects the email
+        No more delivery attempts will be made. This event reports retry exhaustion rather than one specific SMTP exchange, so `data.delivery_attempt` is omitted. An immediate permanent rejection from a recipient server is reported as `message.bounced` instead.
 
         **When it's sent**: After all retry attempts have been exhausted.
       tags:
@@ -253,11 +265,11 @@ webhooks:
       description: |
         &nbsp;
 
-        Triggered when a bounce notification is received from the recipient's mail server.
+        Triggered when a message reaches a bounced outcome. This includes an immediate permanent SMTP rejection or an out-of-band delivery status notification received after the message was accepted.
 
-        This can happen even for emails that were previously successfully delivered. The bounce could be delayed or the recipient's mailbox status changed after delivery.
+        A direct SMTP rejection normally includes `data.delivery_attempt`. An out-of-band bounce does not describe one SMTP attempt, so the object is omitted in that case.
 
-        **When it's sent**: When AhaSend receives a bounce notification from the recipient's mail server.
+        **When it's sent**: When a recipient server permanently rejects the message or AhaSend receives a later bounce notification.
       tags:
         - Message Events
       requestBody:
@@ -278,6 +290,12 @@ webhooks:
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
                 id: "407926766d2711f09b30960002cafe7c"
+                delivery_attempt:
+                  classification: "InvalidRecipient"
+                  smtp_code: 550
+                  enhanced_status_code: "5.1.1"
+                  response: "The email account that you tried to reach does not exist"
+                  command: "RCPT TO"
       responses:
         '200':
           description: Webhook received successfully
@@ -783,6 +801,43 @@ components:
             elsewhere. Older deliveries may omit it — absence carries no signal, so
             do not infer `false` from a missing field and never reject a delivery
             because of it.
+        delivery_attempt:
+          description: |
+            Diagnostics for the delivery attempt this event reports on: the
+            SMTP status code, the response text, and — on failures — the
+            bucket the bounce classifier assigned.
+
+            Optional, and absent more often than present. Today it is
+            `message.delivered`, `message.bounced`, and
+            `message.transient_error` that carry it, and only when an SMTP
+            attempt was actually recorded. These are the cases where no attempt
+            is recorded, and so no object is sent:
+
+            - **Retry exhaustion.** A message that runs out of retries arrives
+              as `message.failed`, which reports the exhaustion rather than a
+              single attempt.
+            - **Out-of-band bounces**, where the DSN arrives separately after
+              the destination already accepted the message.
+            - **Non-SMTP routing**, where the message was handled outside SMTP.
+              Sandbox sends are the exception: they synthesize a representative
+              attempt rather than omitting one.
+            - **Empty responses**, carrying neither a status code nor any text.
+
+            These cases are not closed, and an explicit `null` means the same
+            as a missing field. Always read the object with optional chaining
+            and never treat its absence as an error. Equally, do not treat its
+            presence on another event sharing this data shape as impossible.
+            Events with their own data shape — `message.clicked`,
+            `message.routing`, `suppression.created`, `domain.dns_error` —
+            never carry one.
+
+            On test webhooks and sandbox deliveries the values are
+            representative rather than observed. A sandbox simulation can
+            replace the sample classification with the classification of the
+            selected outcome, so it may not agree with the representative SMTP
+            code and response. Do not calibrate a `classification` switch
+            against sandbox traffic.
+          $ref: '#/components/schemas/DeliveryAttempt'
 
     MessageClickedWebhookData:
       type: object
@@ -840,6 +895,100 @@ components:
             definite true or false. It stays optional in this schema for tolerance:
             if it were ever absent, do not infer `false` and do not reject the
             delivery.
+
+    DeliveryAttempt:
+      # `null` is admitted alongside the object deliberately: it carries exactly
+      # the same meaning as the field being absent, so a consumer that rejected
+      # it would answer 400 to a delivery that told it nothing was recorded, and
+      # 100 consecutive failures disable a webhook. Absent, `null`, and an
+      # object are the three states a reader must handle.
+      type: ["object", "null"]
+      description: |
+        Diagnostics from a single delivery attempt: the SMTP status code, the
+        response text, and — on failures — the bucket the bounce classifier
+        assigned.
+      required:
+        - smtp_code
+      properties:
+        classification:
+          type: string
+          description: |
+            Bucket the bounce classifier assigned to this attempt. Absent on
+            successful deliveries, and absent on a failure the classifier did
+            not label.
+
+            Known values: `InvalidRecipient`, `BadDomain`, `InactiveMailbox`, `InvalidSender`, `QuotaIssues`, `NoAnswerFromHost`, `BadConnection`, `DNSFailure`, `RoutingErrors`, `TransientFailure`, `MessageExpired`, `ProtocolErrors`, `AuthenticationFailed`, `PolicyRelated`, `Uncategorized`.
+
+            This is **not** a closed set. New buckets can be introduced at any
+            time, and this list describes what is emitted today rather than
+            everything that may ever appear. Branch on the values you know and
+            keep a fallback branch for everything else; never reject a delivery
+            because the value is unfamiliar.
+
+            Note that `TransientFailure` here is a classification, unrelated to
+            the `message.transient_error` event type or to the `event` field.
+          x-known-values:
+            - InvalidRecipient
+            - BadDomain
+            - InactiveMailbox
+            - InvalidSender
+            - QuotaIssues
+            - NoAnswerFromHost
+            - BadConnection
+            - DNSFailure
+            - RoutingErrors
+            - TransientFailure
+            - MessageExpired
+            - ProtocolErrors
+            - AuthenticationFailed
+            - PolicyRelated
+            - Uncategorized
+        smtp_code:
+          type: integer
+          minimum: 0
+          description: |
+            SMTP status code recorded for the attempt. Usually this is the code
+            returned by the destination. Always present when this object is
+            present. `0` means AhaSend recorded response content without an SMTP
+            code — an internal error, typically — so do not read `0` as the
+            field being absent.
+        enhanced_status_code:
+          type: string
+          description: |
+            RFC 3463 enhanced status code in `class.subject.detail` form (for
+            example `5.1.1`), when one was recorded for the attempt.
+        response:
+          type: string
+          description: |
+            Text describing the outcome, as the MTA recorded it. Present when
+            non-empty.
+
+            Two things it is not. It is not reliably code-free: the reply code
+            usually lives in `smtp_code` alone, but some destinations leave the
+            reply code, the enhanced code, or both at the front of the text, so
+            do not assume a bare sentence and do not parse codes back out of
+            it. And it is not always the destination's own words: when the
+            failure was raised inside AhaSend rather than by the destination,
+            this carries AhaSend's description of that failure instead.
+
+            Read it as human-readable diagnostics. Branch on `classification`,
+            `smtp_code`, and `enhanced_status_code`.
+        description:
+          type: string
+          description: |
+            Human-readable translation of a complex `response`, present only
+            when that translation differs from `response` itself.
+
+            This is display prose, not an identifier: its wording changes as
+            the translations improve. Never compare it to a literal and never
+            parse it — branch on `classification`, `smtp_code`, or
+            `enhanced_status_code` instead.
+        command:
+          type: string
+          description: |
+            Normalized SMTP command name that was in flight when the attempt was
+            recorded (for example `RCPT TO` or `DATA`), when the MTA reported
+            one. Command arguments such as envelope addresses are not included.
 
     SuppressionWebhookPayload:
       type: object
