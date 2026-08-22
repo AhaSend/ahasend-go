@@ -189,6 +189,11 @@ func (e *NetworkError) Error() string {
 	return fmt.Sprintf("network error: %v", e.Err)
 }
 
+// Unwrap returns the underlying network error.
+func (e *NetworkError) Unwrap() error {
+	return e.Err
+}
+
 // IsRetryable returns true as network errors are generally retryable
 func (e *NetworkError) IsRetryable() bool {
 	return true

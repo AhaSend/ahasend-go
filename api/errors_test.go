@@ -149,12 +149,14 @@ func TestDetermineErrorType(t *testing.T) {
 
 func TestNetworkError(t *testing.T) {
 	t.Run("Error with operation", func(t *testing.T) {
+		cause := errors.New("connection timeout")
 		netErr := &NetworkError{
 			Op:  "GET /api/messages",
-			Err: errors.New("connection timeout"),
+			Err: cause,
 		}
 
 		assert.Equal(t, "network error during GET /api/messages: connection timeout", netErr.Error())
+		assert.ErrorIs(t, netErr, cause)
 		assert.True(t, netErr.IsRetryable())
 	})
 
