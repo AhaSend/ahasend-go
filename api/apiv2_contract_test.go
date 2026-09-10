@@ -245,6 +245,38 @@ func TestContactsAPIRawEmailIsEncodedExactlyOnce(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestContactsAPIRejectsEncodedNullCreateAttribute(t *testing.T) {
+	var nilString *string
+	requestSent := make(chan struct{}, 1)
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requestSent <- struct{}{}
+		w.WriteHeader(http.StatusCreated)
+	})
+	defer cleanup()
+
+	result, response, err := client.ContactsAPI.CreateContact(
+		context.Background(),
+		uuid.New(),
+		requests.CreateContactRequest{
+			Email:      "person@example.com",
+			Attributes: map[string]any{"obsolete": nilString},
+		},
+	)
+
+	require.Error(t, err)
+	assert.Nil(t, response)
+	assert.NotNil(t, result)
+	select {
+	case <-requestSent:
+		t.Fatal("CreateContact sent a request with a null attribute")
+	default:
+	}
+	var apiError *APIError
+	require.ErrorAs(t, err, &apiError)
+	assert.Equal(t, ErrorTypeValidation, apiError.Type)
+	assert.Contains(t, apiError.Message, `attribute "obsolete" must not be null`)
+}
+
 func TestContactsAPIPreservesDocumentedErrorHeaders(t *testing.T) {
 	tests := []struct {
 		name           string

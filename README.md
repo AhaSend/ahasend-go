@@ -10,7 +10,7 @@ The official Go SDK for [AhaSend](https://ahasend.com) 🚀 - a powerful transac
 
 ## ✨ Features
 
-- **📦 Complete API Coverage**: Send emails, manage domains, webhooks, routes, suppressions, Sub Accounts, and more
+- **📦 Complete API Coverage**: Send emails and manage contacts, domains, webhooks, routes, suppressions, Sub Accounts, and more
 - **🔒 Type Safety**: Full Go type system with pointer utilities for optional fields
 - **⚡ Built-in Rate Limiting**: Automatic protection against 429 errors with configurable limits
 - **🔄 Intelligent Retries**: Exponential backoff with jitter for failed requests
@@ -168,6 +168,7 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 | Service | Description | Key Methods |
 |---------|-------------|-------------|
 | **MessagesAPI** | Send and manage emails | `CreateMessage`, `GetMessage`, `CancelMessage` |
+| **ContactsAPI** | Manage account-global contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | **DomainsAPI** | Domain verification & management | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
 | **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
 | **StatisticsAPI** | Email analytics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |

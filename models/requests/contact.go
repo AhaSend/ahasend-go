@@ -1,6 +1,8 @@
 package requests
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -20,7 +22,8 @@ type CreateContactRequest struct {
 // semantics only for update and batch requests.
 func (r CreateContactRequest) Validate() error {
 	for key, value := range r.Attributes {
-		if value == nil {
+		encoded, err := json.Marshal(value)
+		if err == nil && bytes.Equal(bytes.TrimSpace(encoded), []byte("null")) {
 			return fmt.Errorf("attribute %q must not be null", key)
 		}
 	}
