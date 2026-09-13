@@ -399,6 +399,20 @@ func (c *APIClient) NewIdempotencyKeyBuilder(baseKey ...string) *IdempotencyKeyB
 
 // Execute is the centralized method for executing all API requests
 func (c *APIClient) Execute(ctx context.Context, config RequestConfig) (*http.Response, error) {
+	httpClient := c.cfg.HTTPClient
+	if config.CustomTimeout != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *config.CustomTimeout)
+		defer cancel()
+
+		// Make the request-specific context deadline authoritative without
+		// mutating the shared client or losing its transport, redirect, and jar
+		// configuration.
+		requestHTTPClient := *httpClient
+		requestHTTPClient.Timeout = 0
+		httpClient = &requestHTTPClient
+	}
+
 	// Step 1: Validate and build the path
 	if err := validatePathParams(config.PathTemplate, config.PathParams); err != nil {
 		return nil, &APIError{
@@ -479,7 +493,7 @@ func (c *APIClient) Execute(ctx context.Context, config RequestConfig) (*http.Re
 	}
 
 	// Step 8: Execute with retry logic
-	resp, err := c.executeWithRetry(ctx, req, config)
+	resp, err := c.executeWithRetry(ctx, req, config, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -598,7 +612,7 @@ func (c *APIClient) applyRateLimit(ctx context.Context, endpointType EndpointTyp
 
 	// Wait for rate limit token
 	if err := bucket.WaitForTokenWithContext(ctx); err != nil {
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return &NetworkError{Op: "rate limiting", Err: err}
 		}
 		return &APIError{
@@ -611,7 +625,7 @@ func (c *APIClient) applyRateLimit(ctx context.Context, endpointType EndpointTyp
 }
 
 // executeWithRetry executes the request with retry logic and proper body preservation
-func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, config RequestConfig) (*http.Response, error) {
+func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, config RequestConfig, httpClient *http.Client) (*http.Response, error) {
 	// Determine retry configuration
 	var retryConfig RetryConfig
 	if config.CustomRetry != nil {
@@ -622,7 +636,7 @@ func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, con
 
 	// If retries are disabled, execute once
 	if !retryConfig.IsRetryEnabled() {
-		return c.cfg.HTTPClient.Do(req)
+		return httpClient.Do(req)
 	}
 
 	// CRITICAL FIX: Store original body bytes for retry attempts
@@ -649,7 +663,7 @@ func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, con
 		}
 
 		// Execute the request
-		resp, err := c.cfg.HTTPClient.Do(reqClone)
+		resp, err := httpClient.Do(reqClone)
 
 		// Check if we should retry
 		if !c.shouldRetry(err, resp, retryConfig, attempt) {
