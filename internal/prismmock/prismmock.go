@@ -92,6 +92,7 @@ func Start() (*Server, error) {
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	configureProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start prism: %w", err)
 	}
@@ -115,10 +116,10 @@ func (s *Server) Stop() error {
 	if s == nil || s.cmd == nil || s.cmd.Process == nil {
 		return nil
 	}
-	if err := s.cmd.Process.Kill(); err != nil {
+	if err := terminateProcessGroup(s.cmd); err != nil {
 		return err
 	}
-	_, _ = s.cmd.Process.Wait()
+	_ = s.cmd.Wait()
 	return nil
 }
 
