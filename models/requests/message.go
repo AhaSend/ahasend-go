@@ -4,14 +4,22 @@ import (
 	"time"
 
 	"github.com/AhaSend/ahasend-go/models/common"
+	"github.com/google/uuid"
 )
 
 // CreateMessageRequest represents a request to create and send an email message.
 type CreateMessageRequest struct {
-	From          common.SenderAddress    `json:"from"`
-	Recipients    []common.Recipient      `json:"recipients"`
-	Subject       string                  `json:"subject"`
-	ReplyTo       *common.SenderAddress   `json:"reply_to,omitempty"`
+	From       common.SenderAddress `json:"from"`
+	Recipients []common.Recipient   `json:"recipients"`
+	// Subject carries no omitempty on purpose: a templated send that leaves it
+	// unset serialises `"subject": ""`, which is what the API reads as "no
+	// subject given, use the template's".
+	Subject string                `json:"subject"`
+	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
+	// TemplateID names a transactional template to send. It supplies the
+	// subject, preview text and both bodies, and cannot be combined with
+	// TextContent, HtmlContent or AmpContent.
+	TemplateID    *uuid.UUID              `json:"template_id,omitempty"`
 	TextContent   *string                 `json:"text_content,omitempty"`
 	HtmlContent   *string                 `json:"html_content,omitempty"`
 	AmpContent    *string                 `json:"amp_content,omitempty"`
