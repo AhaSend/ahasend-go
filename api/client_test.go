@@ -46,6 +46,7 @@ func TestClientCreation(t *testing.T) {
 	assert.NotNil(t, client.StatisticsAPI)
 	assert.NotNil(t, client.SubAccountsAPI)
 	assert.NotNil(t, client.SuppressionsAPI)
+	assert.NotNil(t, client.TemplatesAPI)
 	assert.NotNil(t, client.UtilityAPI)
 	assert.NotNil(t, client.WebhooksAPI)
 
@@ -53,6 +54,7 @@ func TestClientCreation(t *testing.T) {
 	require.NotNil(t, defaultClient)
 	assert.NotNil(t, defaultClient.ContactsAPI)
 	assert.NotNil(t, defaultClient.SubAccountsAPI)
+	assert.NotNil(t, defaultClient.TemplatesAPI)
 }
 
 func TestExecuteHonorsRequestTimeout(t *testing.T) {
