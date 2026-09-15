@@ -10,7 +10,7 @@ The official Go SDK for [AhaSend](https://ahasend.com) 🚀 - a powerful transac
 
 ## ✨ Features
 
-- **📦 Complete API Coverage**: Send emails and manage contacts, domains, webhooks, routes, suppressions, Sub Accounts, and more
+- **📦 Complete API Coverage**: Send emails inline or from a transactional template, and manage contacts, domains, webhooks, routes, suppressions, Sub Accounts, and more
 - **🔒 Type Safety**: Full Go type system with pointer utilities for optional fields
 - **⚡ Built-in Rate Limiting**: Automatic protection against 429 errors with configurable limits
 - **🔄 Intelligent Retries**: Exponential backoff with jitter for failed requests
@@ -80,6 +80,38 @@ func main() {
 }
 ```
 
+### Send From a Template
+
+A transactional template built in the dashboard supplies the subject, the preview text and both bodies, so a send only has to name it and supply its variables:
+
+```go
+// Read the template to see which variables a send has to supply
+template, _, err := client.TemplatesAPI.GetTemplate(ctx, accountID, templateID)
+if err != nil {
+    log.Fatal(err)
+}
+for _, variable := range template.Variables {
+    log.Printf("%s (required: %t)", variable.Name, variable.Required)
+}
+
+message := requests.CreateMessageRequest{
+    From: common.SenderAddress{Email: "sender@yourdomain.com"},
+    Recipients: []common.Recipient{
+        {
+            Email:         "recipient@example.com",
+            Substitutions: map[string]interface{}{"first_name": "Pat"},
+        },
+    },
+    TemplateID: &templateID,
+}
+
+response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+```
+
+`TemplateID` cannot be combined with `TextContent`, `HtmlContent` or `AmpContent`. Leave `Subject` unset to use the template's own, or set it to override it. Values come from the request's `Substitutions` and from each recipient's, the recipient's winning where both name a variable.
+
+List the account's templates, newest first, with `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})`, paging with the `After` and `Before` cursors the response returns.
+
 ## Authentication & API Keys
 
 All API requests require a Bearer token. There are three ways to authenticate:
@@ -139,6 +171,7 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 
 ### Email Operations
 - **Send Emails**: HTML/text content, attachments, scheduling
+- **Transactional Templates**: Send a saved template by ID and supply its variables
 - **Batch Operations**: Efficient bulk sending
 - **Message Management**: Cancel, retrieve status, view history
 
@@ -168,6 +201,7 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 | Service | Description | Key Methods |
 |---------|-------------|-------------|
 | **MessagesAPI** | Send and manage emails | `CreateMessage`, `GetMessage`, `CancelMessage` |
+| **TemplatesAPI** | Read transactional templates | `GetTemplates`, `GetTemplate` |
 | **ContactsAPI** | Manage account-global contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | **DomainsAPI** | Domain verification & management | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
 | **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |

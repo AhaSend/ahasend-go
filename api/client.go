@@ -260,6 +260,8 @@ type APIClient struct {
 
 	SuppressionsAPI *SuppressionsAPIService
 
+	TemplatesAPI *TemplatesAPIService
+
 	UtilityAPI *UtilityAPIService
 
 	WebhooksAPI *WebhooksAPIService
@@ -314,6 +316,7 @@ func NewAPIClient(opts ...ClientOption) *APIClient {
 	c.StatisticsAPI = (*StatisticsAPIService)(&c.common)
 	c.SubAccountsAPI = (*SubAccountsAPIService)(&c.common)
 	c.SuppressionsAPI = (*SuppressionsAPIService)(&c.common)
+	c.TemplatesAPI = (*TemplatesAPIService)(&c.common)
 	c.UtilityAPI = (*UtilityAPIService)(&c.common)
 	c.WebhooksAPI = (*WebhooksAPIService)(&c.common)
 
