@@ -110,6 +110,24 @@ func TestSuppression_JSONMarshaling(t *testing.T) {
 		assert.Contains(t, result, "created_at")
 		assert.Contains(t, result, "email")
 		assert.Contains(t, result, "expires_at")
+		assert.Contains(t, result, "protected")
+	})
+
+	t.Run("protected flag decodes from the API response", func(t *testing.T) {
+		var decoded Suppression
+		err := json.Unmarshal([]byte(`{
+			"object":"suppression",
+			"id":"01234567-89ab-cdef-0123-456789abcdef",
+			"created_at":"2026-09-10T10:00:00Z",
+			"email":"user@example.com",
+			"domain":"example.com",
+			"reason":"Unsubscribed",
+			"protected":true,
+			"expires_at":"2126-09-10T10:00:00Z"
+		}`), &decoded)
+		require.NoError(t, err)
+
+		assert.True(t, decoded.Protected)
 	})
 }
 

@@ -2178,6 +2178,18 @@ components:
         reason:
           type: string
           description: Reason for suppression
+        protected:
+          type: boolean
+          description: |
+            Whether a bulk wipe must keep this suppression. Read-only. True when
+            AhaSend recorded the recipient's own decision -- they unsubscribed, or they
+            reported a message as spam. It is not derived from the `reason` you send:
+            suppressions you create yourself are never protected, whatever reason they
+            carry, so your own wipe can always clear them. Suppressions predating this
+            field are also protected when they record a complaint under the earlier
+            `FBL Abuse Report` spelling, which nothing writes any more. It says nothing
+            about whether the address can be mailed, which `expires_at` alone answers,
+            and it does not exempt the row from expiring.
         expires_at:
           type: string
           format: date-time
@@ -2189,6 +2201,7 @@ components:
         - email
         - domain
         - reason
+        - protected
         - expires_at
 
     CreateSuppressionResponse:
@@ -9075,7 +9088,10 @@ paths:
     delete:
       summary: Delete All Suppressions
       description: |
-        Deletes all suppressions for the account
+        Deletes the account's suppressions, except protected ones. A suppression is
+        protected when the recipient made the decision themselves, by unsubscribing or by
+        reporting the message as spam; those are kept. The response message reports how
+        many were kept when any were.
 
         **Query Parameters:**
         - `domain`: Optional domain filter to delete suppressions for specific domain only
@@ -9155,7 +9171,7 @@ paths:
 
       responses:
         '200':
-          description: All suppressions deleted successfully
+          description: Suppressions deleted successfully, protected ones kept
           content:
             application/json:
               schema:

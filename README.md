@@ -179,6 +179,12 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 - **Batch Operations**: Efficient bulk sending
 - **Message Management**: Cancel, retrieve status, view history
 
+### Contacts
+- **Scopes**: `contacts:read` to list and get, `contacts:write` to create, update, and batch upsert, `contacts:delete` to delete
+- **Partial Updates**: `UpdateContact` changes only the fields you set; an omitted (nil) field is left unchanged, a pointer to `""` clears a string field, and `Unsubscribed` set to `false` resubscribes the contact
+- **Batch Upserts**: `BatchUpsertContacts` returns 200 even when some items fail, so check `Failed` and each `Data[i].Outcome`
+- **Addressing**: contacts are addressed by ID or email; for an email address containing `/`, use the contact ID
+
 ### Domain & Infrastructure
 - **Domain Management**: Add, verify, and configure sending domains
 - **DNS Validation**: Automated DNS record verification

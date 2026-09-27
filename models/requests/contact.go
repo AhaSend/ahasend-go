@@ -31,7 +31,9 @@ func (r CreateContactRequest) Validate() error {
 	return nil
 }
 
-// UpdateContactRequest represents a partial update to a contact. A nil
+// UpdateContactRequest represents a partial update to a contact. A nil field
+// is omitted and leaves the stored value unchanged; a pointer to "" clears a
+// string field, and Unsubscribed set to false resubscribes the contact. A nil
 // attribute value removes that attribute from the contact.
 type UpdateContactRequest struct {
 	Email        *string        `json:"email,omitempty"`

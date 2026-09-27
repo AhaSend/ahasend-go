@@ -82,7 +82,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				return client.ContactsAPI.GetContacts(context.Background(), accountID, requests.GetContactsParams{
 					Limit:      ahasend.Int32(25),
 					After:      ahasend.String("after-cursor"),
-					Before:     ahasend.String("before-cursor"),
 					Email:      ahasend.String("person@example.com"),
 					Status:     ahasend.String("enabled"),
 					Subscribed: ahasend.Bool(true),
@@ -181,9 +180,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				capturedRequest = r
 				capturedBody, _ = io.ReadAll(r.Body)
 				w.Header().Set("Content-Type", "application/json")
-				if tt.idempotencyKey != "" {
-					w.Header().Set("Idempotent-Replayed", "true")
-				}
 				w.WriteHeader(tt.status)
 				_, _ = w.Write([]byte(tt.response))
 			})
@@ -198,9 +194,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 			assert.Equal(t, tt.method, capturedRequest.Method)
 			assert.Equal(t, tt.path, capturedRequest.URL.Path)
 			assert.Equal(t, tt.idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
-			if tt.idempotencyKey != "" {
-				assert.Equal(t, "true", httpResponse.Header.Get("Idempotent-Replayed"))
-			}
 			if tt.assertRequestBody != nil {
 				tt.assertRequestBody(t, capturedBody)
 			}
@@ -209,7 +202,7 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				query := capturedRequest.URL.Query()
 				assert.Equal(t, "25", query.Get("limit"))
 				assert.Equal(t, "after-cursor", query.Get("after"))
-				assert.Equal(t, "before-cursor", query.Get("before"))
+				assert.False(t, query.Has("before"))
 				assert.Equal(t, "person@example.com", query.Get("email"))
 				assert.Equal(t, "enabled", query.Get("status"))
 				assert.Equal(t, "true", query.Get("subscribed"))
@@ -230,19 +223,41 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 
 func TestContactsAPIRawEmailIsEncodedExactlyOnce(t *testing.T) {
 	accountID := uuid.New()
-	rawEmail := "User+Tag@Example.COM"
-	wantPath := "/v2/accounts/" + accountID.String() + "/contacts/" + rawEmail
+	contactsPath := "/v2/accounts/" + accountID.String() + "/contacts/"
 
-	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, wantPath, r.URL.Path)
-		assert.Equal(t, wantPath, r.URL.EscapedPath())
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(contactResponseFixture))
-	})
-	defer cleanup()
+	tests := []struct {
+		name        string
+		rawEmail    string
+		wantEscaped string
+	}{
+		{name: "plus and uppercase", rawEmail: "User+Tag@Example.COM", wantEscaped: "User+Tag@Example.COM"},
+		{name: "slash", rawEmail: "a/b@example.com", wantEscaped: "a%2Fb@example.com"},
+		{name: "double slash", rawEmail: "a//b@example.com", wantEscaped: "a%2F%2Fb@example.com"},
+		{name: "percent", rawEmail: "100%off@example.com", wantEscaped: "100%25off@example.com"},
+		{name: "unicode local part", rawEmail: "jöhn@example.com", wantEscaped: "j%C3%B6hn@example.com"},
+		{name: "query and fragment delimiters", rawEmail: "a?b#c@example.com", wantEscaped: "a%3Fb%23c@example.com"},
+	}
 
-	_, _, err := client.ContactsAPI.GetContact(context.Background(), accountID, rawEmail)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestURI, escapedPath, decodedPath string
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				requestURI = r.RequestURI
+				escapedPath = r.URL.EscapedPath()
+				decodedPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(contactResponseFixture))
+			})
+			defer cleanup()
+
+			_, _, err := client.ContactsAPI.GetContact(context.Background(), accountID, tt.rawEmail)
+
+			require.NoError(t, err)
+			assert.Equal(t, contactsPath+tt.wantEscaped, requestURI)
+			assert.Equal(t, contactsPath+tt.wantEscaped, escapedPath)
+			assert.Equal(t, contactsPath+tt.rawEmail, decodedPath)
+		})
+	}
 }
 
 func TestContactsAPIRejectsEncodedNullCreateAttribute(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_ahasend_ContactsAPIService(t *testing.T) {
@@ -34,52 +35,48 @@ func Test_ahasend_ContactsAPIService(t *testing.T) {
 	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	rawEmail := "User+Tag@Example.COM"
 
-	validatePrismResponse := func(t *testing.T, response any, httpResponse *http.Response, err error) {
+	// Prism answers each operation with its first documented 2xx example.
+	validatePrismResponse := func(t *testing.T, wantStatus int, response any, httpResponse *http.Response, err error) {
 		t.Helper()
-		if httpResponse == nil {
-			assert.Error(t, err)
-			return
-		}
-		assert.GreaterOrEqual(t, httpResponse.StatusCode, http.StatusOK)
-		assert.Less(t, httpResponse.StatusCode, http.StatusInternalServerError)
-		if httpResponse.StatusCode < http.StatusBadRequest {
-			assert.NotNil(t, response)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, httpResponse)
+		assert.Equal(t, wantStatus, httpResponse.StatusCode)
+		assert.NotNil(t, response)
 	}
 
 	t.Run("GetContacts", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.GetContacts(auth, accountID, requests.GetContactsParams{})
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusOK, response, httpResponse, err)
 	})
 
 	t.Run("GetContact", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.GetContact(auth, accountID, rawEmail)
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusOK, response, httpResponse, err)
 	})
 
 	t.Run("CreateContact", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.CreateContact(auth, accountID, requests.CreateContactRequest{
 			Email: rawEmail,
 		}, WithIdempotencyKey("prism-create-contact"))
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusCreated, response, httpResponse, err)
 	})
 
 	t.Run("UpdateContact", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.UpdateContact(auth, accountID, rawEmail, requests.UpdateContactRequest{
 			Attributes: map[string]any{"obsolete": nil},
 		})
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusOK, response, httpResponse, err)
 	})
 
 	t.Run("DeleteContact", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.DeleteContact(auth, accountID, rawEmail)
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusOK, response, httpResponse, err)
 	})
 
 	t.Run("BatchUpsertContacts", func(t *testing.T) {
 		response, httpResponse, err := apiClient.ContactsAPI.BatchUpsertContacts(auth, accountID, requests.BatchUpsertContactsRequest{
 			Data: []requests.BatchUpsertContactInput{{Email: rawEmail, Attributes: map[string]any{"obsolete": nil}}},
 		}, WithIdempotencyKey("prism-batch-contacts"))
-		validatePrismResponse(t, response, httpResponse, err)
+		validatePrismResponse(t, http.StatusOK, response, httpResponse, err)
 	})
 }
