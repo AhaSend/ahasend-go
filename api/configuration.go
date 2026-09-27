@@ -212,34 +212,9 @@ func NewConfigurationFromEnv() *Configuration {
 // This is the easiest way to get started - just set AHASEND_API_KEY and go.
 func NewAPIClientFromEnv() *APIClient {
 	cfg := ConfigFromEnv()
-	// Convert configuration to functional options
-	opts := []ClientOption{}
-
-	if cfg.APIKey != "" {
-		opts = append(opts, func(c *Configuration) { c.APIKey = cfg.APIKey })
-	}
-	if cfg.Debug {
-		opts = append(opts, WithDebug(cfg.Debug))
-	}
-	if cfg.UserAgent != "" {
-		opts = append(opts, WithUserAgent(cfg.UserAgent))
-	}
-	if cfg.HTTPClient != nil {
-		opts = append(opts, WithHTTPClient(cfg.HTTPClient))
-	}
-	opts = append(opts, WithRateLimit(cfg.EnableRateLimit))
-	opts = append(opts, WithRetryConfig(cfg.RetryConfig))
-	if cfg.CustomerRateLimits != nil {
-		opts = append(opts, WithCustomerRateLimits(*cfg.CustomerRateLimits))
-	}
-	opts = append(opts, WithIdempotencyConfig(cfg.IdempotencyConfig))
-
-	// Add default headers
-	for key, value := range cfg.DefaultHeader {
-		opts = append(opts, WithDefaultHeader(key, value))
-	}
-
-	return NewAPIClient(opts...)
+	// Start from the whole environment configuration, so every variable
+	// ConfigFromEnv loads reaches the client.
+	return NewAPIClient(func(c *Configuration) { *c = *cfg })
 }
 
 // NewValidatedAPIClient creates a new API client with a validated configuration.

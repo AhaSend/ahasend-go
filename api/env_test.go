@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper to set and clean up environment variables
@@ -408,4 +411,56 @@ func boolPtr(b bool) *bool {
 
 func intPtr(i int) *int {
 	return &i
+}
+
+// clearAuthEnv unsets both API key variables so a key in the developer's
+// environment cannot leak into a test.
+func clearAuthEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(EnvAPIKey, "")
+	t.Setenv(EnvAPIToken, "")
+}
+
+// pingAuthorization sends a ping with a client built from the environment to
+// a test server and returns the Authorization header the server received.
+func pingAuthorization(t *testing.T) string {
+	t.Helper()
+
+	var authorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":"pong"}`))
+	}))
+	defer server.Close()
+	t.Setenv(EnvBaseURL, server.URL)
+	t.Setenv(EnvMaxRetries, "0")
+
+	_, _, err := NewAPIClientFromEnv().UtilityAPI.Ping(context.Background())
+	require.NoError(t, err)
+	return authorization
+}
+
+func TestNewAPIClientFromEnvSendsTheAPIKey(t *testing.T) {
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIKey, "aha-sk-from-api-key")
+
+	assert.Equal(t, "Bearer aha-sk-from-api-key", pingAuthorization(t))
+}
+
+func TestNewAPIClientFromEnvFallsBackToToken(t *testing.T) {
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIToken, "aha-sk-from-token")
+
+	assert.Equal(t, "Bearer aha-sk-from-token", pingAuthorization(t))
+}
+
+func TestLoadEnvIntoConfigKeepsAKeySetInCode(t *testing.T) {
+	clearAuthEnv(t)
+	cfg := NewConfiguration()
+	cfg.APIKey = "aha-sk-set-in-code"
+
+	LoadEnvIntoConfig(cfg)
+
+	assert.Equal(t, "aha-sk-set-in-code", cfg.APIKey)
 }

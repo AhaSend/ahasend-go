@@ -63,6 +63,11 @@ func LoadEnvIntoConfig(cfg *Configuration) {
 
 // loadEnvIntoConfig is the internal implementation
 func loadEnvIntoConfig(cfg *Configuration) {
+	// Authentication. An unset variable leaves a key set in code alone.
+	if apiKey := GetAPIKeyFromEnv(); apiKey != "" {
+		cfg.APIKey = apiKey
+	}
+
 	// Server Configuration
 	if baseURL := getEnv(EnvBaseURL); baseURL != "" {
 		// Parse base URL to extract host and scheme
