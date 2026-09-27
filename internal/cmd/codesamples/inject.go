@@ -55,11 +55,10 @@ func inject(spec []byte, samples map[string][]byte) ([]byte, error) {
 	lines := strings.Split(string(spec), "\n")
 	edits := make([]edit, 0, len(operations))
 	for operationID := range operations {
-		e, err := locateGoSample(lines, operationID)
+		e, err := locateGoSample(lines, operationID, sampleLines(samples[operationID]))
 		if err != nil {
 			return nil, err
 		}
-		e.replacement = sampleLines(samples[operationID])
 		edits = append(edits, e)
 	}
 	// Apply from the bottom up so earlier line indexes stay valid.
@@ -141,10 +140,16 @@ type edit struct {
 	replacement []string
 }
 
-// locateGoSample finds the lines of an operation's go sample entry, from its
-// "- lang" line up to the next entry or the end of x-code-samples. An
-// operation without a go entry gets one inserted first in the list.
-func locateGoSample(lines []string, operationID string) (edit, error) {
+// locateGoSample returns the edit that gives an operation entry as its one go
+// sample:
+//
+//   - a go entry, with the blank lines that follow it, is replaced in place.
+//   - an x-code-samples block without a go entry gets one at its end, just
+//     before the next line indented six spaces or less.
+//   - an operation without x-code-samples gets the block, holding only the go
+//     entry, at its end, just before the next line indented four spaces or
+//     less (or at the end of the file).
+func locateGoSample(lines []string, operationID string, entry []string) (edit, error) {
 	idLine := -1
 	for i, line := range lines {
 		if m := operationIDLine.FindStringSubmatch(line); m != nil && unquote(m[1]) == operationID {
@@ -179,7 +184,8 @@ func locateGoSample(lines []string, operationID string) (edit, error) {
 		}
 	}
 	if samplesLine < 0 {
-		return edit{}, fmt.Errorf("%s: has no x-code-samples block", operationID)
+		block := append([]string{"      x-code-samples:"}, entry...)
+		return edit{start: opEnd, end: opEnd, replacement: block}, nil
 	}
 	samplesEnd := opEnd
 	for i := samplesLine + 1; i < opEnd; i++ {
@@ -201,7 +207,7 @@ func locateGoSample(lines []string, operationID string) (edit, error) {
 		if n+1 < len(items) {
 			end = items[n+1]
 		}
-		if itemLang(lines[start:end]) != sampleLang {
+		if !isSampleLang(itemLang(lines[start:end])) {
 			continue
 		}
 		if goItem >= 0 {
@@ -211,13 +217,18 @@ func locateGoSample(lines []string, operationID string) (edit, error) {
 	}
 
 	if goItem < 0 {
-		return edit{start: samplesLine + 1, end: samplesLine + 1}, nil
+		return edit{start: samplesEnd, end: samplesEnd, replacement: entry}, nil
 	}
 	end := samplesEnd
 	if goItem+1 < len(items) {
 		end = items[goItem+1]
 	}
-	return edit{start: items[goItem], end: end}, nil
+	return edit{start: items[goItem], end: end, replacement: entry}, nil
+}
+
+// isSampleLang reports whether an x-code-samples lang names Go, in any case.
+func isSampleLang(lang string) bool {
+	return strings.EqualFold(lang, sampleLang)
 }
 
 func endsOperation(line string) bool {
@@ -279,7 +290,7 @@ func verify(before, after []byte, samples map[string][]byte) error {
 	for operationID, op := range operations {
 		var found []codeSample
 		for _, sample := range op.CodeSamples {
-			if sample.Lang == sampleLang {
+			if isSampleLang(sample.Lang) {
 				found = append(found, sample)
 			}
 		}
@@ -318,7 +329,7 @@ func withoutGoSamples(doc any) any {
 			entries, _ := fields["x-code-samples"].([]any)
 			kept := make([]any, 0, len(entries))
 			for _, entry := range entries {
-				if sample, _ := entry.(map[string]any); sample["lang"] == sampleLang {
+				if sample, _ := entry.(map[string]any); isSampleLang(fmt.Sprint(sample["lang"])) {
 					continue
 				}
 				kept = append(kept, entry)
