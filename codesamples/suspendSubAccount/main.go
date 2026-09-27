@@ -1,0 +1,28 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/AhaSend/ahasend-go/api"
+	"github.com/AhaSend/ahasend-go/models/requests"
+	"github.com/google/uuid"
+)
+
+func main() {
+	client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+	ctx := context.Background()
+
+	subAccountID := uuid.MustParse("7d3c9f5e-2a41-4b8e-9c6d-0f1e2a3b4c5d")
+
+	response, _, err := client.SubAccountsAPI.SuspendSubAccount(ctx, accountID, subAccountID, requests.SuspendSubAccountRequest{
+		Reason: "Customer requested temporary pause",
+	})
+	if err != nil {
+		log.Fatalf("Error suspending sub account: %v", err)
+	}
+	fmt.Printf("%s is %s\n", response.ID, response.Status)
+}
