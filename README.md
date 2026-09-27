@@ -373,11 +373,11 @@ make help
 ### Code Samples
 The Go samples in the API reference come from this repository. Each operation has one program at `codesamples/<operationId>/main.go`, which `go build ./...` compiles like any other package, so a sample cannot drift from the SDK.
 
-- `make sync-spec` downloads the API's `openapi.yaml` from the server repository's `master` branch (the server owns everything but the Go samples) and writes the samples into it; `make sync-spec REF=devel` takes it from another branch while a server change has not reached `master` yet
+- `make sync-spec` downloads the API's `openapi.yaml` from the server repository's `master` branch (the server owns everything but the Go samples) and writes the samples into it; `make sync-spec REF=devel` takes it from another branch while a server change has not reached `master` yet. It uses the `gh` CLI, which needs read access to the private `AhaSend/AhaSend` repository
 - `make code-samples` writes the samples into `openapi/openapi.yaml` after you edit one
 - `make check-code-samples` fails if `openapi/openapi.yaml` does not carry the current samples; CI runs it
 
-The server pulls the Go samples back from `openapi/openapi.yaml` on this repository's `main` branch.
+In the other direction, the API repository's `scripts/sync-code-samples` copies the Go samples from `openapi/openapi.yaml` on this repository's `main` branch into the API's own spec.
 
 ## Related Projects
 
