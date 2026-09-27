@@ -321,25 +321,39 @@ func TestContactsAPIPreservesDocumentedErrorHeaders(t *testing.T) {
 	}
 }
 
-func TestOpenAPIContactOperationsAndResponses(t *testing.T) {
-	type responseContract struct {
-		Ref     string         `yaml:"$ref"`
-		Headers map[string]any `yaml:"headers"`
-	}
-	type operationContract struct {
-		OperationID string                      `yaml:"operationId"`
-		CodeSamples []struct{ Lang string }     `yaml:"x-code-samples"`
-		Responses   map[string]responseContract `yaml:"responses"`
-	}
-	type openAPIContract struct {
-		Paths map[string]map[string]operationContract `yaml:"paths"`
-	}
+// responseContract, operationContract and openAPIContract read just enough of
+// the bundled specification for the tests below to assert what an operation
+// documents.
+type responseContract struct {
+	Ref     string         `yaml:"$ref"`
+	Headers map[string]any `yaml:"headers"`
+}
+
+type operationContract struct {
+	OperationID string                      `yaml:"operationId"`
+	CodeSamples []struct{ Lang string }     `yaml:"x-code-samples"`
+	Security    []map[string][]string       `yaml:"security"`
+	Responses   map[string]responseContract `yaml:"responses"`
+}
+
+type openAPIContract struct {
+	Paths map[string]map[string]operationContract `yaml:"paths"`
+}
+
+func loadOpenAPIContract(t *testing.T) openAPIContract {
+	t.Helper()
 
 	contents, err := os.ReadFile("../openapi/openapi.yaml")
 	require.NoError(t, err)
 
 	var spec openAPIContract
 	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	return spec
+}
+
+func TestOpenAPIContactOperationsAndResponses(t *testing.T) {
+	spec := loadOpenAPIContract(t)
 
 	tests := []struct {
 		path        string
@@ -494,4 +508,49 @@ func TestMessagesAPICreateConversationMessageUsesToField(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, body, "to")
 	assert.NotContains(t, body, "recipients")
+}
+
+func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
+	spec := loadOpenAPIContract(t)
+
+	tests := []struct {
+		path        string
+		method      string
+		operationID string
+		statuses    []string
+	}{
+		{path: "/v2/accounts/{account_id}/templates", method: "get", operationID: "listTemplates", statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: "/v2/accounts/{account_id}/templates/{template_id}", method: "get", operationID: "getTemplate", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			path, ok := spec.Paths[tt.path]
+			require.True(t, ok)
+			operation, ok := path[tt.method]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+
+			var goSamples int
+			for _, sample := range operation.CodeSamples {
+				if sample.Lang == "go" {
+					goSamples++
+				}
+			}
+			assert.Equal(t, 1, goSamples)
+
+			assert.Equal(t, []map[string][]string{{"BearerAuth": {"templates:read"}}}, operation.Security)
+
+			actualStatuses := make([]string, 0, len(operation.Responses))
+			for status := range operation.Responses {
+				actualStatuses = append(actualStatuses, status)
+			}
+			sort.Strings(actualStatuses)
+			assert.Equal(t, tt.statuses, actualStatuses)
+		})
+	}
+
+	// A template_id naming no template of this account is the send's own 404.
+	send := spec.Paths["/v2/accounts/{account_id}/messages"]["post"].Responses
+	assert.Contains(t, send, "404")
 }

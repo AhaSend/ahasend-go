@@ -59,7 +59,10 @@ CreateMessage Create Message
 Creates and sends a message to one or more recipients.
 
 **Validation Requirements:**
-- Either `text_content` or `html_content` is required
+- One of `template_id`, `text_content` or `html_content` is required
+- `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
+- `subject` is optional when the template has one
+- Header names must be visible ASCII with no space or colon
 - `from.email` must be from a domain you own with valid DNS records
 - `retention.metadata` must be between 1 and 30 days
 - `retention.data` must be between 0 and 30 days
@@ -68,6 +71,8 @@ Creates and sends a message to one or more recipients.
 - Schedule times must be in RFC3339 format
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days
+
+See the API reference for the full rules on sending from a template.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -112,6 +117,7 @@ Creates and sends a conversational message with support for To, CC, and BCC reci
 - The combined `to`, `cc`, and `bcc` recipient count must not exceed 50
 - If `reply_to` is provided, do not include `reply-to` in headers
 - If `cc` is provided, do not include `cc` in headers
+- Header names must be visible ASCII with no space or colon
 - `message-id` header will be ignored and automatically generated
 - Schedule times must be in RFC3339 format
 - `schedule.first_attempt` must be in the future and within 7 days
