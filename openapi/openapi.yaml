@@ -56,7 +56,7 @@ info:
     - `suppressions:read` - Read suppressions
     - `suppressions:write` - Create suppressions
     - `suppressions:delete` - Delete suppressions
-    - `suppressions:wipe` - Delete all suppressions (dangerous)
+    - `suppressions:wipe` - Delete the account's suppressions except protected ones (dangerous)
 
     ### Template Scopes
     - `templates:read` - Read transactional templates
@@ -67,9 +67,10 @@ info:
     - `contacts:delete` - Delete contacts
 
     ### Contact lifecycle and attributes
-    Contacts are account-global. API-created contacts have no list membership
-    and cannot be targeted by campaigns until a future Lists API adds them to
-    a list. Contact subscription state and suppression records are independent:
+    Contacts are account-global. A contact created through this API joins no
+    list on its own; campaigns target lists, so add it to one with the Lists
+    endpoints before a campaign can reach it.
+    Contact subscription state and suppression records are independent:
     creating, updating, unsubscribing, resubscribing, or deleting a contact
     never creates, changes, or removes complaint, permanent, or protected
     suppressions. Prefer unsubscribe over delete when the goal is only to stop
@@ -86,6 +87,28 @@ info:
     percent-encoded exactly once as a URL path segment by an HTTP client. For
     example, do not pre-encode `user+tag@example.com` before passing it to an
     SDK that encodes path parameters.
+
+    ### List Scopes
+    - `lists:read` - Read lists and list membership
+    - `lists:write` - Create and update lists, and add or remove their contacts
+    - `lists:delete` - Delete lists
+
+    ### Lists and membership
+    A list is a static, private, single opt-in container of contacts, and it is
+    what a campaign targets. A membership carries its own `subscription_status`
+    (`unconfirmed`, `confirmed`, `unsubscribed`, or `complained`), which is
+    per-list consent and is independent of the contact's account-wide
+    `unsubscribed` flag. A membership created without a status named is
+    `confirmed`, because that is what a campaign reaches. `complained` is the
+    mailbox provider's verdict, never writable, and a membership holding it is
+    frozen.
+
+    Deleting a list keeps its memberships, so an unsubscribe survives it.
+    Removing a contact from a list deletes the membership row and discards that
+    record with it, which is why unsubscribing is the reversible way to stop
+    marketing mail on one list. Expanding a list's members with
+    `include_contacts=true` requires `contacts:read` in addition to
+    `lists:read`.
 
     ### SMTP Credentials Scopes
     - `smtp-credentials:read:all` - Read all SMTP credentials
@@ -2149,6 +2172,389 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Contact'
+        pagination:
+          $ref: '#/components/schemas/ContactPagination'
+
+    # List Schemas
+    ContactList:
+      type: object
+      additionalProperties: false
+      description: |
+        A static, private, single opt-in container of contacts, and the unit a
+        campaign targets.
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - name
+        - description
+        - tags
+        - contact_count
+      properties:
+        object:
+          type: string
+          enum: [contact_list]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the list
+        created_at:
+          type: string
+          format: date-time
+          description: When the list was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the list was last updated
+        name:
+          type: string
+          description: List name; names are not unique within an account
+        description:
+          type: string
+          description: Free-text description; empty when none was given
+        tags:
+          type: array
+          description: Always present; an empty array when the list carries no tags
+          items:
+            type: string
+        contact_count:
+          type: integer
+          minimum: 0
+          description: |
+            The list's subscribers: the members a campaign to this list would
+            reach. A member counts when its membership is `confirmed` and the
+            contact is enabled, not unsubscribed from everything, and not found
+            invalid by validation. It is the same number the dashboard shows.
+
+    EmbeddedContactList:
+      type: object
+      additionalProperties: false
+      description: |
+        The list as a membership carries it: a `contact_list` without
+        `contact_count`, which no membership read pays for.
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - name
+        - description
+        - tags
+      properties:
+        object:
+          type: string
+          enum: [contact_list]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the list
+        created_at:
+          type: string
+          format: date-time
+          description: When the list was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the list was last updated
+        name:
+          type: string
+          description: List name; names are not unique within an account
+        description:
+          type: string
+          description: Free-text description; empty when none was given
+        tags:
+          type: array
+          description: Always present; an empty array when the list carries no tags
+          items:
+            type: string
+
+    CreateContactListRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        The writable list projection. A property that is not writable is
+        rejected with 400 naming it.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: |
+            Trimmed before it is measured and stored. The bound counts
+            characters rather than bytes, and a name that is empty after
+            trimming is rejected.
+        description:
+          type: [string, 'null']
+          maxLength: 1000
+          description: |
+            Trimmed before it is measured and stored. The bound counts
+            characters rather than bytes. Null and omission both store an empty
+            description.
+        tags:
+          type: [array, 'null']
+          items:
+            type: string
+          description: |
+            Each tag is trimmed, empty tags are dropped, and duplicates are
+            collapsed; at most 50 tags may survive that normalization. A null
+            element is rejected rather than read as an empty string. Null and
+            omission both store an empty array.
+
+    UpdateContactListRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        A partial list update. An omitted or null property leaves the stored
+        value unchanged; a present `tags` array replaces the stored tags, and an
+        empty one clears them. A property that is not writable is rejected with
+        400 naming it.
+      properties:
+        name:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 255
+          description: |
+            Trimmed before it is measured and stored, exactly as on create. The
+            bound counts characters rather than bytes, and a name that is empty
+            after trimming is rejected.
+        description:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Trimmed and bounded exactly as on create.
+        tags:
+          type: [array, 'null']
+          items:
+            type: string
+          description: Normalized and bounded exactly as on create.
+
+    ListContact:
+      type: object
+      additionalProperties: false
+      description: |
+        One contact's membership of one list. It carries no id of its own: a
+        membership is addressed by the `(list_id, contact_id)` pair.
+      required:
+        - object
+        - list_id
+        - contact_id
+        - email
+        - subscription_status
+        - subscribed_at
+        - unsubscribed_at
+        - created_at
+        - updated_at
+      properties:
+        object:
+          type: string
+          enum: [list_contact]
+          description: Object type identifier
+        list_id:
+          type: string
+          format: uuid
+          description: The list this membership is on
+        contact_id:
+          type: string
+          format: uuid
+          description: The contact this membership belongs to
+        email:
+          type: string
+          format: email
+          description: The contact's normalized email address
+        subscription_status:
+          type: string
+          enum: [unconfirmed, confirmed, unsubscribed, complained]
+          description: |
+            Per-list consent, independent of the contact's account-wide
+            `unsubscribed` flag. `complained` is the mailbox provider's verdict
+            and is never writable.
+        subscribed_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When consent was given. Set when the membership becomes
+            `confirmed` and left alone afterwards, so it records when consent
+            was given rather than when it was last re-asserted.
+        unsubscribed_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the membership became `unsubscribed`, or when the complaint
+            landed for a `complained` membership. Cleared when the membership
+            becomes `confirmed` again.
+        created_at:
+          type: string
+          format: date-time
+          description: When the membership was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the membership was last updated
+        contact:
+          $ref: '#/components/schemas/Contact'
+          description: |
+            The whole contact. Present only on `GET
+            /v2/accounts/{account_id}/lists/{list_id}/contacts` with
+            `include_contacts=true`.
+        list:
+          $ref: '#/components/schemas/EmbeddedContactList'
+          description: |
+            The list this membership is on. Present only on `GET
+            /v2/accounts/{account_id}/contacts/{id_or_email}/lists`.
+
+    UpsertListContactRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Names at most `subscription_status`. An empty object is legal and names
+        no status: on a new membership that means `confirmed`, and on one that
+        already exists it leaves the stored status exactly as it is. A property
+        that is not writable is rejected with 400 naming it.
+      properties:
+        subscription_status:
+          type: [string, 'null']
+          enum: [confirmed, unconfirmed, unsubscribed, null]
+          description: |
+            Null and omission are one case and name no status. `complained` is
+            the mailbox provider's verdict rather than the caller's and is
+            rejected with 400.
+
+    BatchAddListContactInput:
+      type: object
+      description: |
+        Names exactly one of `email` or `id`; a null names neither. No contact
+        is created here.
+
+        None of that is a request-level rejection, which is why it is stated
+        here rather than constrained above: an entry that names neither
+        identifier, names both, or carries any other property is reported
+        `invalid` at its own position inside a 200, and one naming nobody in
+        this account is reported `not_found`.
+      properties:
+        email:
+          type: [string, 'null']
+          format: email
+          description: Contact email; trimmed and lowercased before duplicates are counted
+        id:
+          type: [string, 'null']
+          format: uuid
+          description: Contact ID
+
+    BatchAddListContactsRequest:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: '#/components/schemas/BatchAddListContactInput'
+
+    BatchListContactResult:
+      type: object
+      additionalProperties: false
+      description: |
+        One entry's outcome. `position` is the entry's index in the request
+        array and the only handle an entry that named no single identifier
+        carries.
+      required: [position, outcome]
+      properties:
+        position:
+          type: integer
+          minimum: 0
+        email:
+          type: string
+          description: |
+            The normalized input email, echoed only when the entry named one
+            identifier and it decoded to a non-empty string. An entry whose
+            `email` was not a string or was empty once trimmed, and one naming
+            both identifiers, carry `position` alone.
+        id:
+          type: string
+          format: uuid
+          description: |
+            The input contact ID, echoed only when the entry named one that
+            parsed as a UUID.
+        outcome:
+          type: string
+          enum: [added, already_member, not_found, invalid]
+          description: |
+            `added` created the membership, `already_member` found one and left
+            it untouched whatever its status, `not_found` matched no contact in
+            this account, and `invalid` was decidable from the payload alone.
+        membership:
+          $ref: '#/components/schemas/ListContact'
+          description: |
+            The membership, present on `added` and on `already_member`, where
+            it is the row as it stands.
+        reason:
+          type: string
+          description: Caller-safe reason present only on `not_found` and `invalid`
+
+    BatchAddListContactsResponse:
+      type: object
+      additionalProperties: false
+      required: [object, added, skipped, failed, data]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        added:
+          type: integer
+          minimum: 0
+          description: Entries whose membership this request created
+        skipped:
+          type: integer
+          minimum: 0
+          description: Entries reported `already_member`
+        failed:
+          type: integer
+          minimum: 0
+          description: Entries reported `not_found` or `invalid`
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchListContactResult'
+
+    PaginatedContactListsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactList'
+        pagination:
+          $ref: '#/components/schemas/ContactPagination'
+
+    PaginatedListContactsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListContact'
         pagination:
           $ref: '#/components/schemas/ContactPagination'
 
@@ -7910,8 +8316,8 @@ paths:
         trimmed and lowercased. Writable attributes must match the account's
         dashboard-managed definitions; validation, membership, and activity
         fields are response-only. The contact cannot be campaign-targeted until
-        a future Lists API adds list membership. This operation does not read or
-        change suppression records.
+        it is added to a list with the Lists endpoints. This operation does not
+        read or change suppression records.
 
         The optional `Idempotency-Key` follows the ordinary 24-hour v2 replay contract.
         Successful 201, controller-produced deterministic 400, and duplicate
@@ -8609,6 +9015,1314 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: Missing `contacts:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Contact not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Lists endpoints
+  /v2/accounts/{account_id}/lists:
+    get:
+      summary: List Lists
+      description: |
+        Returns the account's lists in newest-first `(created_at, id)` order.
+        `after` and `before` are mutually exclusive. Every list carries
+        `contact_count`, the number of members a campaign to it would reach.
+      operationId: getLists
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of lists to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+        - name: name
+          in: query
+          description: |
+            Case-insensitive substring match on the list name. `%`, `_`, and `\`
+            match literally rather than as wildcards. The value is trimmed
+            before it is matched, so one that is empty or all whitespace filters
+            nothing and the full collection is returned.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["lists:read"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "net/url"
+              "os"
+            )
+
+            func main() {
+              endpoint, err := url.Parse("https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists")
+              if err != nil {
+                log.Fatal(err)
+              }
+              query := endpoint.Query()
+              query.Set("limit", "100")
+              query.Set("name", "newsletter")
+              endpoint.RawQuery = query.Encode()
+
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint.String(), nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: Paginated lists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContactListsResponse'
+        '400':
+          description: Invalid filter or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create List
+      description: |
+        Creates one list. Lists are static, private, and single opt-in, and
+        names are not unique within an account. A new list has no members, so
+        its `contact_count` is 0.
+
+        The optional `Idempotency-Key` follows the ordinary 24-hour v2 replay
+        contract. An identical request replays the same status and semantically
+        equivalent JSON body with `Idempotent-Replayed: true`. Reusing the key
+        with a different method, resolved path, or semantic JSON payload
+        returns 422.
+      operationId: createList
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["lists:write"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "os"
+              "strings"
+            )
+
+            func main() {
+              const endpoint = "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists"
+              body := strings.NewReader(`{"name":"Product updates","description":"Monthly release notes","tags":["product"]}`)
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, body)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              req.Header.Set("Content-Type", "application/json")
+              req.Header.Set("Idempotency-Key", "list-create-0001")
+
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContactListRequest'
+      responses:
+        '201':
+          description: List created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactList'
+        '400':
+          description: |
+            Invalid request body, or a property that is not writable. An
+            identical keyed retry replays the stored response with
+            `Idempotent-Replayed: true`.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/lists/{list_id}:
+    get:
+      summary: Get List
+      description: |
+        Returns one account-scoped list, including `contact_count`.
+      operationId: getList
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["lists:read"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "os"
+            )
+
+            func main() {
+              const endpoint = "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111"
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactList'
+        '400':
+          description: Malformed `list_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: List not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Update List
+      description: |
+        Partially updates one account-scoped list. An omitted or null property
+        leaves the stored value unchanged; a present `tags` array replaces the
+        stored tags, and an empty one clears them. A stored value that breaks a
+        bound this API introduces reads back fine and fails only when it is
+        re-sent here.
+      operationId: updateList
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContactListRequest'
+      security:
+        - BearerAuth: ["lists:write"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "os"
+              "strings"
+            )
+
+            func main() {
+              const endpoint = "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111"
+              body := strings.NewReader(`{"name":"Product updates","tags":[]}`)
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, endpoint, body)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              req.Header.Set("Content-Type", "application/json")
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: Updated list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactList'
+        '400':
+          description: Malformed `list_id`, invalid request body, or a property that is not writable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: List not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Delete List
+      description: |
+        Soft-deletes one account-scoped list. The list stops being readable and
+        stops contributing recipients to any campaign, but every membership row
+        is kept, so deleting a list never discards the record that someone
+        unsubscribed from it or reported it as spam. Those memberships stop
+        being readable with the list: this list answers 404 afterwards, and it
+        no longer appears among a contact's lists.
+
+        Deleting a list that is already gone returns 404, so a client retrying
+        to convergence converges.
+      operationId: deleteList
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["lists:delete"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "os"
+            )
+
+            func main() {
+              const endpoint = "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111"
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, endpoint, nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: List deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Malformed `list_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: List not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            A campaign that still needs this list references it. Campaigns
+            in `draft`, `validating`, `scheduled`, `sending`,
+            `paused`, or `waiting_for_review` block the delete, while `sent`,
+            `failed`, and `canceled` campaigns do not. This conflict carries no
+            idempotency headers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/lists/{list_id}/contacts:
+    get:
+      summary: List Contacts on a List
+      description: |
+        Returns one list's members, newest first on the membership's own
+        `(created_at, id)`. Each item carries the membership, its `contact_id`,
+        and the contact's normalized email; `include_contacts=true` embeds the
+        whole contact and additionally requires the `contacts:read` scope.
+        `after` and `before` are mutually exclusive.
+
+        `subscription_status=confirmed` answers who a campaign on this list can
+        reach, subject to the account-wide checks campaign initialization also
+        applies. The filter accepts `complained` as well, because such a
+        membership exists and must be findable even though no caller can write
+        that status.
+      operationId: getListContacts
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of memberships to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+        - name: subscription_status
+          in: query
+          description: Per-list consent filter
+          schema:
+            type: string
+            enum: [unconfirmed, confirmed, unsubscribed, complained]
+        - name: email
+          in: query
+          description: |
+            Exact email filter. The value is normalized before it is
+            compared, so one that is empty or all whitespace filters nothing
+            and the full collection is returned. It is compared against the
+            address as stored, so an address that was stored unnormalized
+            renders normalized in this collection and is still not matched by
+            this filter.
+          schema:
+            type: string
+            format: email
+        - name: include_contacts
+          in: query
+          description: |
+            Embed the whole contact in every item. Requires the `contacts:read`
+            scope in addition to `lists:read`.
+          schema:
+            type: boolean
+      security:
+        - BearerAuth: ["lists:read"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "net/url"
+              "os"
+            )
+
+            func main() {
+              endpoint, err := url.Parse("https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111/contacts")
+              if err != nil {
+                log.Fatal(err)
+              }
+              query := endpoint.Query()
+              query.Set("subscription_status", "confirmed")
+              query.Set("include_contacts", "true")
+              endpoint.RawQuery = query.Encode()
+
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint.String(), nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: Paginated list memberships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListContactsResponse'
+        '400':
+          description: Malformed `list_id`, invalid filter, or invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Missing `lists:read` scope, or `include_contacts=true` without the
+            `contacts:read` scope. The expansion check runs before the list is
+            resolved, so an unauthorized expansion naming a list that does not
+            exist answers 403 rather than 404.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: List not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/lists/{list_id}/contacts/batch:
+    post:
+      summary: Batch add contacts to a list
+      description: |
+        Synchronously adds one through 1,000 existing contacts to one list.
+        This operation only ever inserts: an entry whose membership already
+        exists is reported `already_member` and the stored row is left exactly
+        as it stands, whatever its status, so bulk work can never erase an
+        unsubscribe. A membership it creates is `confirmed`. No contact is
+        created, and an entry naming nobody in this account is reported
+        `not_found`.
+
+        One malformed entry does not cost the others their result. An entry is
+        reported `invalid` when it is not an object, names neither or both of
+        `email` and `id`, carries any other property, holds an `id` that is
+        not a string or not a UUID, or an `email` that is not a string or fails
+        the validation contact writes apply, or repeats an identifier another
+        entry already used. Duplicates are
+        counted on the normalized identifier, so `A@x.com` and `a@x.com` are
+        one identifier and both entries fail. A contact named twice by
+        different kinds of identifier is settled by payload order: the earliest
+        position that would create the membership takes `added`, and every
+        later one takes `already_member`. An unknown property beside `data` is
+        still a 400 for the whole request.
+
+        The memberships and the optional idempotency replay response commit
+        atomically and use the ordinary 24-hour replay window. Every status
+        this operation's handler produces is stored and replayable: the 200,
+        the 404 for a list that is not there, and each of the 400s below.
+        Reusing a key with a different method, resolved path, or semantic JSON
+        payload returns 422. An identical keyed request replays the same status
+        and a semantically equivalent JSON response.
+
+        Measured pacing guidance: batch size is a cap, not a throughput target.
+        Measure end-to-end latency with representative data, submit the next
+        synchronous batch only after the previous response, and reduce batch
+        size or pace requests when latency grows. Honor 429 responses before
+        continuing; the API makes no fixed throughput guarantee.
+      operationId: batchAddListContacts
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["lists:write"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "os"
+              "strings"
+            )
+
+            func main() {
+              const endpoint = "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111/contacts/batch"
+              body := strings.NewReader(`{"data":[{"email":"one@example.com"},{"id":"22222222-2222-4222-8222-222222222222"}]}`)
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, body)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              req.Header.Set("Content-Type", "application/json")
+              req.Header.Set("Idempotency-Key", "list-contacts-batch-0001")
+
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchAddListContactsRequest'
+      responses:
+        '200':
+          description: Ordered per-entry outcomes
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAddListContactsResponse'
+        '400':
+          description: |
+            A malformed `list_id`, a body that is not a single JSON object, an
+            unknown property beside `data`, a `data` that is absent, null or not
+            an array, an empty `data` array, or more than 1,000 entries. An
+            identical keyed retry replays the stored response with
+            `Idempotent-Replayed: true`.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            List not found. The handler produces this status, so it is stored
+            against the idempotency key: an identical keyed retry replays it
+            with `Idempotent-Replayed: true` rather than looking the list up
+            again.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/lists/{list_id}/contacts/{id_or_email}:
+    put:
+      summary: Add or Update a List Contact
+      description: |
+        Adds one existing contact to one list, or updates the membership that
+        is already there, and returns the membership either way. No contact is
+        created.
+
+        A membership this call creates is `confirmed` unless the body names
+        another status. On a membership that already exists, a body naming no
+        status leaves the stored status exactly as it is: a PUT is not an
+        implicit resubscribe, and naming a status is the deliberate act that
+        may resubscribe. A write that names the status the membership already
+        holds changes nothing at all, `updated_at` included, so a retry leaves
+        the row identical.
+
+        `confirmed` sets `subscribed_at` and clears `unsubscribed_at`;
+        `unsubscribed` sets `unsubscribed_at` and leaves `subscribed_at` as it
+        was; `unconfirmed` sets neither.
+
+        UUID-shaped path values resolve by ID; all other values resolve by
+        trimmed, lowercased email. Email identifiers must be percent-encoded
+        exactly once as URL path segments; pass a raw email to SDKs, including
+        addresses such as `user+tag@example.com`.
+      operationId: upsertListContact
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: id_or_email
+          in: path
+          required: true
+          description: |
+            Contact UUID or email address. Percent-encode an email exactly once
+            as a path segment; SDK callers pass the raw email value.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertListContactRequest'
+      security:
+        - BearerAuth: ["lists:write"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "net/url"
+              "os"
+              "strings"
+            )
+
+            func main() {
+              contact := url.PathEscape("user+tag@example.com")
+              endpoint := "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111/contacts/" + contact
+              body := strings.NewReader(`{"subscription_status":"confirmed"}`)
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, endpoint, body)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              req.Header.Set("Content-Type", "application/json")
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: The membership, whether this request created it or updated one
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListContact'
+        '400':
+          description: |
+            Malformed `list_id`, an absent or non-object body, a property that
+            is not writable, or a `subscription_status` outside `confirmed`,
+            `unconfirmed`, and `unsubscribed`. The body is validated before the
+            membership is read, so naming `complained` is 400 whatever the
+            stored row holds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            The list does not exist on this account, or no contact matches
+            `{id_or_email}`. The message says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            The membership is `complained`: the contact reported this list as
+            spam, that verdict is the mailbox provider's rather than the
+            caller's, and writing over it would clear the only record of when
+            the complaint landed. The membership is frozen and nothing is
+            changed, including by a request naming no status. This conflict
+            carries no idempotency headers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Remove a Contact from a List
+      description: |
+        Removes one contact from one list. UUID-shaped path values resolve by
+        ID; all other values resolve by trimmed, lowercased email. Email
+        identifiers must be percent-encoded exactly once as URL path segments;
+        pass a raw email to SDKs, including addresses such as
+        `user+tag@example.com`.
+
+        This deletes the membership row, and with it any record that the
+        contact unsubscribed from this list or reported it as spam, so re-adding
+        them later is silent. Prefer unsubscribe over delete when the intent is
+        only to prevent marketing delivery: `PUT` the same path with
+        `{"subscription_status": "unsubscribed"}` instead, which is reversible
+        and keeps the record. Removing a membership that is not there returns
+        404.
+      operationId: deleteListContact
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: list_id
+          in: path
+          required: true
+          description: List ID
+          schema:
+            type: string
+            format: uuid
+        - name: id_or_email
+          in: path
+          required: true
+          description: |
+            Contact UUID or email address. Percent-encode an email exactly once
+            as a path segment; SDK callers pass the raw email value.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["lists:write"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "net/url"
+              "os"
+            )
+
+            func main() {
+              contact := url.PathEscape("user+tag@example.com")
+              endpoint := "https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/lists/11111111-1111-4111-8111-111111111111/contacts/" + contact
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, endpoint, nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: Contact removed from the list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Malformed `list_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: |
+            The list does not exist on this account, no contact matches
+            `{id_or_email}`, or the contact is not on this list. The message
+            says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/contacts/{id_or_email}/lists:
+    get:
+      summary: List a Contact's Lists
+      description: |
+        Returns the lists one contact is on, newest first on the membership's
+        own `(created_at, id)`. Each item carries the membership with the list
+        embedded, and soft-deleted lists are excluded. This is the reverse of
+        `GET /v2/accounts/{account_id}/lists/{list_id}/contacts`, and the only
+        way to answer what one person is subscribed to without walking every
+        list. `after` and `before` are mutually exclusive.
+
+        UUID-shaped path values resolve by ID; all other values resolve by
+        trimmed, lowercased email. Email identifiers must be percent-encoded
+        exactly once as URL path segments; pass a raw email to SDKs, including
+        addresses such as `user+tag@example.com`.
+
+        To stop marketing mail to someone everywhere at once, `PUT
+        /v2/accounts/{account_id}/contacts/{id_or_email}` with
+        `{"unsubscribed": true}`; there is no remove-from-all-lists operation.
+        That is an account-wide verdict campaigns honour, and it does not
+        change any membership here: every row still reads back with the status
+        it holds, though the contact no longer counts toward any list's
+        `contact_count`. To record the decision on one list, `PUT` that
+        membership with `{"subscription_status": "unsubscribed"}`.
+      operationId: getContactLists
+      tags:
+        - Lists
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: id_or_email
+          in: path
+          required: true
+          description: |
+            Contact UUID or email address. Percent-encode an email exactly once
+            as a path segment; SDK callers pass the raw email value.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of memberships to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+        - name: subscription_status
+          in: query
+          description: Per-list consent filter
+          schema:
+            type: string
+            enum: [unconfirmed, confirmed, unsubscribed, complained]
+      security:
+        - BearerAuth: ["lists:read"]
+      x-code-samples:
+        - lang: go
+          label: Go net/http
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "net/http"
+              "net/url"
+              "os"
+            )
+
+            func main() {
+              contact := url.PathEscape("user+tag@example.com")
+              endpoint, err := url.Parse("https://api.ahasend.com/v2/accounts/00000000-0000-4000-8000-000000000000/contacts/" + contact + "/lists")
+              if err != nil {
+                log.Fatal(err)
+              }
+              query := endpoint.Query()
+              query.Set("subscription_status", "confirmed")
+              endpoint.RawQuery = query.Encode()
+
+              req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint.String(), nil)
+              if err != nil {
+                log.Fatal(err)
+              }
+              req.Header.Set("Authorization", "Bearer "+os.Getenv("AHASEND_API_KEY"))
+              response, err := http.DefaultClient.Do(req)
+              if err != nil {
+                log.Fatal(err)
+              }
+              defer response.Body.Close()
+              fmt.Println(response.Status)
+            }
+      responses:
+        '200':
+          description: Paginated list memberships, each with its list embedded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedListContactsResponse'
+        '400':
+          description: Invalid filter or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `lists:read` scope
           content:
             application/json:
               schema:
@@ -11611,6 +13325,8 @@ tags:
     description: Read, create, update, batch upsert, and delete account-global contacts
   - name: Templates
     description: Read the account's transactional templates and the variables a send must supply
+  - name: Lists
+    description: Manage contact lists and the contacts on them
   - name: Suppressions
     description: Manage email suppressions
   - name: Routes
