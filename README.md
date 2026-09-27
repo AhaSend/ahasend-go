@@ -310,13 +310,7 @@ Run `make help` to see every command. The common ones:
 
 ### Code samples
 
-The Go samples in the API reference come from this repository. Each operation has one program at `codesamples/<operationId>/main.go`. `go build ./...` compiles them, so a sample always matches the SDK.
-
-- `make sync-spec` downloads `openapi.yaml` from the `master` branch of the API repository and writes the samples into it. The API repository owns everything in that file except the Go samples. While a change has not reached `master`, use `make sync-spec REF=devel`. It uses the `gh` command, which needs read access to the private `AhaSend/AhaSend` repository.
-- `make code-samples` writes the samples into `openapi/openapi.yaml` after you change one.
-- `make check-code-samples` fails if `openapi/openapi.yaml` is out of date. CI runs it.
-
-The API repository's `scripts/sync-code-samples` copies the Go samples from `openapi/openapi.yaml` on this repository's `main` branch into its own copy.
+Each operation's Go sample in the API reference is a program at `codesamples/<operationId>/main.go`. `go build ./...` compiles them, so a sample always matches the SDK. After you change one, run `make code-samples` to write it into `openapi/openapi.yaml`. CI runs `make check-code-samples` to check the file is up to date.
 
 ## Related
 
