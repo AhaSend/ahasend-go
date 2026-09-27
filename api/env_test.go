@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper to set and clean up environment variables
@@ -408,4 +411,112 @@ func boolPtr(b bool) *bool {
 
 func intPtr(i int) *int {
 	return &i
+}
+
+// clearAuthEnv unsets both API key variables so a key in the developer's
+// environment cannot leak into a test.
+func clearAuthEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(EnvAPIKey, "")
+	t.Setenv(EnvAPIToken, "")
+}
+
+// pingAuthorization sends a ping with a client built from the environment to
+// a test server and returns the Authorization header the server received.
+func pingAuthorization(t *testing.T) string {
+	t.Helper()
+
+	var authorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":"pong"}`))
+	}))
+	defer server.Close()
+	t.Setenv(EnvBaseURL, server.URL)
+	t.Setenv(EnvMaxRetries, "0")
+
+	_, _, err := NewAPIClientFromEnv().UtilityAPI.Ping(context.Background())
+	require.NoError(t, err)
+	return authorization
+}
+
+func TestNewAPIClientFromEnvSendsTheAPIKey(t *testing.T) {
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIKey, "aha-sk-from-api-key")
+
+	assert.Equal(t, "Bearer aha-sk-from-api-key", pingAuthorization(t))
+}
+
+func TestNewAPIClientFromEnvFallsBackToToken(t *testing.T) {
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIToken, "aha-sk-from-token")
+
+	assert.Equal(t, "Bearer aha-sk-from-token", pingAuthorization(t))
+}
+
+func TestLoadEnvIntoConfigKeepsAKeySetInCode(t *testing.T) {
+	clearAuthEnv(t)
+	cfg := NewConfiguration()
+	cfg.APIKey = "aha-sk-set-in-code"
+
+	LoadEnvIntoConfig(cfg)
+
+	assert.Equal(t, "aha-sk-set-in-code", cfg.APIKey)
+}
+
+func TestConfigFromEnvAppliesTimeouts(t *testing.T) {
+	t.Setenv(EnvTimeout, "7")
+	t.Setenv(EnvConnectTimeout, "3")
+
+	cfg := ConfigFromEnv()
+
+	require.NotNil(t, cfg.HTTPClient)
+	assert.Equal(t, 7*time.Second, cfg.HTTPClient.Timeout)
+	transport, ok := cfg.HTTPClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.NotSame(t, http.DefaultTransport, transport, "the shared default transport must not be modified")
+	assert.NotNil(t, transport.DialContext)
+}
+
+func TestLoadEnvIntoConfigLeavesTheCallersClientAlone(t *testing.T) {
+	t.Setenv(EnvTimeout, "7")
+	t.Setenv(EnvConnectTimeout, "")
+	base := &http.Client{Timeout: time.Minute}
+	cfg := NewConfiguration()
+	cfg.HTTPClient = base
+
+	LoadEnvIntoConfig(cfg)
+
+	assert.Equal(t, 7*time.Second, cfg.HTTPClient.Timeout)
+	assert.Equal(t, time.Minute, base.Timeout)
+}
+
+func TestNewAPIClientFromEnvEnforcesTheRequestTimeout(t *testing.T) {
+	release := make(chan struct{})
+	received := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	t.Setenv(EnvBaseURL, server.URL)
+	t.Setenv(EnvMaxRetries, "0")
+	t.Setenv(EnvTimeout, "1")
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIKey, "aha-sk-from-api-key")
+
+	start := time.Now()
+	_, _, err := NewAPIClientFromEnv().UtilityAPI.Ping(context.Background())
+
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Len(t, received, 1, "the request must reach the server named by AHASEND_BASE_URL")
+	assert.GreaterOrEqual(t, elapsed, 900*time.Millisecond)
+	assert.Less(t, elapsed, 5*time.Second)
 }

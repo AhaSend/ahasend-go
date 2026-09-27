@@ -7,6 +7,8 @@ package api
 
 import (
 	"context"
+	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -63,6 +65,11 @@ func LoadEnvIntoConfig(cfg *Configuration) {
 
 // loadEnvIntoConfig is the internal implementation
 func loadEnvIntoConfig(cfg *Configuration) {
+	// Authentication. An unset variable leaves a key set in code alone.
+	if apiKey := GetAPIKeyFromEnv(); apiKey != "" {
+		cfg.APIKey = apiKey
+	}
+
 	// Server Configuration
 	if baseURL := getEnv(EnvBaseURL); baseURL != "" {
 		// Parse base URL to extract host and scheme
@@ -111,6 +118,41 @@ func loadEnvIntoConfig(cfg *Configuration) {
 	if prefix := getEnv(EnvIdempotencyPrefix); prefix != "" {
 		cfg.IdempotencyConfig.KeyPrefix = prefix
 	}
+
+	// Timeout Configuration
+	if timeout, connectTimeout := GetTimeoutFromEnv(); timeout > 0 || connectTimeout > 0 {
+		cfg.HTTPClient = httpClientWithTimeouts(cfg.HTTPClient, timeout, connectTimeout)
+	}
+}
+
+// httpClientWithTimeouts returns a copy of base, or of a default client when
+// base is nil, that applies the given request and connection timeouts. A zero
+// timeout keeps base's own setting. The connection timeout needs an
+// *http.Transport, so a custom RoundTripper keeps its own dialing behavior.
+// base is never modified, since it may be shared.
+func httpClientWithTimeouts(base *http.Client, timeout, connectTimeout time.Duration) *http.Client {
+	client := &http.Client{}
+	if base != nil {
+		*client = *base
+	}
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+	if connectTimeout > 0 {
+		transport, ok := client.Transport.(*http.Transport)
+		if client.Transport == nil {
+			transport, ok = http.DefaultTransport.(*http.Transport)
+		}
+		if ok {
+			transport = transport.Clone()
+			transport.DialContext = (&net.Dialer{
+				Timeout:   connectTimeout,
+				KeepAlive: 30 * time.Second,
+			}).DialContext
+			client.Transport = transport
+		}
+	}
+	return client
 }
 
 // GetAPIKeyFromEnv returns the API key from environment variables.
