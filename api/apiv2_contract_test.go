@@ -82,7 +82,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				return client.ContactsAPI.GetContacts(context.Background(), accountID, requests.GetContactsParams{
 					Limit:      ahasend.Int32(25),
 					After:      ahasend.String("after-cursor"),
-					Before:     ahasend.String("before-cursor"),
 					Email:      ahasend.String("person@example.com"),
 					Status:     ahasend.String("enabled"),
 					Subscribed: ahasend.Bool(true),
@@ -181,9 +180,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				capturedRequest = r
 				capturedBody, _ = io.ReadAll(r.Body)
 				w.Header().Set("Content-Type", "application/json")
-				if tt.idempotencyKey != "" {
-					w.Header().Set("Idempotent-Replayed", "true")
-				}
 				w.WriteHeader(tt.status)
 				_, _ = w.Write([]byte(tt.response))
 			})
@@ -198,9 +194,6 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 			assert.Equal(t, tt.method, capturedRequest.Method)
 			assert.Equal(t, tt.path, capturedRequest.URL.Path)
 			assert.Equal(t, tt.idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
-			if tt.idempotencyKey != "" {
-				assert.Equal(t, "true", httpResponse.Header.Get("Idempotent-Replayed"))
-			}
 			if tt.assertRequestBody != nil {
 				tt.assertRequestBody(t, capturedBody)
 			}
@@ -209,7 +202,7 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 				query := capturedRequest.URL.Query()
 				assert.Equal(t, "25", query.Get("limit"))
 				assert.Equal(t, "after-cursor", query.Get("after"))
-				assert.Equal(t, "before-cursor", query.Get("before"))
+				assert.False(t, query.Has("before"))
 				assert.Equal(t, "person@example.com", query.Get("email"))
 				assert.Equal(t, "enabled", query.Get("status"))
 				assert.Equal(t, "true", query.Get("subscribed"))

@@ -66,3 +66,18 @@ func TestContactMutationRequestsPreserveNullAttributes(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateContactRequestSendsExplicitZeroValues(t *testing.T) {
+	cleared := ""
+	resubscribe := false
+
+	encoded, err := json.Marshal(UpdateContactRequest{
+		FirstName:    &cleared,
+		Unsubscribed: &resubscribe,
+	})
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &body))
+	assert.Equal(t, map[string]any{"first_name": "", "unsubscribed": false}, body)
+}
