@@ -361,10 +361,11 @@ func (a *ListsAPIService) UpsertListContact(
 /*
 DeleteListContact Remove a Contact from a List
 
-# Deletes one membership, discarding any unsubscribe or complaint it records
+# Deletes one membership, discarding any unsubscribe it records
 
 To stop marketing mail on one list reversibly, use UpsertListContact with
-the unsubscribed status instead.
+the unsubscribed status instead. A complained membership cannot be removed
+and answers 409.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

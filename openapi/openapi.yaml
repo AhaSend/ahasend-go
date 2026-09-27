@@ -10085,12 +10085,14 @@ paths:
         `user+tag@example.com`.
 
         This deletes the membership row, and with it any record that the
-        contact unsubscribed from this list or reported it as spam, so re-adding
-        them later is silent. Prefer unsubscribe over delete when the intent is
-        only to prevent marketing delivery: `PUT` the same path with
+        contact unsubscribed from this list, so re-adding them later is silent.
+        Prefer unsubscribe over delete when the intent is only to prevent
+        marketing delivery: `PUT` the same path with
         `{"subscription_status": "unsubscribed"}` instead, which is reversible
-        and keeps the record. Removing a membership that is not there returns
-        404.
+        and keeps the record. A `complained` membership, one whose contact
+        reported the list as spam, cannot be removed and returns 409, so the
+        contact cannot be added back as `confirmed`. Removing a membership that
+        is not there returns 404.
       operationId: deleteListContact
       tags:
         - Lists
@@ -10179,6 +10181,12 @@ paths:
             The list does not exist on this account, no contact matches
             `{id_or_email}`, or the contact is not on this list. The message
             says which.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The contact reported this list as spam; the membership is kept
           content:
             application/json:
               schema:
