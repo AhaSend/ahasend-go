@@ -11,9 +11,9 @@ import (
 type CreateMessageRequest struct {
 	From       common.SenderAddress `json:"from"`
 	Recipients []common.Recipient   `json:"recipients"`
-	// Subject carries no omitempty on purpose: a templated send that leaves it
-	// unset serialises `"subject": ""`, which is what the API reads as "no
-	// subject given, use the template's".
+	// Subject may be left empty on a templated send whose template has a
+	// subject of its own; the API treats an empty subject, sent or omitted, as
+	// "use the template's".
 	Subject string                `json:"subject"`
 	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
 	// TemplateID names a transactional template to send. It supplies the

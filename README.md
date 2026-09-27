@@ -108,9 +108,13 @@ message := requests.CreateMessageRequest{
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
 
-`TemplateID` cannot be combined with `TextContent`, `HtmlContent` or `AmpContent`. Leave `Subject` unset to use the template's own, or set it to override it. Values come from the request's `Substitutions` and from each recipient's, the recipient's winning where both name a variable.
+`TemplateID` cannot be combined with `TextContent`, `HtmlContent` or `AmpContent`. Leave `Subject` empty to use the template's own, or set it to override it. Values come from the request's `Substitutions` and from each recipient's, the recipient's winning where both name a variable. AhaSend supplies `email`, `view_browser_url` and `unsubscribe_url` itself.
 
-List the account's templates, newest first, with `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})`, paging with the `After` and `Before` cursors the response returns.
+A templated send fails with a 404 for an unknown template, a 400 when neither the request nor the template has a subject or the template has no saved design, and a 400 for the whole request when any recipient is missing a required variable.
+
+`GetTemplate` and `GetTemplates` need the `templates:read` scope; sending from a template needs only the usual send scope.
+
+List the account's templates, newest first, with `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})`. To page, pass the response's `Pagination.NextCursor` back as `After`, or `Pagination.PreviousCursor` as `Before`.
 
 ## Authentication & API Keys
 
