@@ -21,7 +21,7 @@ func main() {
 
 	response, _, err := client.WebhooksAPI.UpdateWebhook(ctx, accountID, webhookID, requests.UpdateWebhookRequest{
 		Name:      ahasend.String("Failures"),
-		URL:       ahasend.String("https://mystartup.com/webhook"),
+		URL:       ahasend.String("https://example.com/webhook"),
 		Enabled:   ahasend.Bool(true),
 		OnBounced: ahasend.Bool(true),
 	})

@@ -17,10 +17,12 @@ func main() {
 	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
 	ctx := context.Background()
 
+	// The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+	// its own retries, so a retried request is not applied twice.
 	response, _, err := client.RoutesAPI.CreateRoute(ctx, accountID, requests.CreateRouteRequest{
 		Name:         "My Route",
-		URL:          "https://mystartup.com/tickets",
-		Recipient:    "ticket-*@mystartup.com",
+		URL:          "https://example.com/tickets",
+		Recipient:    "ticket-*@example.com",
 		Enabled:      ahasend.Bool(true),
 		Attachments:  true,
 		Headers:      true,

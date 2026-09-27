@@ -21,7 +21,7 @@ func main() {
 
 	response, _, err := client.RoutesAPI.UpdateRoute(ctx, accountID, routeID, requests.UpdateRouteRequest{
 		Name: ahasend.String("Updated Name"),
-		URL:  ahasend.String("https://mystartup.com/new-tickets"),
+		URL:  ahasend.String("https://example.com/new-tickets"),
 	})
 	if err != nil {
 		log.Fatalf("Error updating route: %v", err)

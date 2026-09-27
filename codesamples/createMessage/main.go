@@ -18,6 +18,11 @@ func main() {
 	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
 	ctx := context.Background()
 
+	// The SDK sends a fresh Idempotency-Key with every POST and reuses it on its
+	// own retries. Deriving the key from your own ID instead also makes a rerun
+	// of the same job (after a crash, say) return the first send, not a second.
+	orderID := "1234"
+
 	response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, requests.CreateMessageRequest{
 		From: common.SenderAddress{
 			Email: "info@example.com",
@@ -32,7 +37,7 @@ func main() {
 		Subject:     "Hello",
 		TextContent: ahasend.String("Hello world!"),
 		Sandbox:     ahasend.Bool(true),
-	})
+	}, api.WithIdempotencyKey("order-"+orderID+"-receipt"))
 	if err != nil {
 		log.Fatalf("Error sending message: %v", err)
 	}

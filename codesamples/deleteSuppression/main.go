@@ -21,7 +21,7 @@ func main() {
 	response, _, err := client.SuppressionsAPI.DeleteSuppression(
 		ctx,
 		accountID,
-		"info@bigco.com",
+		"info@example.com",
 		ahasend.String("notifications.example.com"),
 	)
 	if err != nil {

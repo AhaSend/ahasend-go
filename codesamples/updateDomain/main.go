@@ -18,9 +18,7 @@ func main() {
 	ctx := context.Background()
 
 	response, _, err := client.DomainsAPI.UpdateDomain(ctx, accountID, "example.com", requests.UpdateDomainRequest{
-		TrackingSubdomain:        ahasend.String("click"),
-		ReturnPathSubdomain:      ahasend.String("mail"),
-		DKIMRotationIntervalDays: ahasend.Int(45),
+		TrackingSubdomain: ahasend.String("click"),
 	})
 	if err != nil {
 		log.Fatalf("Error updating domain: %v", err)

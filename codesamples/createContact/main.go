@@ -17,11 +17,13 @@ func main() {
 	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
 	ctx := context.Background()
 
+	// The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+	// its own retries, so a retried request is not applied twice.
 	response, _, err := client.ContactsAPI.CreateContact(ctx, accountID, requests.CreateContactRequest{
 		Email:      "person@example.com",
 		FirstName:  ahasend.String("Pat"),
 		Attributes: map[string]any{"customer": true},
-	}, api.WithIdempotencyKey("contact-create-0001"))
+	})
 	if err != nil {
 		log.Fatalf("Error creating contact: %v", err)
 	}

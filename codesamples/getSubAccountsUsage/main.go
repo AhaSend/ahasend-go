@@ -22,6 +22,12 @@ func main() {
 	fmt.Printf("Allocation method: %s\n", response.AllocationMethod)
 	fmt.Printf("Total: %d messages, %.2f %s\n", response.Total.ReceptionCount, response.Total.AllocatedCost, response.Currency)
 	for _, sub := range response.SubAccounts {
-		fmt.Printf("  %d messages, %.2f %s\n", sub.ReceptionCount, sub.AllocatedCost, response.Currency)
+		name := "(unnamed)"
+		if sub.Name != nil {
+			name = *sub.Name
+		} else if sub.AccountID != nil {
+			name = sub.AccountID.String()
+		}
+		fmt.Printf("  %s: %d messages, %.2f %s\n", name, sub.ReceptionCount, sub.AllocatedCost, response.Currency)
 	}
 }

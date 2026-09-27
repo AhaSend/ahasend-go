@@ -17,11 +17,13 @@ func main() {
 	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
 	ctx := context.Background()
 
+	// The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+	// its own retries, so a retried request is not applied twice.
 	response, _, err := client.ListsAPI.CreateList(ctx, accountID, requests.CreateListRequest{
 		Name:        "Product updates",
 		Description: ahasend.String("Monthly release notes"),
 		Tags:        []string{"product"},
-	}, api.WithIdempotencyKey("list-create-0001"))
+	})
 	if err != nil {
 		log.Fatalf("Error creating list: %v", err)
 	}

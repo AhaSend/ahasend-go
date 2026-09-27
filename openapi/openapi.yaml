@@ -3701,6 +3701,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.APIKeysAPI.CreateAPIKey(ctx, accountID, requests.CreateAPIKeyRequest{
                 Label: "My API Key",
                 Scopes: []string{
@@ -4273,6 +4275,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.DomainsAPI.CreateDomain(ctx, accountID, requests.CreateDomainRequest{
                 Domain: "example.com",
               })
@@ -4511,9 +4515,7 @@ paths:
               ctx := context.Background()
 
               response, _, err := client.DomainsAPI.UpdateDomain(ctx, accountID, "example.com", requests.UpdateDomainRequest{
-                TrackingSubdomain:        ahasend.String("click"),
-                ReturnPathSubdomain:      ahasend.String("mail"),
-                DKIMRotationIntervalDays: ahasend.Int(45),
+                TrackingSubdomain: ahasend.String("click"),
               })
               if err != nil {
                 log.Fatalf("Error updating domain: %v", err)
@@ -5025,6 +5027,11 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with every POST and reuses it on its
+              // own retries. Deriving the key from your own ID instead also makes a rerun
+              // of the same job (after a crash, say) return the first send, not a second.
+              orderID := "1234"
+
               response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, requests.CreateMessageRequest{
                 From: common.SenderAddress{
                   Email: "info@example.com",
@@ -5039,7 +5046,7 @@ paths:
                 Subject:     "Hello",
                 TextContent: ahasend.String("Hello world!"),
                 Sandbox:     ahasend.Bool(true),
-              })
+              }, api.WithIdempotencyKey("order-"+orderID+"-receipt"))
               if err != nil {
                 log.Fatalf("Error sending message: %v", err)
               }
@@ -5187,6 +5194,9 @@ paths:
               // recipients can see each other (BCC excluded). The combined
               // To + CC + BCC count must not exceed 50. Unlike Create Message,
               // this endpoint does not support template substitutions.
+              //
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.MessagesAPI.CreateConversationMessage(ctx, accountID, requests.CreateConversationMessageRequest{
                 From: common.SenderAddress{
                   Email: "info@example.com",
@@ -5213,6 +5223,8 @@ paths:
               for _, message := range response.Data {
                 if message.ID != nil {
                   fmt.Printf("%s: %s\n", message.Recipient.Email, *message.ID)
+                } else if message.Error != nil {
+                  fmt.Printf("%s: %s\n", message.Recipient.Email, *message.Error)
                 }
               }
             }
@@ -6045,11 +6057,13 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.AccountsAPI.AddAccountMember(ctx, accountID, requests.AddMemberRequest{
                 Email: "teammate@example.com",
                 Name:  ahasend.String("Jordan Lee"),
                 Role:  "Developer",
-              }, api.WithIdempotencyKey("add-member-20240101-jordan"))
+              })
               if err != nil {
                 log.Fatalf("Error adding account member: %v", err)
               }
@@ -6399,11 +6413,13 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.SubAccountsAPI.CreateSubAccount(ctx, accountID, requests.CreateSubAccountRequest{
                 Name:          "Acme Subsidiary",
                 Website:       "acme.example.com",
                 MonthlyCredit: ahasend.Int64(0),
-              }, api.WithIdempotencyKey("subacct-20240101-acme"))
+              })
               if err != nil {
                 log.Fatalf("Error creating sub account: %v", err)
               }
@@ -6518,7 +6534,13 @@ paths:
               fmt.Printf("Allocation method: %s\n", response.AllocationMethod)
               fmt.Printf("Total: %d messages, %.2f %s\n", response.Total.ReceptionCount, response.Total.AllocatedCost, response.Currency)
               for _, sub := range response.SubAccounts {
-                fmt.Printf("  %d messages, %.2f %s\n", sub.ReceptionCount, sub.AllocatedCost, response.Currency)
+                name := "(unnamed)"
+                if sub.Name != nil {
+                  name = *sub.Name
+                } else if sub.AccountID != nil {
+                  name = sub.AccountID.String()
+                }
+                fmt.Printf("  %s: %d messages, %.2f %s\n", name, sub.ReceptionCount, sub.AllocatedCost, response.Currency)
               }
             }
 
@@ -7289,19 +7311,21 @@ paths:
 
               subAccountID := uuid.MustParse("7d3c9f5e-2a41-4b8e-9c6d-0f1e2a3b4c5d")
 
-              // Bootstrap an API key for the sub account; the idempotency key makes
-              // retries safe.
+              // Bootstrap an API key for the sub account.
+              //
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.SubAccountsAPI.CreateSubAccountAPIKey(ctx, accountID, subAccountID, requests.CreateAPIKeyRequest{
                 Label:  "Bootstrap key",
                 Scopes: []string{"messages:send:all", "domains:read"},
                 // Optional: restrict the key to specific source IPs.
                 IPAllowList: []string{"203.0.113.0/24"},
-              }, api.WithIdempotencyKey("child-bootstrap-key-20240101-acme"))
+              })
               if err != nil {
                 log.Fatalf("Error creating sub-account API key: %v", err)
               }
-              // SecretKey is returned only on create (and on an exact idempotent
-              // replay): store it now.
+              // SecretKey is returned only on create (and on an idempotent replay of
+              // it): store it now.
               fmt.Printf("Created API key %s, secret key: %s\n", response.ID, *response.SecretKey)
             }
 
@@ -7839,11 +7863,13 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.ContactsAPI.CreateContact(ctx, accountID, requests.CreateContactRequest{
                 Email:      "person@example.com",
                 FirstName:  ahasend.String("Pat"),
                 Attributes: map[string]any{"customer": true},
-              }, api.WithIdempotencyKey("contact-create-0001"))
+              })
               if err != nil {
                 log.Fatalf("Error creating contact: %v", err)
               }
@@ -8119,12 +8145,14 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.ContactsAPI.BatchUpsertContacts(ctx, accountID, requests.BatchUpsertContactsRequest{
                 Data: []requests.BatchUpsertContactInput{
                   {Email: "one@example.com"},
                   {Email: "two@example.com", Unsubscribed: ahasend.Bool(true)},
                 },
-              }, api.WithIdempotencyKey("contact-batch-0001"))
+              })
               if err != nil {
                 log.Fatalf("Error upserting contacts: %v", err)
               }
@@ -8687,11 +8715,13 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.ListsAPI.CreateList(ctx, accountID, requests.CreateListRequest{
                 Name:        "Product updates",
                 Description: ahasend.String("Monthly release notes"),
                 Tags:        []string{"product"},
-              }, api.WithIdempotencyKey("list-create-0001"))
+              })
               if err != nil {
                 log.Fatalf("Error creating list: %v", err)
               }
@@ -9188,7 +9218,6 @@ paths:
 
               response, _, err := client.ListsAPI.GetListContacts(ctx, accountID, listID, requests.GetListContactsParams{
                 SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
-                IncludeContacts:    ahasend.Bool(true),
               })
               if err != nil {
                 log.Fatalf("Error listing list contacts: %v", err)
@@ -9320,6 +9349,7 @@ paths:
               "github.com/AhaSend/ahasend-go"
               "github.com/AhaSend/ahasend-go/api"
               "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/AhaSend/ahasend-go/models/responses"
               "github.com/google/uuid"
             )
 
@@ -9332,17 +9362,24 @@ paths:
 
               // Name each contact by email or by ID.
               contactID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.ListsAPI.BatchAddListContacts(ctx, accountID, listID, requests.BatchAddListContactsRequest{
                 Data: []requests.BatchAddListContactInput{
                   {Email: ahasend.String("one@example.com")},
                   {ID: &contactID},
                 },
-              }, api.WithIdempotencyKey("list-contacts-batch-0001"))
+              })
               if err != nil {
                 log.Fatalf("Error adding contacts to the list: %v", err)
               }
               // Each item succeeds or fails on its own.
               fmt.Printf("added=%d skipped=%d failed=%d\n", response.Added, response.Skipped, response.Failed)
+              for _, result := range response.Data {
+                if result.Outcome != responses.BatchListContactOutcomeAdded {
+                  fmt.Printf("item %d: %s %s\n", result.Position, result.Outcome, result.Reason)
+                }
+              }
             }
 
       requestBody:
@@ -9500,11 +9537,13 @@ paths:
 
               listID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 
+              // Record that the contact unsubscribed from this list. Setting confirmed
+              // would subscribe them again, so only do that when they asked for it.
               response, _, err := client.ListsAPI.UpsertListContact(ctx, accountID, listID, "user+tag@example.com", requests.UpsertListContactRequest{
-                SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
+                SubscriptionStatus: ahasend.String(requests.ListContactStatusUnsubscribed),
               })
               if err != nil {
-                log.Fatalf("Error adding the contact to the list: %v", err)
+                log.Fatalf("Error updating the list membership: %v", err)
               }
               fmt.Printf("%s is %s\n", response.Email, response.SubscriptionStatus)
             }
@@ -10045,6 +10084,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.SuppressionsAPI.CreateSuppression(ctx, accountID, requests.CreateSuppressionRequest{
                 Email:     "test@example.com",
                 Reason:    ahasend.String("Inbox full"),
@@ -10198,7 +10239,7 @@ paths:
               response, _, err := client.SuppressionsAPI.DeleteSuppression(
                 ctx,
                 accountID,
-                "info@bigco.com",
+                "info@example.com",
                 ahasend.String("notifications.example.com"),
               )
               if err != nil {
@@ -10519,10 +10560,12 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.RoutesAPI.CreateRoute(ctx, accountID, requests.CreateRouteRequest{
                 Name:         "My Route",
-                URL:          "https://mystartup.com/tickets",
-                Recipient:    "ticket-*@mystartup.com",
+                URL:          "https://example.com/tickets",
+                Recipient:    "ticket-*@example.com",
                 Enabled:      ahasend.Bool(true),
                 Attachments:  true,
                 Headers:      true,
@@ -10754,7 +10797,7 @@ paths:
 
               response, _, err := client.RoutesAPI.UpdateRoute(ctx, accountID, routeID, requests.UpdateRouteRequest{
                 Name: ahasend.String("Updated Name"),
-                URL:  ahasend.String("https://mystartup.com/new-tickets"),
+                URL:  ahasend.String("https://example.com/new-tickets"),
               })
               if err != nil {
                 log.Fatalf("Error updating route: %v", err)
@@ -11146,9 +11189,11 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.WebhooksAPI.CreateWebhook(ctx, accountID, requests.CreateWebhookRequest{
                 Name:             "Failures",
-                URL:              "https://mystartup.com/webhook",
+                URL:              "https://example.com/webhook",
                 Scope:            "global",
                 Enabled:          ahasend.Bool(true),
                 OnBounced:        true,
@@ -11391,7 +11436,7 @@ paths:
 
               response, _, err := client.WebhooksAPI.UpdateWebhook(ctx, accountID, webhookID, requests.UpdateWebhookRequest{
                 Name:      ahasend.String("Failures"),
-                URL:       ahasend.String("https://mystartup.com/webhook"),
+                URL:       ahasend.String("https://example.com/webhook"),
                 Enabled:   ahasend.Bool(true),
                 OnBounced: ahasend.Bool(true),
               })
@@ -11718,6 +11763,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request is not applied twice.
               response, _, err := client.SMTPCredentialsAPI.CreateSMTPCredential(ctx, accountID, requests.CreateSMTPCredentialRequest{
                 Name:    "My SMTP Credential",
                 Scope:   "global",

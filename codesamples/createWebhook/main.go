@@ -17,9 +17,11 @@ func main() {
 	accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
 	ctx := context.Background()
 
+	// The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+	// its own retries, so a retried request is not applied twice.
 	response, _, err := client.WebhooksAPI.CreateWebhook(ctx, accountID, requests.CreateWebhookRequest{
 		Name:             "Failures",
-		URL:              "https://mystartup.com/webhook",
+		URL:              "https://example.com/webhook",
 		Scope:            "global",
 		Enabled:          ahasend.Bool(true),
 		OnBounced:        true,

@@ -21,7 +21,6 @@ func main() {
 
 	response, _, err := client.ListsAPI.GetListContacts(ctx, accountID, listID, requests.GetListContactsParams{
 		SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
-		IncludeContacts:    ahasend.Bool(true),
 	})
 	if err != nil {
 		log.Fatalf("Error listing list contacts: %v", err)

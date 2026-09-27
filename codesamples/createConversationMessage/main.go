@@ -22,6 +22,9 @@ func main() {
 	// recipients can see each other (BCC excluded). The combined
 	// To + CC + BCC count must not exceed 50. Unlike Create Message,
 	// this endpoint does not support template substitutions.
+	//
+	// The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+	// its own retries, so a retried request is not applied twice.
 	response, _, err := client.MessagesAPI.CreateConversationMessage(ctx, accountID, requests.CreateConversationMessageRequest{
 		From: common.SenderAddress{
 			Email: "info@example.com",
@@ -48,6 +51,8 @@ func main() {
 	for _, message := range response.Data {
 		if message.ID != nil {
 			fmt.Printf("%s: %s\n", message.Recipient.Email, *message.ID)
+		} else if message.Error != nil {
+			fmt.Printf("%s: %s\n", message.Recipient.Email, *message.Error)
 		}
 	}
 }
