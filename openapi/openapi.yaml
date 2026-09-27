@@ -3727,10 +3727,11 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const apiKey = await client.apiKeys.create(
-              { label: "Production API key", scopes: ["messages:send:all"] },
-              { idempotencyKey: "sdk-sample-create-api-key" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const apiKey = await client.apiKeys.create({
+              label: "Production API key",
+              scopes: ["messages:send:all"],
+            });
             console.log("API key created.", { id: apiKey.id, label: apiKey.label });
 
       requestBody:
@@ -4296,10 +4297,8 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const domain = await client.domains.create(
-              { domain: "example.com" },
-              { idempotencyKey: "sdk-sample-create-domain" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const domain = await client.domains.create({ domain: "example.com" });
             console.log("Domain created.", { id: domain.id, domain: domain.domain });
 
       requestBody:
@@ -5067,16 +5066,14 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const result = await client.messages.send(
-              {
-                from: { email: "sender@example.com", name: "Example" },
-                recipients: [{ email: "recipient@example.net" }],
-                subject: "Hello from AhaSend",
-                html_content: "<p>Hello!</p>",
-                sandbox: true,
-              },
-              { idempotencyKey: "sdk-sample-send-message" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.messages.send({
+              from: { email: "sender@example.com", name: "Example" },
+              recipients: [{ email: "recipient@example.net" }],
+              subject: "Hello from AhaSend",
+              html_content: "<p>Hello!</p>",
+              sandbox: true,
+            });
             console.log("Sandbox message accepted.", { count: result.data.length });
 
       requestBody:
@@ -5236,16 +5233,14 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const result = await client.messages.sendConversation(
-              {
-                from: { email: "sender@example.com", name: "Example" },
-                to: [{ email: "recipient@example.net" }],
-                subject: "Hello from AhaSend",
-                html_content: "<p>Hello!</p>",
-                sandbox: true,
-              },
-              { idempotencyKey: "sdk-sample-send-conversation" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.messages.sendConversation({
+              from: { email: "sender@example.com", name: "Example" },
+              to: [{ email: "recipient@example.net" }],
+              subject: "Hello from AhaSend",
+              html_content: "<p>Hello!</p>",
+              sandbox: true,
+            });
             console.log("Sandbox conversation accepted.", { count: result.data.length });
 
       requestBody:
@@ -5579,6 +5574,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.templates.list({ limit: 20 });
+            console.log("Templates listed.", { count: page.data.length });
+
       responses:
         '200':
           description: Paginated templates
@@ -5676,6 +5680,16 @@ paths:
                 fmt.Printf("%s required=%t\n", variable.Name, variable.Required)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const template = await client.templates.get(templateId);
+            console.log("Template found.", { id: template.id, name: template.name });
 
       responses:
         '200':
@@ -6077,10 +6091,11 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const member = await client.accounts.addMember(
-              { email: "developer@example.com", role: "Developer" },
-              { idempotencyKey: "sdk-sample-add-account-member" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const member = await client.accounts.addMember({
+              email: "developer@example.com",
+              role: "Developer",
+            });
             console.log("Account member added.", { userId: member.user_id, role: member.role });
 
       requestBody:
@@ -6433,10 +6448,11 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const subAccount = await client.subAccounts.create(
-              { name: "Example subsidiary", website: "subsidiary.example.com" },
-              { idempotencyKey: "sdk-sample-create-sub-account" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const subAccount = await client.subAccounts.create({
+              name: "Example subsidiary",
+              website: "subsidiary.example.com",
+            });
             console.log("Sub-account created.", { id: subAccount.id, status: subAccount.status });
 
       requestBody:
@@ -7364,11 +7380,11 @@ paths:
 
             const client = AhaSendClient.fromEnv();
             const subAccountId = "00000000-0000-4000-8000-000000000004";
-            const apiKey = await client.subAccounts.apiKeys.create(
-              subAccountId,
-              { label: "Bootstrap key", scopes: ["messages:send:all"] },
-              { idempotencyKey: "sdk-sample-create-sub-account-api-key" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const apiKey = await client.subAccounts.apiKeys.create(subAccountId, {
+              label: "Bootstrap key",
+              scopes: ["messages:send:all"],
+            });
             console.log("Sub-account API key created.", { id: apiKey.id, label: apiKey.label });
 
       requestBody:
@@ -7877,6 +7893,20 @@ paths:
               fmt.Printf("Created contact %s\n", response.ID)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const contact = await client.contacts.create({
+              email: "person@example.com",
+              first_name: "Pat",
+              attributes: { customer: true },
+            });
+            console.log("Contact created.", { id: contact.id, status: contact.status });
+
       requestBody:
         required: true
         content:
@@ -8054,6 +8084,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.contacts.list({ status: "enabled", subscribed: true, limit: 20 });
+            console.log("Contacts listed.", { count: page.data.length });
+
       responses:
         '200':
           description: Paginated contacts
@@ -8165,6 +8204,21 @@ paths:
                 }
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.contacts.batchUpsert({
+              data: [
+                { email: "new@example.com", attributes: { customer: true } },
+                { email: "existing@example.com", attributes: { obsolete: null } },
+              ],
+            });
+            console.log("Contact batch completed.", { created: result.created, updated: result.updated });
 
       requestBody:
         required: true
@@ -8289,6 +8343,16 @@ paths:
               fmt.Printf("%s %s unsubscribed=%t\n", response.ID, response.Email, response.Unsubscribed)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const idOrEmail = "User+Tag@Example.COM";
+            const contact = await client.contacts.get(idOrEmail);
+            console.log("Contact found.", { id: contact.id, status: contact.status });
+
       responses:
         '200':
           description: Contact
@@ -8395,6 +8459,19 @@ paths:
               }
               fmt.Printf("Updated contact %s\n", response.ID)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const idOrEmail = "User+Tag@Example.COM";
+            const contact = await client.contacts.update(idOrEmail, {
+              unsubscribed: true,
+              attributes: { obsolete: null },
+            });
+            console.log("Contact updated.", { id: contact.id, unsubscribed: contact.unsubscribed });
 
       responses:
         '200':
@@ -8508,6 +8585,16 @@ paths:
               }
               fmt.Println(response.Message)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const idOrEmail = "User+Tag@Example.COM";
+            const result = await client.contacts.delete(idOrEmail);
+            console.log("Contact deleted.", { message: result.message });
 
       responses:
         '200':
@@ -8630,6 +8717,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.lists.list({ name: "newsletter", limit: 20 });
+            console.log("Lists listed.", { count: page.data.length });
+
       responses:
         '200':
           description: Paginated lists
@@ -8728,6 +8824,20 @@ paths:
               }
               fmt.Printf("Created list %s\n", response.ID)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const list = await client.lists.create({
+              name: "Product updates",
+              description: "Monthly release notes",
+              tags: ["product"],
+            });
+            console.log("List created.", { id: list.id, contactCount: list.contact_count });
 
       requestBody:
         required: true
@@ -8840,6 +8950,16 @@ paths:
               }
               fmt.Printf("%s (%d contacts)\n", response.Name, response.ContactCount)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const list = await client.lists.get(listId);
+            console.log("List found.", { id: list.id, contactCount: list.contact_count });
 
       responses:
         '200':
@@ -8954,6 +9074,16 @@ paths:
               fmt.Printf("Updated list %s\n", response.Name)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const list = await client.lists.update(listId, { name: "Product news", tags: [] });
+            console.log("List updated.", { id: list.id, name: list.name });
+
       responses:
         '200':
           description: Updated list
@@ -9058,6 +9188,16 @@ paths:
               }
               fmt.Println(response.Message)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const result = await client.lists.delete(listId);
+            console.log("List deleted.", { message: result.message });
 
       responses:
         '200':
@@ -9228,6 +9368,19 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const page = await client.lists.contacts.list(listId, {
+              subscription_status: "confirmed",
+              limit: 20,
+            });
+            console.log("List members listed.", { count: page.data.length });
+
       responses:
         '200':
           description: Paginated list memberships
@@ -9382,6 +9535,19 @@ paths:
                 }
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.lists.contacts.batchAdd(listId, {
+              data: [{ email: "one@example.com" }, { id: "00000000-0000-4000-8000-000000000011" }],
+            });
+            console.log("List batch completed.", { added: result.added, failed: result.failed });
 
       requestBody:
         required: true
@@ -9549,6 +9715,19 @@ paths:
               fmt.Printf("%s is %s\n", response.Email, response.SubscriptionStatus)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const idOrEmail = "User+Tag@Example.COM";
+            const membership = await client.lists.contacts.upsert(listId, idOrEmail, {
+              subscription_status: "unsubscribed",
+            });
+            console.log("List membership saved.", { status: membership.subscription_status });
+
       responses:
         '200':
           description: The membership, whether this request created it or updated one
@@ -9688,6 +9867,17 @@ paths:
               }
               fmt.Println(response.Message)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const listId = "00000000-0000-4000-8000-000000000010";
+            const idOrEmail = "User+Tag@Example.COM";
+            const result = await client.lists.contacts.delete(listId, idOrEmail);
+            console.log("Contact removed from list.", { message: result.message });
 
       responses:
         '200':
@@ -9846,6 +10036,16 @@ paths:
                 }
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const idOrEmail = "User+Tag@Example.COM";
+            const page = await client.contacts.lists.list(idOrEmail, { subscription_status: "confirmed" });
+            console.log("Contact lists listed.", { count: page.data.length });
 
       responses:
         '200':
@@ -10104,14 +10304,12 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const result = await client.suppressions.create(
-              {
-                email: "recipient@example.net",
-                reason: "User requested removal",
-                expires_at: "2030-01-01T00:00:00Z",
-              },
-              { idempotencyKey: "sdk-sample-create-suppression" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.suppressions.create({
+              email: "recipient@example.net",
+              reason: "User requested removal",
+              expires_at: "2030-01-01T00:00:00Z",
+            });
             console.log("Suppression created.", { count: result.data.length });
 
       requestBody:
@@ -10584,14 +10782,12 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const route = await client.routes.create(
-              {
-                name: "Inbound messages",
-                url: "https://example.com/inbound",
-                recipient: "inbound@example.com",
-              },
-              { idempotencyKey: "sdk-sample-create-route" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const route = await client.routes.create({
+              name: "Inbound messages",
+              url: "https://example.com/inbound",
+              recipient: "inbound@example.com",
+            });
             console.log("Route created.", { id: route.id, name: route.name });
 
       requestBody:
@@ -11214,15 +11410,13 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const webhook = await client.webhooks.create(
-              {
-                name: "Delivery events",
-                url: "https://example.com/webhooks/ahasend",
-                scope: "global",
-                on_delivered: true,
-              },
-              { idempotencyKey: "sdk-sample-create-webhook" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const webhook = await client.webhooks.create({
+              name: "Delivery events",
+              url: "https://example.com/webhooks/ahasend",
+              scope: "global",
+              on_delivered: true,
+            });
             console.log("Webhook created.", { id: webhook.id, name: webhook.name });
 
       requestBody:
@@ -11785,10 +11979,11 @@ paths:
             import { AhaSendClient } from "@ahasend/sdk";
 
             const client = AhaSendClient.fromEnv();
-            const credential = await client.smtpCredentials.create(
-              { name: "Production SMTP", scope: "global" },
-              { idempotencyKey: "sdk-sample-create-smtp-credential" },
-            );
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const credential = await client.smtpCredentials.create({
+              name: "Production SMTP",
+              scope: "global",
+            });
             console.log("SMTP credential created.", { id: credential.id, name: credential.name });
 
       requestBody:
