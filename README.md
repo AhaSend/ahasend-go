@@ -1,33 +1,26 @@
-# 📧 AhaSend Go SDK
+# AhaSend Go SDK
 
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.18-blue.svg)](https://golang.org/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/AhaSend/ahasend-go.svg)](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
-[![Go Report Card](https://goreportcard.com/badge/github.com/AhaSend/ahasend-go)](https://goreportcard.com/report/github.com/AhaSend/ahasend-go)
-[![API Documentation](https://img.shields.io/badge/docs-api-green.svg)](https://ahasend.com/docs/api-reference)
 [![License: MIT](https://img.shields.io/github/license/ahasend/ahasend-go)](https://opensource.org/licenses/MIT)
 
-The official Go SDK for [AhaSend](https://ahasend.com) 🚀 - a powerful transactional email service with high deliverability, comprehensive tracking, and developer-friendly APIs.
+The Go SDK for the [AhaSend](https://ahasend.com) API. Use it to send email and to manage templates, contacts, lists, domains, webhooks, routes, suppressions and sub accounts.
 
-## ✨ Features
+It also:
 
-- **📦 Complete API Coverage**: Send emails inline or from a transactional template, and manage contacts, domains, webhooks, routes, suppressions, Sub Accounts, and more
-- **🔒 Type Safety**: Full Go type system with pointer utilities for optional fields
-- **⚡ Built-in Rate Limiting**: Automatic protection against 429 errors with configurable limits
-- **🔄 Intelligent Retries**: Exponential backoff with jitter for failed requests
-- **🔗 Webhook Processing**: Standard Webhooks compliant verification and parsing
-- **📊 Comprehensive Tracking**: Opens, clicks, bounces, deliveries, and more
-- **🛡️ Automatic Idempotency**: Prevent duplicate API calls (including email sends) automatically
-- **📚 Rich Examples**: 12+ production-ready examples covering all major use cases
+- Keeps under the API's rate limits.
+- Retries failed requests, waiting longer between each try.
+- Adds an idempotency key to every create request, so a retried request is not applied twice.
+- Checks and reads webhook requests.
 
-## Quick Start
-
-### Installation
+## Install
 
 ```bash
 go get github.com/AhaSend/ahasend-go
 ```
 
-### Send Your First Email
+Requires Go 1.18 or later.
+
+## Send an email
 
 ```go
 package main
@@ -45,47 +38,38 @@ import (
 )
 
 func main() {
-    apiKey := os.Getenv("AHASEND_API_KEY")
-    if apiKey == "" {
-        log.Fatal("AHASEND_API_KEY environment variable is required")
-    }
-
     accountID, err := uuid.Parse(os.Getenv("AHASEND_ACCOUNT_ID"))
     if err != nil {
-        log.Fatalf("Invalid AHASEND_ACCOUNT_ID: %v", err)
+        log.Fatalf("invalid AHASEND_ACCOUNT_ID: %v", err)
     }
 
-    client := api.NewAPIClient(api.WithAPIKey(apiKey))
-    ctx := context.Background()
+    client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
 
-    // Send email
     message := requests.CreateMessageRequest{
-        From: common.SenderAddress{Email: "sender@yourdomain.com"},
-        Recipients: []common.Recipient{
-            {Email: "recipient@example.com"},
-        },
-        Subject:     "Hello from AhaSend!",
-        HtmlContent: ahasend.String("<h1>Welcome!</h1>"),
-        TextContent: ahasend.String("Welcome!"),
+        From:        common.SenderAddress{Email: "sender@yourdomain.com"},
+        Recipients:  []common.Recipient{{Email: "recipient@example.com"}},
+        Subject:     "Hello from AhaSend",
+        HtmlContent: ahasend.String("<h1>Welcome</h1>"),
+        TextContent: ahasend.String("Welcome"),
     }
 
-    response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+    response, _, err := client.MessagesAPI.CreateMessage(context.Background(), accountID, message)
     if err != nil {
         log.Fatal(err)
     }
 
     if len(response.Data) > 0 && response.Data[0].ID != nil {
-        log.Printf("Email sent! Message ID: %s", *response.Data[0].ID)
+        log.Printf("sent, message ID %s", *response.Data[0].ID)
     }
 }
 ```
 
-### Send From a Template
+## Send from a template
 
-A transactional template built in the dashboard supplies the subject, the preview text and both bodies, so a send only has to name it and supply its variables:
+A transactional template made in the dashboard holds the subject, the preview text and both bodies. A send names the template and gives values for its variables:
 
 ```go
-// Read the template to see which variables a send has to supply
+// Read the template to see which variables a send must give.
 template, _, err := client.TemplatesAPI.GetTemplate(ctx, accountID, templateID)
 if err != nil {
     log.Fatal(err)
@@ -108,158 +92,129 @@ message := requests.CreateMessageRequest{
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
 
-`TemplateID` cannot be combined with `TextContent`, `HtmlContent` or `AmpContent`. Leave `Subject` empty to use the template's own, or set it to override it. Values come from the request's `Substitutions` and from each recipient's, the recipient's winning where both name a variable. AhaSend supplies `email`, `view_browser_url` and `unsubscribe_url` itself.
+- `TemplateID` cannot be used with `TextContent`, `HtmlContent` or `AmpContent`.
+- Leave `Subject` empty to use the template's subject, or set it to replace it.
+- Variable values come from the request's `Substitutions` and from each recipient's. When both give the same variable, the recipient's value is used.
+- AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
+- The send fails with:
+  - 404 when the template does not exist.
+  - 400 when neither the request nor the template has a subject, or the template has no saved design.
+  - 400 for the whole request when any recipient is missing a required variable.
+- `GetTemplate` and `GetTemplates` need the `templates:read` scope. Sending from a template needs only the normal send scope.
 
-A templated send fails with a 404 for an unknown template, a 400 when neither the request nor the template has a subject or the template has no saved design, and a 400 for the whole request when any recipient is missing a required variable.
+`client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})` lists the account's templates, newest first. For the next page, pass the response's `Pagination.NextCursor` as `After`. For the previous page, pass `Pagination.PreviousCursor` as `Before`.
 
-`GetTemplate` and `GetTemplates` need the `templates:read` scope; sending from a template needs only the usual send scope.
+## API keys
 
-List the account's templates, newest first, with `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})`. To page, pass the response's `Pagination.NextCursor` back as `After`, or `Pagination.PreviousCursor` as `Before`.
+Every request needs an API key. Get one from the [AhaSend dashboard](https://dashboard.ahasend.com). There are three ways to give it to the SDK.
 
-## Authentication & API Keys
+From the environment:
 
-All API requests require a Bearer token. There are three ways to authenticate:
-
-### Environment Variable (Recommended)
 ```bash
-# Set environment variable
 export AHASEND_API_KEY="aha-sk-your-64-character-key"
 ```
 
 ```go
 client := api.NewAPIClientFromEnv()
-ctx := context.Background()
 ```
 
-### Client-wide Configuration
+When you create the client:
+
 ```go
-// Set API key when creating client
-client := api.NewAPIClient(
-    api.WithAPIKey(apiKey),
-)
+client := api.NewAPIClient(api.WithAPIKey(apiKey))
+```
 
-// or:
-// cfg := api.NewConfiguration()
-// cfg.APIKey = "aha-sk-..."
-// client := api.NewAPIClientWithConfig(cfg)
+For one request only:
 
-// All subsequent API calls will use this key automatically
+```go
+ctx := context.WithValue(context.Background(), api.ContextAccessToken, "aha-sk-your-64-character-key")
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
 
-### Context Override (Per-request)
-```go
-// Override API key for specific requests
-ctx := context.WithValue(context.Background(),
-    api.ContextAccessToken, "aha-sk-your-64-character-key")
+### Sub account scopes
 
-response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
-```
+A parent or partner key that manages sub accounts needs one or more of these scopes:
 
-Get your API key from the [AhaSend Dashboard](https://dashboard.ahasend.com).
+| Scope | Allows |
+|---|---|
+| `sub-accounts:read` | List and read sub accounts |
+| `sub-accounts:write` | Create and update sub accounts |
+| `sub-accounts:delete` | Delete sub accounts |
+| `sub-accounts:suspend` | Suspend and unsuspend sub accounts |
+| `sub-accounts:usage` | Read each sub account's usage and cost |
+| `sub-account-api-keys:read` | List and read sub accounts' API keys |
+| `sub-account-api-keys:write` | Create and update sub accounts' API keys |
+| `sub-account-api-keys:delete` | Delete sub accounts' API keys |
 
-### Granular Sub-Account Scopes
+## Contacts
 
-Parent or partner credentials that manage Sub Accounts need one or more of these exact scopes:
+- Scopes: `contacts:read` to list and read, `contacts:write` to create, update and batch upsert, `contacts:delete` to delete.
+- `UpdateContact` changes only the fields you set:
+  - A nil field is left as it is.
+  - A pointer to `""` clears a text field.
+  - `Unsubscribed` set to `false` subscribes the contact again.
+- `BatchUpsertContacts` returns 200 even when some items fail. Check `Failed` and each `Data[i].Outcome`.
+- Find a contact by ID or by email. For an email that contains `/`, use the ID.
 
-- `sub-accounts:read` - List and read sub accounts under the parent
-- `sub-accounts:write` - Create and update sub accounts
-- `sub-accounts:delete` - Soft-delete sub accounts
-- `sub-accounts:suspend` - Suspend and unsuspend sub accounts
-- `sub-accounts:usage` - Read per-sub-account usage and allocated cost
-- `sub-account-api-keys:read` - List and read API keys owned by sub accounts
-- `sub-account-api-keys:write` - Create and update API keys owned by sub accounts
-- `sub-account-api-keys:delete` - Delete API keys owned by sub accounts
+## Lists
 
-## Core Functionality
+- Scopes:
+  - `lists:read` to read lists and their members.
+  - `lists:write` to create and update lists, and to add or remove members.
+  - `lists:delete` to delete lists.
+  - `IncludeContacts` on `GetListContacts` also needs `contacts:read`.
+- `ContactCount` is the number of members a campaign to the list would reach, not the number of all members.
+- `BatchAddListContacts` returns 200 even when some items fail. Check `Failed` and each `Data[i].Outcome`. A contact already on the list is reported as `already_member` and left as it is.
+- To stop mail to one member, use `UpsertListContact` with the status `unsubscribed`. This keeps the record of their choice. `DeleteListContact` removes the member and that record with it.
+- A member whose status is `complained` cannot be changed or removed. Both calls return 409.
 
-### Email Operations
-- **Send Emails**: HTML/text content, attachments, scheduling
-- **Transactional Templates**: Send a saved template by ID and supply its variables
-- **Batch Operations**: Efficient bulk sending
-- **Message Management**: Cancel, retrieve status, view history
+## Services
 
-### Contacts
-- **Scopes**: `contacts:read` to list and get, `contacts:write` to create, update, and batch upsert, `contacts:delete` to delete
-- **Partial Updates**: `UpdateContact` changes only the fields you set; an omitted (nil) field is left unchanged, a pointer to `""` clears a string field, and `Unsubscribed` set to `false` resubscribes the contact
-- **Batch Upserts**: `BatchUpsertContacts` returns 200 even when some items fail, so check `Failed` and each `Data[i].Outcome`
-- **Addressing**: contacts are addressed by ID or email; for an email address containing `/`, use the contact ID
-
-### Lists
-- **Scopes**: `lists:read` to read lists and memberships, `lists:write` to create and update lists and to add or remove their contacts, `lists:delete` to delete lists; `IncludeContacts` on `GetListContacts` also needs `contacts:read`
-- **Contact Count**: `ContactCount` is the number of members a campaign to the list would reach, not every member
-- **Batch Adds**: `BatchAddListContacts` returns 200 even when some items fail, so check `Failed` and each `Data[i].Outcome`; existing memberships are reported `already_member` and left unchanged
-- **Membership Status**: prefer `UpsertListContact` with `unsubscribed` over `DeleteListContact`, which discards the unsubscribe record; a `complained` membership cannot be changed and answers 409
-
-### Domain & Infrastructure
-- **Domain Management**: Add, verify, and configure sending domains
-- **DNS Validation**: Automated DNS record verification
-- **Route Management**: Handle inbound email processing
-- **SMTP Credentials**: Generate credentials for legacy applications
-
-### Monitoring & Analytics
-- **Delivery Statistics**: Track sends, deliveries, bounces, opens, clicks
-- **Real-time Events**: Webhook notifications for all email events
-- **Suppression Management**: Handle bounces and unsubscribes automatically
-
-### Partner & Platform
-- **Sub Account Management**: Create, update, suspend, delete, and review usage for child accounts
-- **Child API Keys**: Issue and manage API keys owned by Sub Accounts
-
-### Developer Experience
-- **Automatic Rate Limiting**: Three endpoint categories with smart detection
-- **Retry Configuration**: Multiple backoff strategies (exponential, linear, constant)
-- **Error Handling**: Structured error types with detailed context
-- **Comprehensive Testing**: Unit and integration tests with mock server
-
-## API Reference
-
-| Service | Description | Key Methods |
-|---------|-------------|-------------|
-| **MessagesAPI** | Send and manage emails | `CreateMessage`, `GetMessage`, `CancelMessage` |
-| **TemplatesAPI** | Read transactional templates | `GetTemplates`, `GetTemplate` |
-| **ContactsAPI** | Manage account-global contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
-| **ListsAPI** | Manage contact lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
-| **DomainsAPI** | Domain verification & management | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
-| **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
-| **StatisticsAPI** | Email analytics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
-| **SuppressionsAPI** | Manage block lists | `CreateSuppression`, `DeleteSuppression`, `GetSuppressions` |
-| **RoutesAPI** | Inbound email handling | `CreateRoute`, `UpdateRoute` |
-| **AccountsAPI** | Account & member management | `GetAccount`, `AddAccountMember` |
-| **APIKeysAPI** | API key management | `CreateAPIKey`, `UpdateAPIKey` |
-| **SubAccountsAPI** | Parent and partner Sub Account management | `ListSubAccounts`, `CreateSubAccount`, `CreateSubAccountAPIKey`, `GetSubAccountsUsage` |
+| Service | Use it to | Main methods |
+|---|---|---|
+| `MessagesAPI` | Send and manage email | `CreateMessage`, `GetMessage`, `CancelMessage` |
+| `TemplatesAPI` | Read transactional templates | `GetTemplates`, `GetTemplate` |
+| `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
+| `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
+| `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
+| `WebhooksAPI` | Manage webhooks | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
+| `StatisticsAPI` | Read sending statistics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
+| `SuppressionsAPI` | Manage addresses that must not be emailed | `CreateSuppression`, `DeleteSuppression`, `GetSuppressions` |
+| `RoutesAPI` | Handle incoming email | `CreateRoute`, `UpdateRoute` |
+| `AccountsAPI` | Manage the account and its members | `GetAccount`, `AddAccountMember` |
+| `APIKeysAPI` | Manage API keys | `CreateAPIKey`, `UpdateAPIKey` |
+| `SubAccountsAPI` | Manage sub accounts and their API keys | `ListSubAccounts`, `CreateSubAccount`, `CreateSubAccountAPIKey`, `GetSubAccountsUsage` |
 
 ## Examples
 
-Explore our [comprehensive examples](./examples/):
+The [examples](./examples/) folder has a runnable program for each common task:
 
-- **[send_email.go](./examples/send_email.go)** - Basic email sending
-- **[send_with_attachments.go](./examples/send_with_attachments.go)** - File attachments
-- **[batch_send.go](./examples/batch_send.go)** - Bulk email operations
-- **[scheduled_send.go](./examples/scheduled_send.go)** - Schedule future delivery
-- **[webhook_processing.go](./examples/webhook_processing.go)** - Handle webhook events
-- **[webhook_management.go](./examples/webhook_management.go)** - Create and manage webhooks
-- **[domain_management.go](./examples/domain_management.go)** - Domain setup & verification
-- **[statistics.go](./examples/statistics.go)** - Analytics and reporting
-- **[error_handling.go](./examples/error_handling.go)** - Robust error handling
-- **[rate_limiting.go](./examples/rate_limiting.go)** - Rate limit configuration
-- **[idempotency.go](./examples/idempotency.go)** - Prevent duplicate sends
-- **[list_management.go](./examples/list_management.go)** - Create lists and manage their members
-- **[sub_account_management.go](./examples/sub_account_management.go)** - Manage Sub Accounts, usage, and child API keys
+- [send_email.go](./examples/send_email.go): send an email
+- [send_template.go](./examples/send_template.go): send from a transactional template
+- [send_with_attachments.go](./examples/send_with_attachments.go): send with attachments
+- [batch_send.go](./examples/batch_send.go): send to many recipients
+- [scheduled_send.go](./examples/scheduled_send.go): send later
+- [webhook_processing.go](./examples/webhook_processing.go): receive webhook requests
+- [webhook_management.go](./examples/webhook_management.go): create and manage webhooks
+- [domain_management.go](./examples/domain_management.go): add and check a domain
+- [statistics.go](./examples/statistics.go): read statistics
+- [error_handling.go](./examples/error_handling.go): handle errors
+- [rate_limiting.go](./examples/rate_limiting.go): set rate limits
+- [idempotency.go](./examples/idempotency.go): avoid sending twice
+- [list_management.go](./examples/list_management.go): create lists and manage their members
+- [sub_account_management.go](./examples/sub_account_management.go): manage sub accounts, usage and their API keys
 
-Run any example:
+To run one:
+
 ```bash
-# Set your credentials
 export AHASEND_API_KEY="your-api-key"
 export AHASEND_ACCOUNT_ID="your-account-id"
-
-# Run example
 go run examples/send_email.go
 ```
 
-## Webhook Processing
+## Webhooks
 
-The SDK includes Standard Webhooks compliant processing with HMAC-SHA256 verification:
+The `webhooks` package checks each request's signature (it follows the Standard Webhooks spec) and reads the event:
 
 ```go
 package main
@@ -280,26 +235,24 @@ func main() {
     http.HandleFunc("/webhooks", func(w http.ResponseWriter, r *http.Request) {
         event, err := verifier.ParseRequest(r)
         if err != nil {
-            http.Error(w, "Invalid webhook", http.StatusBadRequest)
+            http.Error(w, "invalid webhook", http.StatusBadRequest)
             return
         }
 
-        // Handle different event types
         switch e := event.(type) {
         case *webhooks.MessageDeliveredEvent:
-            log.Printf("Email delivered to %s", e.Data.Recipient)
+            log.Printf("delivered to %s", e.Data.Recipient)
         case *webhooks.MessageBouncedEvent:
-            // DeliveryAttempt is optional and nil when no SMTP attempt was
-            // recorded, so check before reading. Log the codes and the
-            // classification; Response and Description are free-form text that
-            // routinely embeds the recipient and message content.
+            // DeliveryAttempt is nil when no delivery attempt was recorded.
+            // Log the codes, not Response or Description: those are free text
+            // that often contains the recipient and the message content.
             if a := e.Data.DeliveryAttempt; a != nil {
-                log.Printf("Email bounced with SMTP code %d", a.SMTPCode)
+                log.Printf("bounced with SMTP code %d", a.SMTPCode)
                 if a.Classification != nil {
                     log.Printf("  classification: %s", *a.Classification)
                 }
             } else {
-                log.Printf("Email bounced, no delivery attempt recorded")
+                log.Printf("bounced, no delivery attempt recorded")
             }
         }
 
@@ -310,96 +263,72 @@ func main() {
 }
 ```
 
-The bucket in `DeliveryAttempt.Classification` is an open set — new values can
-appear at any time — so switch on the `webhooks.Classification*` constants you
-handle and keep a `default` branch for the rest. Never reject a delivery
-because the value is unfamiliar: an endpoint that answers 400 is disabled after
-100 consecutive failures.
+New values can appear in `DeliveryAttempt.Classification` at any time. Handle the `webhooks.Classification*` values you care about, and keep a `default` case for the rest. Do not reject a request because of a value you do not know: a webhook that fails 100 times in a row is turned off.
 
-**Supported Events**: `message.*` (delivered, bounced, opened, clicked), `suppression.*`, `domain.*`, `route.*`
+Events:
+- `message.reception`, `message.delivered`, `message.transient_error`, `message.failed`, `message.bounced`, `message.suppressed`, `message.opened`, `message.clicked`
+- `suppression.created`
+- `domain.dns_error`
+- `message.routing`
 
-## Configuration
+## Settings
 
-### Rate Limiting
+Rate limits:
+
 ```go
 client := api.NewAPIClient(api.WithAPIKey(apiKey))
 
-// Configure for high-volume sending
-client.SetSendMessageRateLimit(500, 1000) // 500 req/s, 1000 burst
-
-// Configure statistics polling
-client.SetStatisticsRateLimit(10, 20) // 10 req/s, 20 burst
+client.SetSendMessageRateLimit(500, 1000) // 500 requests a second, bursts up to 1000
+client.SetStatisticsRateLimit(10, 20)     // 10 requests a second, bursts up to 20
 ```
 
-### Retry Configuration
-```go
-retryConfig := api.RetryConfig{
-    Enabled:           true,
-    MaxRetries:        3,
-    BackoffStrategy:   api.BackoffExponential,
-    BaseDelay:         time.Second,
-    MaxDelay:          30 * time.Second,
-}
+Retries:
 
+```go
 client := api.NewAPIClient(
     api.WithAPIKey(apiKey),
-    api.WithRetryConfig(retryConfig),
+    api.WithRetryConfig(api.RetryConfig{
+        Enabled:         true,
+        MaxRetries:      3,
+        BackoffStrategy: api.BackoffExponential,
+        BaseDelay:       time.Second,
+        MaxDelay:        30 * time.Second,
+    }),
 )
 ```
 
 ## Development
 
-This project includes a comprehensive [Makefile](./Makefile) for all development tasks:
+Run `make help` to see every command. The common ones:
 
-```bash
-# Set up development environment
-make setup
+- `make setup`: install the tools
+- `make dev-test`: format, lint and run the tests
+- `make full-test`: all tests with coverage
+- `make test-unit`: unit tests
+- `make test-integration`: tests against a mock server (needs Prism)
+- `make test-coverage`: coverage report
 
-# Quick development cycle (format, lint, test)
-make dev-test
+### Code samples
 
-# Full test suite with coverage
-make full-test
+The Go samples in the API reference come from this repository. Each operation has one program at `codesamples/<operationId>/main.go`. `go build ./...` compiles them, so a sample always matches the SDK.
 
-# Show all available commands
-make help
-```
+- `make sync-spec` downloads `openapi.yaml` from the `master` branch of the API repository and writes the samples into it. The API repository owns everything in that file except the Go samples. While a change has not reached `master`, use `make sync-spec REF=devel`. It uses the `gh` command, which needs read access to the private `AhaSend/AhaSend` repository.
+- `make code-samples` writes the samples into `openapi/openapi.yaml` after you change one.
+- `make check-code-samples` fails if `openapi/openapi.yaml` is out of date. CI runs it.
 
-### Testing
-- **Unit Tests**: `make test-unit`
-- **Integration Tests**: `make test-integration` (requires Prism mock server)
-- **Coverage Reports**: `make test-coverage`
+The API repository's `scripts/sync-code-samples` copies the Go samples from `openapi/openapi.yaml` on this repository's `main` branch into its own copy.
 
-### Code Samples
-The Go samples in the API reference come from this repository. Each operation has one program at `codesamples/<operationId>/main.go`, which `go build ./...` compiles like any other package, so a sample cannot drift from the SDK.
+## Related
 
-- `make sync-spec` downloads the API's `openapi.yaml` from the server repository's `master` branch (the server owns everything but the Go samples) and writes the samples into it; `make sync-spec REF=devel` takes it from another branch while a server change has not reached `master` yet. It uses the `gh` CLI, which needs read access to the private `AhaSend/AhaSend` repository
-- `make code-samples` writes the samples into `openapi/openapi.yaml` after you edit one
-- `make check-code-samples` fails if `openapi/openapi.yaml` does not carry the current samples; CI runs it
+- [AhaSend CLI](https://github.com/AhaSend/ahasend-cli): a command-line tool built on this SDK
 
-In the other direction, the API repository's `scripts/sync-code-samples` copies the Go samples from `openapi/openapi.yaml` on this repository's `main` branch into the API's own spec.
+## Help
 
-## Related Projects
-
-- **[AhaSend CLI](https://github.com/AhaSend/ahasend-cli)** - Command-line tool built on this SDK
-
-## Documentation & Support
-
-- 📚 [API Documentation](https://ahasend.com/docs)
-- 🔗 [Go Package Documentation](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
-- 💬 [Support](mailto:support@ahasend.com)
-- 🐛 [Issues](https://github.com/AhaSend/ahasend-go/issues)
-
-## Requirements
-
-- **Go**: 1.18 or later
-- **Runtime dependencies**: `github.com/google/uuid`
-- **Test dependencies**: `github.com/stretchr/testify`
+- [API documentation](https://ahasend.com/docs)
+- [Go package documentation](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
+- [Email support](mailto:support@ahasend.com)
+- [Report an issue](https://github.com/AhaSend/ahasend-go/issues)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-Built with ❤️ by the [AhaSend](https://ahasend.com) team
+MIT. See [LICENSE](LICENSE).
