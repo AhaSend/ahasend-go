@@ -52,6 +52,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/AhaSend/ahasend-go/models/common"
 )
@@ -168,13 +169,19 @@ func WithoutRateLimit() RequestOption {
 
 // Security and Validation Functions
 
-// validatePathParam checks for path traversal and other security issues
+// validatePathParam rejects values that cannot address exactly one path segment.
+// buildPath escapes "/" to %2F, so only an empty value or a dot segment, which
+// url.PathEscape leaves as-is and URL normalisation removes, reaches another resource.
 func validatePathParam(value string) error {
-	if strings.Contains(value, "..") || strings.Contains(value, "//") {
+	if value == "" {
+		return errors.New("parameter must not be empty")
+	}
+	if value == "." || value == ".." {
 		return fmt.Errorf("potential path traversal detected: %s", value)
 	}
-	if strings.ContainsAny(value, "\n\r\t") {
-		return fmt.Errorf("invalid characters in parameter: %s", value)
+	// No identifier contains control characters; one here is a caller bug.
+	if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return fmt.Errorf("invalid characters in parameter: %q", value)
 	}
 	return nil
 }

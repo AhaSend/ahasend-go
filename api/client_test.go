@@ -195,3 +195,47 @@ func TestUtilityFunctions(t *testing.T) {
 	assert.NotNil(t, ptrInt)
 	assert.Equal(t, i, *ptrInt)
 }
+
+func TestBuildPathEscapesEachValueIntoOneSegment(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "double slash in local part", value: "a//b@x.com", want: "/contacts/a%2F%2Fb@x.com"},
+		{name: "dots inside a value", value: "first..last@x.com", want: "/contacts/first..last@x.com"},
+		{name: "slash-separated dot segment", value: "../accounts", want: "/contacts/..%2Faccounts"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, err := buildPath("/contacts/{id}", map[string]string{"id": tt.value})
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, path)
+		})
+	}
+}
+
+func TestBuildPathRejectsValuesThatLeaveTheSegment(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "empty", value: ""},
+		{name: "current directory", value: "."},
+		{name: "parent directory", value: ".."},
+		{name: "newline", value: "a\nb@x.com"},
+		{name: "tab", value: "a\tb@x.com"},
+		{name: "NUL", value: "a\x00b@x.com"},
+		{name: "DEL", value: "a\x7fb@x.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := buildPath("/contacts/{id}", map[string]string{"id": tt.value})
+
+			assert.Error(t, err)
+		})
+	}
+}

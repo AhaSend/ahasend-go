@@ -230,19 +230,41 @@ func TestContactsAPIEmitsDeclaredTransport(t *testing.T) {
 
 func TestContactsAPIRawEmailIsEncodedExactlyOnce(t *testing.T) {
 	accountID := uuid.New()
-	rawEmail := "User+Tag@Example.COM"
-	wantPath := "/v2/accounts/" + accountID.String() + "/contacts/" + rawEmail
+	contactsPath := "/v2/accounts/" + accountID.String() + "/contacts/"
 
-	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, wantPath, r.URL.Path)
-		assert.Equal(t, wantPath, r.URL.EscapedPath())
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(contactResponseFixture))
-	})
-	defer cleanup()
+	tests := []struct {
+		name        string
+		rawEmail    string
+		wantEscaped string
+	}{
+		{name: "plus and uppercase", rawEmail: "User+Tag@Example.COM", wantEscaped: "User+Tag@Example.COM"},
+		{name: "slash", rawEmail: "a/b@example.com", wantEscaped: "a%2Fb@example.com"},
+		{name: "double slash", rawEmail: "a//b@example.com", wantEscaped: "a%2F%2Fb@example.com"},
+		{name: "percent", rawEmail: "100%off@example.com", wantEscaped: "100%25off@example.com"},
+		{name: "unicode local part", rawEmail: "jöhn@example.com", wantEscaped: "j%C3%B6hn@example.com"},
+		{name: "query and fragment delimiters", rawEmail: "a?b#c@example.com", wantEscaped: "a%3Fb%23c@example.com"},
+	}
 
-	_, _, err := client.ContactsAPI.GetContact(context.Background(), accountID, rawEmail)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestURI, escapedPath, decodedPath string
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				requestURI = r.RequestURI
+				escapedPath = r.URL.EscapedPath()
+				decodedPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(contactResponseFixture))
+			})
+			defer cleanup()
+
+			_, _, err := client.ContactsAPI.GetContact(context.Background(), accountID, tt.rawEmail)
+
+			require.NoError(t, err)
+			assert.Equal(t, contactsPath+tt.wantEscaped, requestURI)
+			assert.Equal(t, contactsPath+tt.wantEscaped, escapedPath)
+			assert.Equal(t, contactsPath+tt.rawEmail, decodedPath)
+		})
+	}
 }
 
 func TestContactsAPIRejectsEncodedNullCreateAttribute(t *testing.T) {
