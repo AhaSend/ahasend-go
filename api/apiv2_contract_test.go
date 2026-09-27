@@ -719,17 +719,32 @@ func TestListsAPIPreservesComplainedConflict(t *testing.T) {
 	})
 	defer cleanup()
 
-	_, httpResponse, err := client.ListsAPI.UpsertListContact(context.Background(), uuid.New(), uuid.New(), "person@example.com", requests.UpsertListContactRequest{
-		SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
-	})
+	calls := map[string]func() (*http.Response, error){
+		"upsert": func() (*http.Response, error) {
+			_, httpResponse, err := client.ListsAPI.UpsertListContact(context.Background(), uuid.New(), uuid.New(), "person@example.com", requests.UpsertListContactRequest{
+				SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
+			})
+			return httpResponse, err
+		},
+		"delete": func() (*http.Response, error) {
+			_, httpResponse, err := client.ListsAPI.DeleteListContact(context.Background(), uuid.New(), uuid.New(), "person@example.com")
+			return httpResponse, err
+		},
+	}
 
-	require.Error(t, err)
-	require.NotNil(t, httpResponse)
-	assert.Equal(t, http.StatusConflict, httpResponse.StatusCode)
-	var apiErr *APIError
-	require.ErrorAs(t, err, &apiErr)
-	assert.Equal(t, http.StatusConflict, apiErr.StatusCode)
-	assert.Contains(t, apiErr.Message, "cannot be changed")
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			httpResponse, err := call()
+
+			require.Error(t, err)
+			require.NotNil(t, httpResponse)
+			assert.Equal(t, http.StatusConflict, httpResponse.StatusCode)
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr)
+			assert.Equal(t, http.StatusConflict, apiErr.StatusCode)
+			assert.Contains(t, apiErr.Message, "cannot be changed")
+		})
+	}
 }
 
 func TestOpenAPIListOperationsAndResponses(t *testing.T) {
@@ -775,7 +790,7 @@ func TestOpenAPIListOperationsAndResponses(t *testing.T) {
 		{path: listContacts, method: "get", operationID: "getListContacts", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: listBatch, method: "post", operationID: "batchAddListContacts", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: listContact, method: "put", operationID: "upsertListContact", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
-		{path: listContact, method: "delete", operationID: "deleteListContact", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: listContact, method: "delete", operationID: "deleteListContact", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
 		{path: contactLists, method: "get", operationID: "getContactLists", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 	}
 

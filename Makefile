@@ -16,7 +16,7 @@ YELLOW := \033[33m
 BLUE := \033[34m
 RESET := \033[0m
 
-.PHONY: all build clean test test-unit test-integration test-coverage lint fmt vet check-deps deps help install-tools benchmark security mock-server setup ci
+.PHONY: all build clean test test-unit test-integration test-coverage lint fmt vet check-deps deps help install-tools benchmark security mock-server setup ci sync-spec code-samples check-code-samples
 
 # Default target
 all: check-deps fmt lint vet test build
@@ -126,6 +126,25 @@ mock-server-validate: ## Validate the OpenAPI spec
 	npx --yes @redocly/cli lint openapi/openapi.yaml
 	@echo "$(GREEN)OpenAPI spec is valid!$(RESET)"
 
+# OpenAPI specification
+# The server repository owns openapi.yaml; this SDK owns its Go code samples.
+# REF picks the server branch, e.g. `make sync-spec REF=devel` while a change
+# has not reached master yet.
+SERVER_REPO := AhaSend/AhaSend
+REF ?= master
+
+sync-spec: ## Download the server's openapi.yaml and write the Go code samples into it
+	@echo "$(BLUE)Downloading openapi.yaml from $(SERVER_REPO)@$(REF)...$(RESET)"
+	gh api -H 'Accept: application/vnd.github.raw' 'repos/$(SERVER_REPO)/contents/openapi.yaml?ref=$(REF)' > openapi/openapi.yaml.tmp
+	mv openapi/openapi.yaml.tmp openapi/openapi.yaml
+	@$(MAKE) code-samples
+
+code-samples: ## Write codesamples/*/main.go into openapi/openapi.yaml
+	go run ./internal/cmd/codesamples
+
+check-code-samples: ## Fail if openapi/openapi.yaml does not carry the current Go code samples
+	go run ./internal/cmd/codesamples -check
+
 # Development workflow
 dev-test: fmt lint vet test-unit ## Quick development test cycle
 	@echo "$(GREEN)Development tests passed!$(RESET)"
@@ -203,7 +222,7 @@ debug-info: ## Show debugging information
 # Install SDK locally (for testing)
 install-local: ## Install SDK locally for testing
 	@echo "$(BLUE)Installing SDK locally...$(RESET)"
-	go install ./...
+	go install $(shell go list ./... | grep -v '/codesamples/')
 
 # Update dependencies
 update-deps: ## Update all dependencies
