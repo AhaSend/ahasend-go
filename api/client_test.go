@@ -40,6 +40,7 @@ func TestClientCreation(t *testing.T) {
 	assert.NotNil(t, client.APIKeysAPI)
 	assert.NotNil(t, client.ContactsAPI)
 	assert.NotNil(t, client.DomainsAPI)
+	assert.NotNil(t, client.ListsAPI)
 	assert.NotNil(t, client.MessagesAPI)
 	assert.NotNil(t, client.RoutesAPI)
 	assert.NotNil(t, client.SMTPCredentialsAPI)
@@ -53,6 +54,7 @@ func TestClientCreation(t *testing.T) {
 	defaultClient := NewAPIClient()
 	require.NotNil(t, defaultClient)
 	assert.NotNil(t, defaultClient.ContactsAPI)
+	assert.NotNil(t, defaultClient.ListsAPI)
 	assert.NotNil(t, defaultClient.SubAccountsAPI)
 	assert.NotNil(t, defaultClient.TemplatesAPI)
 }

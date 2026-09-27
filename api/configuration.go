@@ -278,6 +278,7 @@ func NewAPIClientWithConfig(cfg *Configuration) *APIClient {
 	c.AccountsAPI = (*AccountsAPIService)(&c.common)
 	c.ContactsAPI = (*ContactsAPIService)(&c.common)
 	c.DomainsAPI = (*DomainsAPIService)(&c.common)
+	c.ListsAPI = (*ListsAPIService)(&c.common)
 	c.MessagesAPI = (*MessagesAPIService)(&c.common)
 	c.RoutesAPI = (*RoutesAPIService)(&c.common)
 	c.SMTPCredentialsAPI = (*SMTPCredentialsAPIService)(&c.common)
