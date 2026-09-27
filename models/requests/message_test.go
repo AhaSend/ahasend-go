@@ -45,14 +45,14 @@ func TestCreateMessageRequestOmitsTemplateIDWhenUnset(t *testing.T) {
 	assert.NotContains(t, request, "template_id")
 }
 
-func TestCreateMessageRequestSendsEmptySubjectWhenTheTemplateSuppliesOne(t *testing.T) {
+func TestCreateMessageRequestOmitsContentWhenSendingATemplate(t *testing.T) {
 	encoded, err := json.Marshal(templatedSendRequest(uuid.New()))
 	require.NoError(t, err)
 
-	// The API reads an empty subject as "no subject given, use the template's",
-	// so the key has to reach the wire rather than being omitted.
+	// The API rejects a template_id combined with any content field.
 	var request map[string]any
 	require.NoError(t, json.Unmarshal(encoded, &request))
-	require.Contains(t, request, "subject")
-	assert.Equal(t, "", request["subject"])
+	assert.NotContains(t, request, "text_content")
+	assert.NotContains(t, request, "html_content")
+	assert.NotContains(t, request, "amp_content")
 }
