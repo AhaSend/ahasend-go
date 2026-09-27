@@ -370,6 +370,15 @@ make help
 - **Integration Tests**: `make test-integration` (requires Prism mock server)
 - **Coverage Reports**: `make test-coverage`
 
+### Code Samples
+The Go samples in the API reference come from this repository. Each operation has one program at `codesamples/<operationId>/main.go`, which `go build ./...` compiles like any other package, so a sample cannot drift from the SDK.
+
+- `make sync-spec` downloads the API's `openapi.yaml` (the server repository owns everything but the Go samples) and writes the samples into it
+- `make code-samples` writes the samples into `openapi/openapi.yaml` after you edit one
+- `make check-code-samples` fails if `openapi/openapi.yaml` does not carry the current samples; CI runs it
+
+The server pulls the Go samples back from `openapi/openapi.yaml` on this repository's `main` branch.
+
 ## Related Projects
 
 - **[AhaSend CLI](https://github.com/AhaSend/ahasend-cli)** - Command-line tool built on this SDK
