@@ -140,10 +140,10 @@ sync-spec: ## Download the server's openapi.yaml and write the Go code samples i
 	@$(MAKE) code-samples
 
 code-samples: ## Write codesamples/*/main.go into openapi/openapi.yaml
-	go run ./internal/tools/codesamples
+	go run ./internal/cmd/codesamples
 
 check-code-samples: ## Fail if openapi/openapi.yaml does not carry the current Go code samples
-	go run ./internal/tools/codesamples -check
+	go run ./internal/cmd/codesamples -check
 
 # Development workflow
 dev-test: fmt lint vet test-unit ## Quick development test cycle

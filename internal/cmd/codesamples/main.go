@@ -10,8 +10,8 @@
 //
 // Usage:
 //
-//	go run ./internal/tools/codesamples          # rewrite openapi/openapi.yaml
-//	go run ./internal/tools/codesamples -check   # fail if it is out of date
+//	go run ./internal/cmd/codesamples          # rewrite openapi/openapi.yaml
+//	go run ./internal/cmd/codesamples -check   # fail if it is out of date
 package main
 
 import (
