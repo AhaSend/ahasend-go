@@ -424,6 +424,390 @@ func TestOpenAPIContactOperationsAndResponses(t *testing.T) {
 	assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", batch["422"].Ref)
 }
 
+const listResponseFixture = `{
+	"object":"contact_list",
+	"id":"22222222-2222-4222-8222-222222222222",
+	"created_at":"2026-09-10T10:00:00Z",
+	"updated_at":"2026-09-10T11:00:00Z",
+	"name":"Newsletter",
+	"description":"",
+	"tags":[],
+	"contact_count":7
+}`
+
+const listContactResponseFixture = `{
+	"object":"list_contact",
+	"list_id":"22222222-2222-4222-8222-222222222222",
+	"contact_id":"11111111-1111-4111-8111-111111111111",
+	"email":"user+tag@example.com",
+	"subscription_status":"unsubscribed",
+	"subscribed_at":"2026-09-10T10:00:00Z",
+	"unsubscribed_at":"2026-09-11T10:00:00Z",
+	"created_at":"2026-09-10T10:00:00Z",
+	"updated_at":"2026-09-11T10:00:00Z"
+}`
+
+func TestListsAPIEmitsDeclaredTransport(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	listID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	contactID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	rawEmail := "a/b+Tag@Example.COM"
+	escapedEmail := "a%2Fb+Tag@Example.COM"
+	listsPath := "/v2/accounts/" + accountID.String() + "/lists"
+	listPath := listsPath + "/" + listID.String()
+
+	type listCall func(*APIClient) (any, *http.Response, error)
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		status         int
+		response       string
+		idempotencyKey string
+		wantQuery      url.Values
+		wantBody       string
+		call           listCall
+		assertResult   func(*testing.T, any)
+	}{
+		{
+			name:      "get lists",
+			method:    http.MethodGet,
+			path:      listsPath,
+			status:    http.StatusOK,
+			response:  `{"object":"list","data":[` + listResponseFixture + `],"pagination":{"has_more":true,"next_cursor":"next","previous_cursor":null}}`,
+			wantQuery: url.Values{"limit": {"25"}, "after": {"after-cursor"}, "name": {"News"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.GetLists(context.Background(), accountID, requests.GetListsParams{
+					Limit: ahasend.Int32(25),
+					After: ahasend.String("after-cursor"),
+					Name:  ahasend.String("News"),
+				})
+			},
+			assertResult: func(t *testing.T, result any) {
+				page := result.(*responses.PaginatedContactListsResponse)
+				require.Len(t, page.Data, 1)
+				assert.Equal(t, listID, page.Data[0].ID)
+				assert.Equal(t, 7, page.Data[0].ContactCount)
+				assert.Equal(t, []string{}, page.Data[0].Tags)
+				assert.True(t, page.Pagination.HasMore)
+				require.NotNil(t, page.Pagination.NextCursor)
+				assert.Equal(t, "next", *page.Pagination.NextCursor)
+			},
+		},
+		{
+			name:           "create list",
+			method:         http.MethodPost,
+			path:           listsPath,
+			status:         http.StatusCreated,
+			response:       listResponseFixture,
+			idempotencyKey: "create-list",
+			wantBody:       `{"name":"Newsletter","description":"Monthly","tags":["news"]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.CreateList(context.Background(), accountID, requests.CreateListRequest{
+					Name:        "Newsletter",
+					Description: ahasend.String("Monthly"),
+					Tags:        []string{"news"},
+				}, WithIdempotencyKey("create-list"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "contact_list", result.(*responses.ContactList).Object)
+			},
+		},
+		{
+			name:     "get list",
+			method:   http.MethodGet,
+			path:     listPath,
+			status:   http.StatusOK,
+			response: listResponseFixture,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.GetList(context.Background(), accountID, listID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "Newsletter", result.(*responses.ContactList).Name)
+			},
+		},
+		{
+			name:     "update list",
+			method:   http.MethodPut,
+			path:     listPath,
+			status:   http.StatusOK,
+			response: listResponseFixture,
+			wantBody: `{"description":"","tags":[]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.UpdateList(context.Background(), accountID, listID, requests.UpdateListRequest{
+					Description: ahasend.String(""),
+					Tags:        &[]string{},
+				})
+			},
+		},
+		{
+			name:     "delete list",
+			method:   http.MethodDelete,
+			path:     listPath,
+			status:   http.StatusOK,
+			response: `{"message":"list deleted"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.DeleteList(context.Background(), accountID, listID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "list deleted", result.(*common.SuccessResponse).Message)
+			},
+		},
+		{
+			name:      "get list contacts",
+			method:    http.MethodGet,
+			path:      listPath + "/contacts",
+			status:    http.StatusOK,
+			response:  `{"object":"list","data":[` + listContactResponseFixture[:len(listContactResponseFixture)-1] + `,"contact":` + contactResponseFixture + `}],"pagination":{"has_more":false,"next_cursor":null,"previous_cursor":null}}`,
+			wantQuery: url.Values{"limit": {"100"}, "before": {"before-cursor"}, "subscription_status": {"unsubscribed"}, "email": {"person@example.com"}, "include_contacts": {"true"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.GetListContacts(context.Background(), accountID, listID, requests.GetListContactsParams{
+					Before:             ahasend.String("before-cursor"),
+					SubscriptionStatus: ahasend.String(requests.ListContactStatusUnsubscribed),
+					Email:              ahasend.String("person@example.com"),
+					IncludeContacts:    ahasend.Bool(true),
+				})
+			},
+			assertResult: func(t *testing.T, result any) {
+				page := result.(*responses.PaginatedListContactsResponse)
+				require.Len(t, page.Data, 1)
+				membership := page.Data[0]
+				assert.Equal(t, contactID, membership.ContactID)
+				assert.Equal(t, requests.ListContactStatusUnsubscribed, membership.SubscriptionStatus)
+				require.NotNil(t, membership.UnsubscribedAt)
+				require.NotNil(t, membership.Contact)
+				assert.Equal(t, contactID, membership.Contact.ID)
+				assert.Nil(t, membership.List)
+			},
+		},
+		{
+			name:           "batch add list contacts",
+			method:         http.MethodPost,
+			path:           listPath + "/contacts/batch",
+			status:         http.StatusOK,
+			response:       `{"object":"list","added":0,"skipped":1,"failed":2,"data":[{"position":0,"id":"11111111-1111-4111-8111-111111111111","outcome":"already_member","membership":` + listContactResponseFixture + `},{"position":1,"email":"nobody@example.com","outcome":"not_found","reason":"contact not found"},{"position":2,"outcome":"invalid","reason":"entry must name exactly one of email or id"}]}`,
+			idempotencyKey: "batch-list-contacts",
+			wantBody:       `{"data":[{"id":"11111111-1111-4111-8111-111111111111"},{"email":"nobody@example.com"}]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.BatchAddListContacts(context.Background(), accountID, listID, requests.BatchAddListContactsRequest{
+					Data: []requests.BatchAddListContactInput{{ID: &contactID}, {Email: ahasend.String("nobody@example.com")}},
+				}, WithIdempotencyKey("batch-list-contacts"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				batch := result.(*responses.BatchAddListContactsResponse)
+				assert.Equal(t, 0, batch.Added)
+				assert.Equal(t, 1, batch.Skipped)
+				assert.Equal(t, 2, batch.Failed)
+				require.Len(t, batch.Data, 3)
+				assert.Equal(t, responses.BatchListContactOutcomeAlreadyMember, batch.Data[0].Outcome)
+				require.NotNil(t, batch.Data[0].ID)
+				assert.Equal(t, contactID, *batch.Data[0].ID)
+				require.NotNil(t, batch.Data[0].Membership)
+				assert.Equal(t, requests.ListContactStatusUnsubscribed, batch.Data[0].Membership.SubscriptionStatus)
+				assert.Equal(t, responses.BatchListContactOutcomeNotFound, batch.Data[1].Outcome)
+				assert.Equal(t, "nobody@example.com", batch.Data[1].Email)
+				assert.Equal(t, 2, batch.Data[2].Position)
+				assert.Equal(t, responses.BatchListContactOutcomeInvalid, batch.Data[2].Outcome)
+				assert.Empty(t, batch.Data[2].Email)
+				assert.Nil(t, batch.Data[2].ID)
+				assert.NotEmpty(t, batch.Data[2].Reason)
+			},
+		},
+		{
+			name:     "upsert list contact",
+			method:   http.MethodPut,
+			path:     listPath + "/contacts/" + escapedEmail,
+			status:   http.StatusOK,
+			response: listContactResponseFixture,
+			wantBody: `{"subscription_status":"unsubscribed"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.UpsertListContact(context.Background(), accountID, listID, rawEmail, requests.UpsertListContactRequest{
+					SubscriptionStatus: ahasend.String(requests.ListContactStatusUnsubscribed),
+				})
+			},
+		},
+		{
+			name:     "upsert list contact naming no status",
+			method:   http.MethodPut,
+			path:     listPath + "/contacts/" + contactID.String(),
+			status:   http.StatusOK,
+			response: listContactResponseFixture,
+			wantBody: `{}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.UpsertListContact(context.Background(), accountID, listID, contactID.String(), requests.UpsertListContactRequest{})
+			},
+		},
+		{
+			name:     "delete list contact",
+			method:   http.MethodDelete,
+			path:     listPath + "/contacts/" + escapedEmail,
+			status:   http.StatusOK,
+			response: `{"message":"contact removed from list"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.DeleteListContact(context.Background(), accountID, listID, rawEmail)
+			},
+		},
+		{
+			name:      "get contact lists",
+			method:    http.MethodGet,
+			path:      "/v2/accounts/" + accountID.String() + "/contacts/" + escapedEmail + "/lists",
+			status:    http.StatusOK,
+			response:  `{"object":"list","data":[` + listContactResponseFixture[:len(listContactResponseFixture)-1] + `,"list":{"object":"contact_list","id":"22222222-2222-4222-8222-222222222222","created_at":"2026-09-10T10:00:00Z","updated_at":"2026-09-10T11:00:00Z","name":"Newsletter","description":"","tags":["news"]}}],"pagination":{"has_more":false,"next_cursor":null,"previous_cursor":null}}`,
+			wantQuery: url.Values{"limit": {"10"}, "subscription_status": {"complained"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.ListsAPI.GetContactLists(context.Background(), accountID, rawEmail, requests.GetContactListsParams{
+					Limit:              ahasend.Int32(10),
+					SubscriptionStatus: ahasend.String(requests.ListContactStatusComplained),
+				})
+			},
+			assertResult: func(t *testing.T, result any) {
+				page := result.(*responses.PaginatedListContactsResponse)
+				require.Len(t, page.Data, 1)
+				require.NotNil(t, page.Data[0].List)
+				assert.Equal(t, listID, page.Data[0].List.ID)
+				assert.Equal(t, []string{"news"}, page.Data[0].List.Tags)
+				assert.Nil(t, page.Data[0].Contact)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedRequest *http.Request
+			var capturedBody []byte
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				capturedRequest = r
+				capturedBody, _ = io.ReadAll(r.Body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.response))
+			})
+			defer cleanup()
+
+			result, httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, httpResponse)
+			require.NotNil(t, capturedRequest)
+			assert.Equal(t, tt.status, httpResponse.StatusCode)
+			assert.Equal(t, tt.method, capturedRequest.Method)
+			assert.Equal(t, tt.path, capturedRequest.URL.EscapedPath())
+			assert.Equal(t, tt.idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
+			if tt.wantQuery != nil {
+				assert.Equal(t, tt.wantQuery, capturedRequest.URL.Query())
+			} else {
+				assert.Empty(t, capturedRequest.URL.RawQuery)
+			}
+			if tt.wantBody != "" {
+				assert.JSONEq(t, tt.wantBody, string(capturedBody))
+			} else {
+				assert.Empty(t, capturedBody)
+			}
+			if tt.assertResult != nil {
+				tt.assertResult(t, result)
+			}
+		})
+	}
+}
+
+func TestListsAPIPreservesComplainedConflict(t *testing.T) {
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"message":"contact reported this list as spam and their membership cannot be changed"}`))
+	})
+	defer cleanup()
+
+	_, httpResponse, err := client.ListsAPI.UpsertListContact(context.Background(), uuid.New(), uuid.New(), "person@example.com", requests.UpsertListContactRequest{
+		SubscriptionStatus: ahasend.String(requests.ListContactStatusConfirmed),
+	})
+
+	require.Error(t, err)
+	require.NotNil(t, httpResponse)
+	assert.Equal(t, http.StatusConflict, httpResponse.StatusCode)
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, http.StatusConflict, apiErr.StatusCode)
+	assert.Contains(t, apiErr.Message, "cannot be changed")
+}
+
+func TestOpenAPIListOperationsAndResponses(t *testing.T) {
+	type responseContract struct {
+		Ref     string         `yaml:"$ref"`
+		Headers map[string]any `yaml:"headers"`
+	}
+	type operationContract struct {
+		OperationID string                      `yaml:"operationId"`
+		Security    []map[string][]string       `yaml:"security"`
+		Responses   map[string]responseContract `yaml:"responses"`
+	}
+	type openAPIContract struct {
+		Paths map[string]map[string]operationContract `yaml:"paths"`
+	}
+
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	var spec openAPIContract
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	const (
+		lists        = "/v2/accounts/{account_id}/lists"
+		list         = "/v2/accounts/{account_id}/lists/{list_id}"
+		listContacts = "/v2/accounts/{account_id}/lists/{list_id}/contacts"
+		listBatch    = "/v2/accounts/{account_id}/lists/{list_id}/contacts/batch"
+		listContact  = "/v2/accounts/{account_id}/lists/{list_id}/contacts/{id_or_email}"
+		contactLists = "/v2/accounts/{account_id}/contacts/{id_or_email}/lists"
+	)
+	tests := []struct {
+		path        string
+		method      string
+		operationID string
+		scope       string
+		statuses    []string
+	}{
+		{path: lists, method: "get", operationID: "getLists", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: lists, method: "post", operationID: "createList", scope: "lists:write", statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: list, method: "get", operationID: "getList", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: list, method: "put", operationID: "updateList", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: list, method: "delete", operationID: "deleteList", scope: "lists:delete", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
+		{path: listContacts, method: "get", operationID: "getListContacts", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: listBatch, method: "post", operationID: "batchAddListContacts", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: listContact, method: "put", operationID: "upsertListContact", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
+		{path: listContact, method: "delete", operationID: "deleteListContact", scope: "lists:write", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: contactLists, method: "get", operationID: "getContactLists", scope: "lists:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			path, ok := spec.Paths[tt.path]
+			require.True(t, ok)
+			operation, ok := path[tt.method]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+			assert.Equal(t, []map[string][]string{{"BearerAuth": {tt.scope}}}, operation.Security)
+
+			actualStatuses := make([]string, 0, len(operation.Responses))
+			for status := range operation.Responses {
+				actualStatuses = append(actualStatuses, status)
+			}
+			sort.Strings(actualStatuses)
+			assert.Equal(t, tt.statuses, actualStatuses)
+		})
+	}
+
+	create := spec.Paths[lists]["post"].Responses
+	assert.Contains(t, create["201"].Headers, "Idempotent-Replayed")
+	assert.Equal(t, "#/components/responses/IdempotencyConflict", create["409"].Ref)
+	assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", create["422"].Ref)
+
+	batch := spec.Paths[listBatch]["post"].Responses
+	assert.Contains(t, batch["200"].Headers, "Idempotent-Replayed")
+	assert.Equal(t, "#/components/responses/IdempotencyConflict", batch["409"].Ref)
+	assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", batch["422"].Ref)
+}
+
 func TestSuppressionsAPIGetSuppressionsUsesTimeQueryNames(t *testing.T) {
 	var lastRequest *http.Request
 	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
