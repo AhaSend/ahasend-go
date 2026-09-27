@@ -26,6 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating SMTP credential: %v", err)
 	}
-	// The password is returned only on create: store it now.
-	fmt.Printf("Username: %s, password: %s\n", response.Username, response.Password)
+	// response.Password is returned only on create: put it in your secret
+	// store now, and never log it.
+	fmt.Printf("Created SMTP credential for username %s\n", response.Username)
 }

@@ -31,6 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating API key: %v", err)
 	}
-	// SecretKey is returned only on create: store it now.
-	fmt.Printf("Created API key %s, secret key: %s\n", response.ID, *response.SecretKey)
+	// response.SecretKey is returned only on create: put it in your secret
+	// store now, and never log it.
+	fmt.Printf("Created API key %s (%s)\n", response.ID, response.Label)
 }

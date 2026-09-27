@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating sub-account API key: %v", err)
 	}
-	// SecretKey is returned only on create (and on an idempotent replay of
-	// it): store it now.
-	fmt.Printf("Created API key %s, secret key: %s\n", response.ID, *response.SecretKey)
+	// response.SecretKey is returned only on create (and on an idempotent
+	// replay of it): put it in your secret store now, and never log it.
+	fmt.Printf("Created API key %s (%s)\n", response.ID, response.Label)
 }
