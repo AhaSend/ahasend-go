@@ -29,6 +29,9 @@ Before running these examples, you need:
 - [scheduled_send.go](./scheduled_send.go) - Schedule emails for future delivery
 - [idempotency.go](./idempotency.go) - Ensure emails are sent only once using idempotency keys
 
+### Contacts & Lists
+- [list_management.go](./list_management.go) - Create lists, add contacts, and manage membership status
+
 ### Domain Management
 - [domain_management.go](./domain_management.go) - Add, verify, and manage sending domains
 

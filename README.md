@@ -185,6 +185,12 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 - **Batch Upserts**: `BatchUpsertContacts` returns 200 even when some items fail, so check `Failed` and each `Data[i].Outcome`
 - **Addressing**: contacts are addressed by ID or email; for an email address containing `/`, use the contact ID
 
+### Lists
+- **Scopes**: `lists:read` to read lists and memberships, `lists:write` to create and update lists and to add or remove their contacts, `lists:delete` to delete lists; `IncludeContacts` on `GetListContacts` also needs `contacts:read`
+- **Contact Count**: `ContactCount` is the number of members a campaign to the list would reach, not every member
+- **Batch Adds**: `BatchAddListContacts` returns 200 even when some items fail, so check `Failed` and each `Data[i].Outcome`; existing memberships are reported `already_member` and left unchanged
+- **Membership Status**: prefer `UpsertListContact` with `unsubscribed` over `DeleteListContact`, which discards the unsubscribe record; a `complained` membership cannot be changed and answers 409
+
 ### Domain & Infrastructure
 - **Domain Management**: Add, verify, and configure sending domains
 - **DNS Validation**: Automated DNS record verification
@@ -213,6 +219,7 @@ Parent or partner credentials that manage Sub Accounts need one or more of these
 | **MessagesAPI** | Send and manage emails | `CreateMessage`, `GetMessage`, `CancelMessage` |
 | **TemplatesAPI** | Read transactional templates | `GetTemplates`, `GetTemplate` |
 | **ContactsAPI** | Manage account-global contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
+| **ListsAPI** | Manage contact lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
 | **DomainsAPI** | Domain verification & management | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
 | **WebhooksAPI** | Event notifications | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
 | **StatisticsAPI** | Email analytics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
@@ -237,6 +244,7 @@ Explore our [comprehensive examples](./examples/):
 - **[error_handling.go](./examples/error_handling.go)** - Robust error handling
 - **[rate_limiting.go](./examples/rate_limiting.go)** - Rate limit configuration
 - **[idempotency.go](./examples/idempotency.go)** - Prevent duplicate sends
+- **[list_management.go](./examples/list_management.go)** - Create lists and manage their members
 - **[sub_account_management.go](./examples/sub_account_management.go)** - Manage Sub Accounts, usage, and child API keys
 
 Run any example:
