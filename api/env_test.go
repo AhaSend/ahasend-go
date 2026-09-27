@@ -464,3 +464,59 @@ func TestLoadEnvIntoConfigKeepsAKeySetInCode(t *testing.T) {
 
 	assert.Equal(t, "aha-sk-set-in-code", cfg.APIKey)
 }
+
+func TestConfigFromEnvAppliesTimeouts(t *testing.T) {
+	t.Setenv(EnvTimeout, "7")
+	t.Setenv(EnvConnectTimeout, "3")
+
+	cfg := ConfigFromEnv()
+
+	require.NotNil(t, cfg.HTTPClient)
+	assert.Equal(t, 7*time.Second, cfg.HTTPClient.Timeout)
+	transport, ok := cfg.HTTPClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.NotSame(t, http.DefaultTransport, transport, "the shared default transport must not be modified")
+	assert.NotNil(t, transport.DialContext)
+}
+
+func TestLoadEnvIntoConfigLeavesTheCallersClientAlone(t *testing.T) {
+	t.Setenv(EnvTimeout, "7")
+	t.Setenv(EnvConnectTimeout, "")
+	base := &http.Client{Timeout: time.Minute}
+	cfg := NewConfiguration()
+	cfg.HTTPClient = base
+
+	LoadEnvIntoConfig(cfg)
+
+	assert.Equal(t, 7*time.Second, cfg.HTTPClient.Timeout)
+	assert.Equal(t, time.Minute, base.Timeout)
+}
+
+func TestNewAPIClientFromEnvEnforcesTheRequestTimeout(t *testing.T) {
+	release := make(chan struct{})
+	received := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	t.Setenv(EnvBaseURL, server.URL)
+	t.Setenv(EnvMaxRetries, "0")
+	t.Setenv(EnvTimeout, "1")
+	clearAuthEnv(t)
+	t.Setenv(EnvAPIKey, "aha-sk-from-api-key")
+
+	start := time.Now()
+	_, _, err := NewAPIClientFromEnv().UtilityAPI.Ping(context.Background())
+
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Len(t, received, 1, "the request must reach the server named by AHASEND_BASE_URL")
+	assert.GreaterOrEqual(t, elapsed, 900*time.Millisecond)
+	assert.Less(t, elapsed, 5*time.Second)
+}
