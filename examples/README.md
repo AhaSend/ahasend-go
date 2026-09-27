@@ -22,6 +22,7 @@ Before running these examples, you need:
 ### Basic Operations
 - [send_email.go](./send_email.go) - Send a simple transactional email  
 - [send_with_attachments.go](./send_with_attachments.go) - Send email with file attachments
+- [send_template.go](./send_template.go) - Send email from a transactional template
 
 ### Advanced Features
 - [batch_send.go](./batch_send.go) - Send emails to multiple recipients efficiently
