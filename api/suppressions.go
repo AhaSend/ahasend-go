@@ -187,16 +187,18 @@ func (a *SuppressionsAPIService) GetSuppressions(
 	if params.Domain != nil {
 		queryParams.Set("domain", *params.Domain)
 	}
+	// FromDate and ToDate are the deprecated names of FromTime and ToTime, and
+	// are sent only when the new field is nil.
 	fromTime := params.FromTime
 	if fromTime == nil {
-		fromTime = params.FromTime
+		fromTime = params.FromDate //nolint:staticcheck // SA1019: fallback for the deprecated field
 	}
 	if fromTime != nil {
 		queryParams.Set("from_time", fromTime.Format(time.RFC3339))
 	}
 	toTime := params.ToTime
 	if toTime == nil {
-		toTime = params.ToTime
+		toTime = params.ToDate //nolint:staticcheck // SA1019: fallback for the deprecated field
 	}
 	if toTime != nil {
 		queryParams.Set("to_time", toTime.Format(time.RFC3339))

@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -854,6 +856,273 @@ func TestSuppressionsAPIGetSuppressionsUsesTimeQueryNames(t *testing.T) {
 	assert.Equal(t, toTime.Format(time.RFC3339), query.Get("to_time"))
 	assert.Empty(t, query.Get("from_date"))
 	assert.Empty(t, query.Get("to_date"))
+}
+
+func TestSuppressionsAPIGetSuppressionsFallsBackToDeprecatedDates(t *testing.T) {
+	var lastRequest *http.Request
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		lastRequest = r
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"object":"list","data":[],"pagination":{"has_more":false}}`))
+	})
+	defer cleanup()
+
+	fromDate := time.Date(2026, 4, 18, 10, 0, 0, 0, time.UTC)
+	toDate := fromDate.Add(time.Hour)
+
+	t.Run("deprecated fields alone are sent as the time filters", func(t *testing.T) {
+		_, _, err := client.SuppressionsAPI.GetSuppressions(context.Background(), uuid.New(), requests.GetSuppressionsParams{
+			FromDate: &fromDate,
+			ToDate:   &toDate,
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, lastRequest)
+		query := lastRequest.URL.Query()
+		assert.Equal(t, fromDate.Format(time.RFC3339), query.Get("from_time"))
+		assert.Equal(t, toDate.Format(time.RFC3339), query.Get("to_time"))
+		assert.Empty(t, query.Get("from_date"))
+		assert.Empty(t, query.Get("to_date"))
+	})
+
+	t.Run("FromTime and ToTime win over the deprecated fields", func(t *testing.T) {
+		fromTime := fromDate.Add(24 * time.Hour)
+		toTime := fromTime.Add(time.Hour)
+
+		_, _, err := client.SuppressionsAPI.GetSuppressions(context.Background(), uuid.New(), requests.GetSuppressionsParams{
+			FromTime: &fromTime,
+			ToTime:   &toTime,
+			FromDate: &fromDate,
+			ToDate:   &toDate,
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, lastRequest)
+		query := lastRequest.URL.Query()
+		assert.Equal(t, fromTime.Format(time.RFC3339), query.Get("from_time"))
+		assert.Equal(t, toTime.Format(time.RFC3339), query.Get("to_time"))
+	})
+}
+
+func TestDomainsAPIGetDomainsWithParamsSerializesFilters(t *testing.T) {
+	var lastRequest *http.Request
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		lastRequest = r
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"object":"list","data":[],"pagination":{"has_more":false}}`))
+	})
+	defer cleanup()
+
+	t.Run("sending type and DNS validity", func(t *testing.T) {
+		_, _, err := client.DomainsAPI.GetDomainsWithParams(context.Background(), uuid.New(), requests.GetDomainsParams{
+			DNSValid:    ahasend.Bool(true),
+			SendingType: ahasend.String(common.DomainSendingTypeMarketing),
+			PaginationParams: common.PaginationParams{
+				Limit: ahasend.Int32(25),
+				After: ahasend.String("after-cursor"),
+			},
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, lastRequest)
+		query := lastRequest.URL.Query()
+		assert.Equal(t, "marketing", query.Get("sending_type"))
+		assert.Equal(t, "true", query.Get("dns_valid"))
+		assert.Equal(t, "25", query.Get("limit"))
+		assert.Equal(t, "after-cursor", query.Get("after"))
+	})
+
+	t.Run("no filters", func(t *testing.T) {
+		_, _, err := client.DomainsAPI.GetDomainsWithParams(context.Background(), uuid.New(), requests.GetDomainsParams{})
+
+		require.NoError(t, err)
+		require.NotNil(t, lastRequest)
+		query := lastRequest.URL.Query()
+		assert.NotContains(t, query, "sending_type")
+		assert.NotContains(t, query, "dns_valid")
+		assert.Equal(t, "100", query.Get("limit"))
+	})
+
+	t.Run("GetDomains keeps its DNS validity filter and pagination", func(t *testing.T) {
+		_, _, err := client.DomainsAPI.GetDomains(context.Background(), uuid.New(), ahasend.Bool(false), &common.PaginationParams{
+			Before: ahasend.String("before-cursor"),
+		})
+
+		require.NoError(t, err)
+		require.NotNil(t, lastRequest)
+		query := lastRequest.URL.Query()
+		assert.Equal(t, "false", query.Get("dns_valid"))
+		assert.Equal(t, "100", query.Get("limit"))
+		assert.Equal(t, "before-cursor", query.Get("before"))
+		assert.NotContains(t, query, "sending_type")
+	})
+}
+
+const unpausedMarketingDomainResponseFixture = `{
+	"object":"domain",
+	"id":"33333333-3333-4333-8333-333333333333",
+	"created_at":"2026-10-01T10:00:00Z",
+	"updated_at":"2026-10-01T11:00:00Z",
+	"domain":"mail.example.com",
+	"account_id":"44444444-4444-4444-8444-444444444444",
+	"dns_records":[],
+	"last_dns_check_at":null,
+	"dns_valid":true,
+	"tracking_subdomain":null,
+	"return_path_subdomain":null,
+	"subscription_subdomain":null,
+	"media_subdomain":null,
+	"dkim_rotation_interval_days":null,
+	"dkim_selector":null,
+	"rotation_ready":false,
+	"dsn_recipient":null,
+	"sending_type":"marketing",
+	"paused":false,
+	"paused_at":null,
+	"pause_reason":null
+}`
+
+func TestSubAccountsAPIUnpauseSubAccountDomain(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	subAccountID := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+	basePath := "/v2/accounts/" + accountID.String() + "/sub-accounts/" + subAccountID.String() + "/domains/"
+
+	tests := []struct {
+		name        string
+		domain      string
+		escapedPath string
+	}{
+		{name: "hostname", domain: "mail.example.com", escapedPath: basePath + "mail.example.com/unpause"},
+		{name: "a slash stays inside the domain segment", domain: "mail.example.com/x", escapedPath: basePath + "mail.example.com%2Fx/unpause"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotMethod, gotPath, gotIdempotencyKey string
+			var gotBody []byte
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotPath = r.URL.EscapedPath()
+				gotIdempotencyKey = r.Header.Get("Idempotency-Key")
+				gotBody, _ = io.ReadAll(r.Body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(unpausedMarketingDomainResponseFixture))
+			})
+			defer cleanup()
+
+			resp, httpResp, err := client.SubAccountsAPI.UnpauseSubAccountDomain(context.Background(), accountID, subAccountID, tt.domain)
+
+			require.NoError(t, err)
+			require.NotNil(t, httpResp)
+			assert.Equal(t, http.StatusOK, httpResp.StatusCode)
+			assert.Equal(t, http.MethodPost, gotMethod)
+			assert.Equal(t, tt.escapedPath, gotPath)
+			assert.NotEmpty(t, gotIdempotencyKey)
+			assert.Empty(t, gotBody)
+
+			require.NotNil(t, resp)
+			assert.Equal(t, "mail.example.com", resp.Domain)
+			assert.Equal(t, common.DomainSendingTypeMarketing, resp.SendingType)
+			assert.False(t, resp.Paused)
+			assert.Nil(t, resp.PausedAt)
+			assert.Nil(t, resp.PauseReason)
+		})
+	}
+
+	t.Run("an empty domain is refused before the request", func(t *testing.T) {
+		var called bool
+		client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			called = true
+		})
+		defer cleanup()
+
+		_, _, err := client.SubAccountsAPI.UnpauseSubAccountDomain(context.Background(), accountID, subAccountID, "")
+
+		require.Error(t, err)
+		assert.False(t, called)
+	})
+
+	t.Run("a refused unpause is an APIError", func(t *testing.T) {
+		client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"domain not found"}`))
+		})
+		defer cleanup()
+
+		_, httpResp, err := client.SubAccountsAPI.UnpauseSubAccountDomain(context.Background(), accountID, subAccountID, "mail.example.com")
+
+		require.Error(t, err)
+		require.NotNil(t, httpResp)
+		var apiErr *APIError
+		require.ErrorAs(t, err, &apiErr)
+		assert.Equal(t, ErrorTypeNotFound, apiErr.Type)
+		assert.Equal(t, "domain not found", apiErr.Message)
+	})
+}
+
+func TestOpenAPIUnpauseSubAccountDomainOperation(t *testing.T) {
+	spec := loadOpenAPIContract(t)
+
+	path, ok := spec.Paths["/v2/accounts/{account_id}/sub-accounts/{sub_account_id}/domains/{domain}/unpause"]
+	require.True(t, ok)
+	operation, ok := path["post"]
+	require.True(t, ok)
+	assert.Equal(t, "unpauseSubAccountDomain", operation.OperationID)
+
+	var goSamples int
+	for _, sample := range operation.CodeSamples {
+		if sample.Lang == "go" {
+			goSamples++
+		}
+	}
+	assert.Equal(t, 1, goSamples)
+
+	assert.Equal(t, []map[string][]string{{"BearerAuth": {"sub-accounts:suspend"}}}, operation.Security)
+
+	actualStatuses := make([]string, 0, len(operation.Responses))
+	for status := range operation.Responses {
+		actualStatuses = append(actualStatuses, status)
+	}
+	sort.Strings(actualStatuses)
+	assert.Equal(t, []string{"200", "400", "401", "403", "404", "500"}, actualStatuses)
+}
+
+// TestOpenAPIDomainSchemaMatchesModel fails when the bundled specification
+// gives Domain a property that responses.Domain cannot decode.
+func TestOpenAPIDomainSchemaMatchesModel(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	var spec struct {
+		Components struct {
+			Schemas struct {
+				Domain struct {
+					Properties map[string]any `yaml:"properties"`
+				} `yaml:"Domain"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	specFields := make([]string, 0, len(spec.Components.Schemas.Domain.Properties))
+	for name := range spec.Components.Schemas.Domain.Properties {
+		specFields = append(specFields, name)
+	}
+	sort.Strings(specFields)
+
+	modelFields := make([]string, 0, len(specFields))
+	modelType := reflect.TypeOf(responses.Domain{})
+	for i := 0; i < modelType.NumField(); i++ {
+		name, _, _ := strings.Cut(modelType.Field(i).Tag.Get("json"), ",")
+		modelFields = append(modelFields, name)
+	}
+	sort.Strings(modelFields)
+
+	assert.Equal(t, specFields, modelFields)
 }
 
 func TestRoutesAPIGetRoutesWithParamsSerializesDomain(t *testing.T) {

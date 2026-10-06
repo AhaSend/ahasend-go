@@ -131,7 +131,7 @@ info:
     - `sub-accounts:read` - List and read sub accounts under the parent
     - `sub-accounts:write` - Create and update sub accounts
     - `sub-accounts:delete` - Soft-delete sub accounts
-    - `sub-accounts:suspend` - Suspend and unsuspend sub accounts
+    - `sub-accounts:suspend` - Pause and resume sub accounts, and unpause their domains
     - `sub-accounts:usage` - Read per-sub-account usage and allocated cost
     - `sub-account-api-keys:read` - List and read API keys owned by sub accounts
     - `sub-account-api-keys:write` - Create and update API keys owned by sub accounts
@@ -619,6 +619,23 @@ components:
         dsn_recipient:
           type: [string, 'null']
           description: Optional recipient address for delivery status notifications.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. The sending type affects your deliverability. Marketing email from a transactional domain can get your account paused.
+        paused:
+          type: boolean
+          description: Whether sending from the domain is paused. While the domain is paused, new email from it is refused, and you cannot delete or rename it. Your other domains continue to send.
+        paused_at:
+          type: [string, 'null']
+          format: date-time
+          description: When sending from the domain was paused. Null when the domain is not paused.
+        pause_reason:
+          type: [string, 'null']
+          description: |
+            The reason of the pause. Null when the domain is not paused.
+
+            - `bounce_rate`: too many recent emails from the domain bounced.
       required:
         - object
         - id
@@ -637,6 +654,10 @@ components:
         - dkim_selector
         - rotation_ready
         - dsn_recipient
+        - sending_type
+        - paused
+        - paused_at
+        - pause_reason
 
     CreateDomainRequest:
       type: object
@@ -678,6 +699,10 @@ components:
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. Omit to create a transactional domain. Null and empty values are refused.
       example:
         domain: "example.com"
         tracking_subdomain: "click"
@@ -712,6 +737,10 @@ components:
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen. It cannot be changed once the selector locks after DNS verification or while a DKIM key rotation is in progress.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. Omit to leave the current value unchanged. Null and empty values are refused. A change applies to new messages in a maximum of five minutes.
       example:
         tracking_subdomain: "click"
         return_path_subdomain: "mail"
@@ -1630,7 +1659,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
-          description: Reason shown on the sub account suspension record
+          description: Reason for the pause. When this call starts the pause, the dashboard of the sub account shows it as a note.
       example:
         reason: "Customer requested temporary pause"
 
@@ -4146,6 +4175,12 @@ paths:
           description: Filter results by DNS validation status
           schema:
             type: [boolean, 'null']
+        - name: sending_type
+          in: query
+          description: Filter results by sending type
+          schema:
+            type: string
+            enum: [transactional, marketing]
         - name: limit
           in: query
           description: Maximum number of items to return (1-100)
@@ -4659,11 +4694,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot delete the domain, or sending from the domain is paused. You cannot delete a domain while sending from it is paused.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending is paused on the domain 'example.com'. You cannot remove or rename it while sending is paused. Contact support.
         '404':
           description: Domain not found
           content:
@@ -5105,11 +5146,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
         '404':
           description: The template named by `template_id` does not exist
           content:
@@ -5272,11 +5319,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
@@ -6933,8 +6986,8 @@ paths:
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/suspend:
     post:
-      summary: Suspend Sub Account
-      description: Suspends a sub account under the parent account
+      summary: Pause Sub Account
+      description: Pauses sending on a sub account under the parent account. The status of the sub account becomes `suspended`.
       operationId: suspendSubAccount
       tags:
         - Sub Accounts
@@ -7008,7 +7061,7 @@ paths:
               $ref: '#/components/schemas/SuspendSubAccountRequest'
       responses:
         '200':
-          description: Sub account suspended successfully
+          description: Sub account paused successfully
           content:
             application/json:
               schema:
@@ -7046,8 +7099,8 @@ paths:
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/unsuspend:
     post:
-      summary: Unsuspend Sub Account
-      description: Unsuspends a sub account under the parent account
+      summary: Resume Sub Account
+      description: Resumes sending on a paused sub account under the parent account
       operationId: unsuspendSubAccount
       tags:
         - Sub Accounts
@@ -7110,11 +7163,85 @@ paths:
 
       responses:
         '200':
-          description: Sub account unsuspended successfully
+          description: Sub account resumed successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Forbidden, or AhaSend paused the sub account. Only AhaSend support
+            can resume that pause.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/domains/{domain}/unpause:
+    post:
+      summary: Unpause Sub Account Domain
+      description: |
+        Lifts the pause on a domain of a sub account under the parent account, so that the domain can send again.
+        The call is idempotent: if sending from the domain is not paused, it changes nothing and returns the domain.
+        A change of the pause can take some minutes to apply to new email.
+      operationId: unpauseSubAccountDomain
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: domain
+          in: path
+          required: true
+          description: Domain name
+          schema:
+            type: string
+            format: hostname
+      security:
+        - BearerAuth: ["sub-accounts:suspend"]
+      responses:
+        '200':
+          description: The domain, with sending not paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
         '400':
           description: Bad request
           content:
@@ -7134,7 +7261,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Sub account not found under the parent account
+          description: Sub account not found under the parent account, or domain not found in the sub account
           content:
             application/json:
               schema:
@@ -7145,6 +7272,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              subAccountID := uuid.MustParse("7d3c9f5e-2a41-4b8e-9c6d-0f1e2a3b4c5d")
+
+              response, _, err := client.SubAccountsAPI.UnpauseSubAccountDomain(ctx, accountID, subAccountID, "example.com")
+              if err != nil {
+                log.Fatalf("Error unpausing sub account domain: %v", err)
+              }
+              fmt.Printf("%s paused: %t\n", response.Domain, response.Paused)
+            }
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/api-keys:
     get:
