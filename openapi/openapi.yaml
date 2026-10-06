@@ -799,7 +799,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content
+          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
       example:
         email: "user@example.com"
         name: "John Doe"
@@ -952,7 +952,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Global substitutions, recipient substitutions override global
+          description: Global substitutions, recipient substitutions override global. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
         tags:
           type: array
           items:
@@ -1311,7 +1311,7 @@ components:
         template_id:
           type: [string, 'null']
           format: uuid
-          description: The transactional template the message was sent from; null for a message sent without one
+          description: The transactional template the message was sent from through the API's `template_id`. Null for any other message, including SMTP mail, dashboard test sends and messages sent before this field was added. The template may have been deleted since.
       required:
         - object
         - created_at
@@ -1442,8 +1442,10 @@ components:
             - type: 'null'
           description: The default sender, used by a send that names no `from`. Null when the template has none, and then every send must name one.
         reply_to:
-          type: string
-          description: The default reply-to address, used by a send that sets no reply-to. Empty when the template has none.
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The default reply-to address, used by a send that sets no reply-to, also one that names its own `from`. Null when the template has none. It has the shape of a send request's `reply_to`; its `name` is always empty.
 
     PaginatedTemplatesResponse:
       type: object

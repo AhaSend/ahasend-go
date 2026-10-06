@@ -30,8 +30,9 @@ type Template struct {
 	// nil when the template has none, and then every send must name one.
 	From *common.SenderAddress `json:"from,omitempty"`
 	// ReplyTo is the default reply-to address, used by a send that sets no
-	// reply-to. It is "" when the template has none.
-	ReplyTo string `json:"reply_to"`
+	// reply-to, also one that names its own sender. It is nil when the template
+	// has none, and its Name is always empty.
+	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
 }
 
 // PaginatedTemplatesResponse represents a page of transactional templates.

@@ -92,7 +92,7 @@ message := requests.CreateMessageRequest{
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
 
-A template can also hold a default sender and reply-to address: `template.From` (nil when the template has none) and `template.ReplyTo` (`""` when it has none). A send from a template with a sender can leave `From` out:
+A template can also hold a default sender and reply-to address: `template.From` and `template.ReplyTo`, each nil when the template has none. A send from a template with a sender can leave `From` out:
 
 ```go
 message := requests.CreateMessageRequest{

@@ -20,7 +20,7 @@ const templateFixture = `{
 	"preheader":"It expires in an hour",
 	"variables":[{"name":"first_name","required":true},{"name":"unsubscribe_url","required":false}],
 	"from":{"email":"hello@example.com","name":"Example"},
-	"reply_to":"support@example.com"
+	"reply_to":{"email":"support@example.com","name":""}
 }`
 
 func TestTemplateDecodesAPIFixture(t *testing.T) {
@@ -43,10 +43,11 @@ func TestTemplateDecodesAPIFixture(t *testing.T) {
 	assert.Equal(t, "hello@example.com", template.From.Email)
 	require.NotNil(t, template.From.Name)
 	assert.Equal(t, "Example", *template.From.Name)
-	assert.Equal(t, "support@example.com", template.ReplyTo)
+	require.NotNil(t, template.ReplyTo)
+	assert.Equal(t, "support@example.com", template.ReplyTo.Email)
 }
 
-func TestTemplateDecodesNullSenderAndEmptyReplyTo(t *testing.T) {
+func TestTemplateDecodesNullSenderAndReplyTo(t *testing.T) {
 	payload := []byte(`{
 		"object":"template",
 		"id":"33333333-3333-4333-8333-333333333333",
@@ -57,14 +58,14 @@ func TestTemplateDecodesNullSenderAndEmptyReplyTo(t *testing.T) {
 		"preheader":"",
 		"variables":[],
 		"from":null,
-		"reply_to":""
+		"reply_to":null
 	}`)
 
 	var template Template
 	require.NoError(t, json.Unmarshal(payload, &template))
 
 	assert.Nil(t, template.From)
-	assert.Empty(t, template.ReplyTo)
+	assert.Nil(t, template.ReplyTo)
 }
 
 func TestTemplateDecodesSenderWithoutName(t *testing.T) {
@@ -78,7 +79,7 @@ func TestTemplateDecodesSenderWithoutName(t *testing.T) {
 		"preheader":"",
 		"variables":[],
 		"from":{"email":"hello@example.com","name":""},
-		"reply_to":""
+		"reply_to":null
 	}`)
 
 	var template Template
@@ -112,8 +113,7 @@ func TestTemplateDecodesEmptySubjectPreheaderAndVariables(t *testing.T) {
 		"name":"Draft",
 		"subject":"",
 		"preheader":"",
-		"variables":[],
-		"reply_to":""
+		"variables":[]
 	}`)
 
 	var template Template
