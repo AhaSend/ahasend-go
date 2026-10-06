@@ -62,8 +62,9 @@ Creates and sends a message to one or more recipients.
 - One of `template_id`, `text_content` or `html_content` is required
 - `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
 - `subject` is optional when the template has one
+- `from.email` is optional when the template has a sender; an empty one uses the template's
 - Header names must be visible ASCII with no space or colon
-- `from.email` must be from a domain you own with valid DNS records
+- The sender, `from.email` or the template's, must be from a domain you own with valid DNS records
 - `retention.metadata` must be between 1 and 30 days
 - `retention.data` must be between 0 and 30 days
 - If `reply_to` is provided, do not include `reply-to` in headers

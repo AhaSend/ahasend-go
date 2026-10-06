@@ -56,3 +56,19 @@ func TestCreateMessageRequestOmitsContentWhenSendingATemplate(t *testing.T) {
 	assert.NotContains(t, request, "html_content")
 	assert.NotContains(t, request, "amp_content")
 }
+
+func TestCreateMessageRequestWithoutSenderSendsEmptyFromEmail(t *testing.T) {
+	templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+	encoded, err := json.Marshal(CreateMessageRequest{
+		Recipients: []common.Recipient{{Email: "recipient@example.com"}},
+		TemplateID: &templateID,
+	})
+	require.NoError(t, err)
+
+	// The API reads a from with an empty email on a templated send as "use
+	// the template's sender".
+	var request map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &request))
+	assert.Equal(t, map[string]any{"email": ""}, request["from"])
+}

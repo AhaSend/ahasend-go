@@ -888,11 +888,21 @@ components:
     CreateMessageRequest:
       type: object
       required:
-        - from
         - recipients
       properties:
         from:
-          $ref: '#/components/schemas/Address'
+          type: [object, 'null']
+          properties:
+            email:
+              type: string
+              description: An address on a domain defined in your account with valid DNS records. Required, and must not be empty, unless the request names a `template_id` whose template has a default sender.
+            name:
+              type: string
+              description: Display name for the sender
+          description: |
+            The sender. Required, with an `email`, unless the request names a `template_id` whose template carries a default sender of its own: then leave `from` out to use the template's sender. A `from` given here is used even when the template has one.
+
+            On such a request a `from` that is null or has no `email`, or an empty one, counts as absent, name included, so a client that always sends the object can leave the sender to the template. On any other request a `from` without an `email` is rejected.
         recipients:
           type: array
           items:
@@ -902,7 +912,7 @@ components:
           description: This does not set the To header to multiple addresses, it sends a separate message for each recipient
         reply_to:
           $ref: '#/components/schemas/Address'
-          description: If provided, the reply-to header in headers array must not be provided
+          description: If provided, the reply-to header in headers array must not be provided. On a request naming a `template_id`, either one is used instead of the template's reply-to.
         subject:
           type: string
           description: |
@@ -1298,6 +1308,10 @@ components:
           type: string
           format: uuid
           description: Account ID this message belongs to
+        template_id:
+          type: [string, 'null']
+          format: uuid
+          description: The transactional template the message was sent from; null for a message sent without one
       required:
         - object
         - created_at
@@ -1322,6 +1336,7 @@ components:
         - reference_message_id
         - domain_id
         - account_id
+        - template_id
 
     # Full message schema with content fields
     Message:
@@ -1385,6 +1400,8 @@ components:
         - subject
         - preheader
         - variables
+        - from
+        - reply_to
       properties:
         object:
           type: string
@@ -1419,6 +1436,14 @@ components:
             Every variable the design uses. A send naming this template must
             carry a value for each required one, in `substitutions` or in the
             recipient's own map, or it is rejected in full.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The default sender, used by a send that names no `from`. Null when the template has none, and then every send must name one.
+        reply_to:
+          type: string
+          description: The default reply-to address, used by a send that sets no reply-to. Empty when the template has none.
 
     PaginatedTemplatesResponse:
       type: object
@@ -5003,8 +5028,9 @@ paths:
         - Either `template_id`, `text_content` or `html_content` is required
         - `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
         - `subject` is required unless a template supplies one
+        - `from` is required unless a template supplies a sender; a `from` with an empty `email` counts as absent
         - a template named by `template_id` must have a saved design; one with neither an HTML nor a text body is rejected
-        - `from.email` must be from a domain you own with valid DNS records
+        - the sender, `from.email` or the template's, must be from a domain you own with valid DNS records
         - `retention.metadata` must be between 1 and 30 days
         - `retention.data` must be between 0 and 30 days
         - If `reply_to` is provided, do not include `reply-to` in headers
@@ -5016,7 +5042,9 @@ paths:
 
         **Sending a template:**
 
-        Name a transactional template with `template_id` and it supplies the subject, the preview text and both bodies. A subject given in the request is used instead of the template's; everything else about the envelope -- recipients, reply-to, attachments, headers, tags, tracking, retention, schedule and sandbox -- applies exactly as it does to an inline send.
+        Name a transactional template with `template_id` and it supplies the subject, the preview text and both bodies, and its default sender and reply-to when it has them. A `subject`, `from` or `reply_to` given in the request is used instead of the template's, and a `reply-to` in `headers` counts as the request's reply-to. Everything else about the envelope -- recipients, attachments, headers, tags, tracking, retention, schedule and sandbox -- applies exactly as it does to an inline send.
+
+        A request with no `from`, or a `from` with an empty `email`, sends from the template's sender. That sender is checked exactly as a `from` in the request is: a domain that is not this account's, has invalid DNS records or is paused fails the send with the same error. A request with no `from` naming a template with no sender is rejected.
 
         Values for the template's variables come from `substitutions` and from each recipient's own `substitutions`, the recipient's winning where both name a variable. Every variable the template requires must have a value for every recipient; a request missing one is rejected in full, naming each variable and the recipient it is missing for, and nothing is sent. A value for a name the template does not use is accepted and passed through, because your own `subject` and `headers` are substituted too.
 
@@ -5026,9 +5054,10 @@ paths:
 
         You are never asked for the link, and on a message that carries ours a `List-Unsubscribe` or `List-Unsubscribe-Post` of your own in `headers` is dropped however it is spelled. On every other send -- an inline one, or a template whose design does not use the variable -- your header passes through unchanged.
 
-        Authorization uses the domain in `from.email`: either
-        `messages:send:all` or the matching domain-specific send role is
-        sufficient. Sending from a template requires no additional scope.
+        Authorization uses the domain of the sender, `from.email` or the
+        template's: either `messages:send:all` or the matching
+        domain-specific send role is sufficient. Sending from a template
+        requires no additional scope.
       operationId: createMessage
       tags:
         - Messages
@@ -5147,7 +5176,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain. A request naming a `template_id` with no `from`, or a `from` with an empty `email`, is refused with `this api key is not authorized to send messages` when the API key cannot send from any domain.
           content:
             application/json:
               schema:

@@ -65,10 +65,6 @@ func main() {
 	// The template supplies the subject, preview text and both bodies, so the
 	// request carries no content. Leave Subject empty to use the template's.
 	message := requests.CreateMessageRequest{
-		From: common.SenderAddress{
-			Email: "sender@yourdomain.com",
-			Name:  ahasend.String("Your Name"),
-		},
 		Recipients: []common.Recipient{
 			{
 				Email: "recipient@example.com",
@@ -80,6 +76,19 @@ func main() {
 		TemplateID:    &templateID,
 		Substitutions: map[string]interface{}{"company": "Your Company"},
 		Tags:          []string{"template", "test"},
+	}
+
+	// A template with a default sender supplies it when From is left empty. A
+	// template without one needs a sender in the request. The template's
+	// reply-to applies whenever the request sets no ReplyTo and no reply-to
+	// header, From or not.
+	if template.From != nil {
+		fmt.Printf("Sending from the template's sender: %s\n", template.From.Email)
+	} else {
+		message.From = common.SenderAddress{
+			Email: "sender@yourdomain.com",
+			Name:  ahasend.String("Your Name"),
+		}
 	}
 
 	// Send the email

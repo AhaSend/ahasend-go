@@ -1091,38 +1091,67 @@ func TestOpenAPIUnpauseSubAccountDomainOperation(t *testing.T) {
 	assert.Equal(t, []string{"200", "400", "401", "403", "404", "500"}, actualStatuses)
 }
 
-// TestOpenAPIDomainSchemaMatchesModel fails when the bundled specification
-// gives Domain a property that responses.Domain cannot decode.
-func TestOpenAPIDomainSchemaMatchesModel(t *testing.T) {
+// openAPISchemaProperties returns the sorted property names of a schema in
+// the bundled specification, including those of its inline allOf branches.
+// A $ref branch adds nothing: name the referenced schema as well.
+func openAPISchemaProperties(t *testing.T, schemaNames ...string) []string {
+	t.Helper()
+
 	contents, err := os.ReadFile("../openapi/openapi.yaml")
 	require.NoError(t, err)
 
+	type schemaProperties struct {
+		Properties map[string]any `yaml:"properties"`
+	}
 	var spec struct {
 		Components struct {
-			Schemas struct {
-				Domain struct {
-					Properties map[string]any `yaml:"properties"`
-				} `yaml:"Domain"`
+			Schemas map[string]struct {
+				schemaProperties `yaml:",inline"`
+				AllOf            []schemaProperties `yaml:"allOf"`
 			} `yaml:"schemas"`
 		} `yaml:"components"`
 	}
 	require.NoError(t, yaml.Unmarshal(contents, &spec))
 
-	specFields := make([]string, 0, len(spec.Components.Schemas.Domain.Properties))
-	for name := range spec.Components.Schemas.Domain.Properties {
-		specFields = append(specFields, name)
+	var names []string
+	for _, schemaName := range schemaNames {
+		schema, ok := spec.Components.Schemas[schemaName]
+		require.True(t, ok, "schema %s", schemaName)
+		for _, part := range append([]schemaProperties{schema.schemaProperties}, schema.AllOf...) {
+			for name := range part.Properties {
+				names = append(names, name)
+			}
+		}
 	}
-	sort.Strings(specFields)
+	sort.Strings(names)
+	return names
+}
 
-	modelFields := make([]string, 0, len(specFields))
-	modelType := reflect.TypeOf(responses.Domain{})
+// modelJSONFields returns the sorted JSON names of a struct's fields.
+func modelJSONFields(model any) []string {
+	modelType := reflect.TypeOf(model)
+	names := make([]string, 0, modelType.NumField())
 	for i := 0; i < modelType.NumField(); i++ {
 		name, _, _ := strings.Cut(modelType.Field(i).Tag.Get("json"), ",")
-		modelFields = append(modelFields, name)
+		names = append(names, name)
 	}
-	sort.Strings(modelFields)
+	sort.Strings(names)
+	return names
+}
 
-	assert.Equal(t, specFields, modelFields)
+// TestOpenAPIDomainSchemaMatchesModel fails when the bundled specification
+// gives Domain a property that responses.Domain cannot decode.
+func TestOpenAPIDomainSchemaMatchesModel(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "Domain"), modelJSONFields(responses.Domain{}))
+}
+
+func TestOpenAPIMessageSchemaMatchesModel(t *testing.T) {
+	// Message is an allOf of a $ref to MessageSummary and the content fields.
+	assert.Equal(t, openAPISchemaProperties(t, "Message", "MessageSummary"), modelJSONFields(responses.Message{}))
+}
+
+func TestOpenAPITemplateSchemaMatchesModel(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "Template"), modelJSONFields(responses.Template{}))
 }
 
 func TestRoutesAPIGetRoutesWithParamsSerializesDomain(t *testing.T) {
@@ -1191,6 +1220,57 @@ func TestMessagesAPICreateConversationMessageUsesToField(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, body, "to")
 	assert.NotContains(t, body, "recipients")
+}
+
+func TestMessagesAPICreateMessageWithoutSenderSendsEmptyFromEmail(t *testing.T) {
+	accountID := uuid.New()
+	templateID := uuid.New()
+	var body map[string]interface{}
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/v2/accounts/"+accountID.String()+"/messages", r.URL.Path)
+		err := json.NewDecoder(r.Body).Decode(&body)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"object":"list","data":[]}`))
+	})
+	defer cleanup()
+
+	_, _, err := client.MessagesAPI.CreateMessage(context.Background(), accountID, requests.CreateMessageRequest{
+		Recipients: []common.Recipient{{Email: "recipient@example.com"}},
+		TemplateID: &templateID,
+	})
+
+	// On a templated send, the API reads a from with an empty email as "use
+	// the template's sender".
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{"email": ""}, body["from"])
+	assert.Equal(t, templateID.String(), body["template_id"])
+}
+
+func TestOpenAPICreateMessageSenderIsOptional(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	var spec struct {
+		Components struct {
+			Schemas struct {
+				CreateMessageRequest struct {
+					Required   []string `yaml:"required"`
+					Properties struct {
+						From struct {
+							Type []string `yaml:"type"`
+						} `yaml:"from"`
+					} `yaml:"properties"`
+				} `yaml:"CreateMessageRequest"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	request := spec.Components.Schemas.CreateMessageRequest
+	assert.NotContains(t, request.Required, "from")
+	assert.ElementsMatch(t, []string{"object", "null"}, request.Properties.From.Type)
 }
 
 func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {

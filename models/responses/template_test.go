@@ -18,7 +18,9 @@ const templateFixture = `{
 	"name":"Password reset",
 	"subject":"Reset your password",
 	"preheader":"It expires in an hour",
-	"variables":[{"name":"first_name","required":true},{"name":"unsubscribe_url","required":false}]
+	"variables":[{"name":"first_name","required":true},{"name":"unsubscribe_url","required":false}],
+	"from":{"email":"hello@example.com","name":"Example"},
+	"reply_to":"support@example.com"
 }`
 
 func TestTemplateDecodesAPIFixture(t *testing.T) {
@@ -37,6 +39,55 @@ func TestTemplateDecodesAPIFixture(t *testing.T) {
 	assert.True(t, template.Variables[0].Required)
 	assert.Equal(t, "unsubscribe_url", template.Variables[1].Name)
 	assert.False(t, template.Variables[1].Required)
+	require.NotNil(t, template.From)
+	assert.Equal(t, "hello@example.com", template.From.Email)
+	require.NotNil(t, template.From.Name)
+	assert.Equal(t, "Example", *template.From.Name)
+	assert.Equal(t, "support@example.com", template.ReplyTo)
+}
+
+func TestTemplateDecodesNullSenderAndEmptyReplyTo(t *testing.T) {
+	payload := []byte(`{
+		"object":"template",
+		"id":"33333333-3333-4333-8333-333333333333",
+		"created_at":"2026-09-10T10:00:00Z",
+		"updated_at":"2026-09-10T10:00:00Z",
+		"name":"No sender",
+		"subject":"Hello",
+		"preheader":"",
+		"variables":[],
+		"from":null,
+		"reply_to":""
+	}`)
+
+	var template Template
+	require.NoError(t, json.Unmarshal(payload, &template))
+
+	assert.Nil(t, template.From)
+	assert.Empty(t, template.ReplyTo)
+}
+
+func TestTemplateDecodesSenderWithoutName(t *testing.T) {
+	payload := []byte(`{
+		"object":"template",
+		"id":"44444444-4444-4444-8444-444444444444",
+		"created_at":"2026-09-10T10:00:00Z",
+		"updated_at":"2026-09-10T10:00:00Z",
+		"name":"Sender without a name",
+		"subject":"Hello",
+		"preheader":"",
+		"variables":[],
+		"from":{"email":"hello@example.com","name":""},
+		"reply_to":""
+	}`)
+
+	var template Template
+	require.NoError(t, json.Unmarshal(payload, &template))
+
+	require.NotNil(t, template.From)
+	assert.Equal(t, "hello@example.com", template.From.Email)
+	require.NotNil(t, template.From.Name)
+	assert.Empty(t, *template.From.Name)
 }
 
 func TestTemplateRoundTripsWithoutLoss(t *testing.T) {
@@ -61,7 +112,8 @@ func TestTemplateDecodesEmptySubjectPreheaderAndVariables(t *testing.T) {
 		"name":"Draft",
 		"subject":"",
 		"preheader":"",
-		"variables":[]
+		"variables":[],
+		"reply_to":""
 	}`)
 
 	var template Template

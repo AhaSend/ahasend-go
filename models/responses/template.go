@@ -26,6 +26,12 @@ type Template struct {
 	Subject   string             `json:"subject"`
 	Preheader string             `json:"preheader"`
 	Variables []TemplateVariable `json:"variables"`
+	// From is the default sender, used by a send that names no sender. It is
+	// nil when the template has none, and then every send must name one.
+	From *common.SenderAddress `json:"from,omitempty"`
+	// ReplyTo is the default reply-to address, used by a send that sets no
+	// reply-to. It is "" when the template has none.
+	ReplyTo string `json:"reply_to"`
 }
 
 // PaginatedTemplatesResponse represents a page of transactional templates.

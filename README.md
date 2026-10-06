@@ -92,13 +92,34 @@ message := requests.CreateMessageRequest{
 response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
 ```
 
+A template can also hold a default sender and reply-to address: `template.From` (nil when the template has none) and `template.ReplyTo` (`""` when it has none). A send from a template with a sender can leave `From` out:
+
+```go
+message := requests.CreateMessageRequest{
+    // No From: the send uses the template's sender.
+    Recipients: []common.Recipient{
+        {
+            Email:         "recipient@example.com",
+            Substitutions: map[string]interface{}{"first_name": "Pat"},
+        },
+    },
+    TemplateID: &templateID,
+}
+```
+
 - `TemplateID` cannot be used with `TextContent`, `HtmlContent` or `AmpContent`.
 - Leave `Subject` empty to use the template's subject, or set it to replace it.
+- Leave `From.Email` empty to use the template's sender; `From.Name` is then ignored too. A `From` with an `Email` replaces the template's sender.
+- The template's reply-to applies to every send from it, with or without `From`, unless the request sets `ReplyTo` or a `reply-to` entry in `Headers`; either one replaces it.
+- The template's sender is checked as a sender in the request is: its domain must be in your account, have valid DNS records and not be paused.
 - Variable values come from the request's `Substitutions` and from each recipient's. When both give the same variable, the recipient's value is used.
 - AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
 - The send fails with:
   - 404 when the template does not exist.
   - 400 when neither the request nor the template has a subject, or the template has no saved design.
+  - 400 when neither the request nor the template has a sender.
+  - 400 `the template's default sender or reply-to is not valid, edit it on the template page` when a stored value the send uses no longer passes the address checks.
+  - 403 `this api key is not authorized to send messages` when the request has no sender and the API key cannot send from any domain.
   - 400 for the whole request when any recipient is missing a required variable.
 - `GetTemplate` and `GetTemplates` need the `templates:read` scope. Sending from a template needs only the normal send scope.
 

@@ -240,3 +240,20 @@ func TestMessage_OptionalFields_JSONMarshaling(t *testing.T) {
 		assert.Equal(t, int64(12345), *unmarshaled.ReferenceMessageID)
 	})
 }
+
+func TestMessageDecodesTemplateID(t *testing.T) {
+	t.Run("sent from a template", func(t *testing.T) {
+		var msg Message
+		require.NoError(t, json.Unmarshal([]byte(`{"object":"message","template_id":"11111111-1111-4111-8111-111111111111"}`), &msg))
+
+		require.NotNil(t, msg.TemplateID)
+		assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), *msg.TemplateID)
+	})
+
+	t.Run("sent without a template", func(t *testing.T) {
+		var msg Message
+		require.NoError(t, json.Unmarshal([]byte(`{"object":"message","template_id":null}`), &msg))
+
+		assert.Nil(t, msg.TemplateID)
+	})
+}

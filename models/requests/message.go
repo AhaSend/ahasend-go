@@ -9,6 +9,10 @@ import (
 
 // CreateMessageRequest represents a request to create and send an email message.
 type CreateMessageRequest struct {
+	// From is the sender. On a request with a TemplateID, a From with an empty
+	// Email takes the template's stored sender, and its Name is ignored too;
+	// the API rejects the send when the template has no sender. Every other
+	// request must set From.Email.
 	From       common.SenderAddress `json:"from"`
 	Recipients []common.Recipient   `json:"recipients"`
 	// Subject may be left empty on a templated send whose template has a
@@ -17,8 +21,9 @@ type CreateMessageRequest struct {
 	Subject string                `json:"subject"`
 	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
 	// TemplateID names a transactional template to send. It supplies the
-	// subject, preview text and both bodies, and cannot be combined with
-	// TextContent, HtmlContent or AmpContent.
+	// subject, preview text and both bodies, and the template's sender and
+	// reply-to when it has them. It cannot be combined with TextContent,
+	// HtmlContent or AmpContent.
 	TemplateID    *uuid.UUID              `json:"template_id,omitempty"`
 	TextContent   *string                 `json:"text_content,omitempty"`
 	HtmlContent   *string                 `json:"html_content,omitempty"`
