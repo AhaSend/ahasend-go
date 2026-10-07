@@ -1,74 +1,56 @@
 package requests
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func templatedSendRequest(templateID uuid.UUID) CreateMessageRequest {
-	return CreateMessageRequest{
-		From:       common.SenderAddress{Email: "sender@example.com"},
+func templateSendRequest(templateID uuid.UUID) CreateTemplateMessageRequest {
+	return CreateTemplateMessageRequest{
+		TemplateID: templateID,
 		Recipients: []common.Recipient{{Email: "recipient@example.com"}},
-		TemplateID: &templateID,
 	}
 }
 
-func TestCreateMessageRequestMarshalsTemplateID(t *testing.T) {
+func TestCreateTemplateMessageRequestMarshalsTemplateID(t *testing.T) {
 	templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 
-	encoded, err := json.Marshal(templatedSendRequest(templateID))
-	require.NoError(t, err)
+	request := marshalToMap(t, templateSendRequest(templateID))
 
-	var request map[string]any
-	require.NoError(t, json.Unmarshal(encoded, &request))
 	assert.Equal(t, templateID.String(), request["template_id"])
 }
 
-func TestCreateMessageRequestOmitsTemplateIDWhenUnset(t *testing.T) {
-	textContent := "Hello"
+func TestCreateTemplateMessageRequestOmitsFromWhenNil(t *testing.T) {
+	// The API reads a request with no from as "use the template's sender".
+	request := marshalToMap(t, templateSendRequest(uuid.New()))
 
-	encoded, err := json.Marshal(CreateMessageRequest{
-		From:        common.SenderAddress{Email: "sender@example.com"},
-		Recipients:  []common.Recipient{{Email: "recipient@example.com"}},
-		Subject:     "Hello",
-		TextContent: &textContent,
-	})
-	require.NoError(t, err)
-
-	var request map[string]any
-	require.NoError(t, json.Unmarshal(encoded, &request))
-	assert.NotContains(t, request, "template_id")
+	assert.NotContains(t, request, "from")
 }
 
-func TestCreateMessageRequestOmitsContentWhenSendingATemplate(t *testing.T) {
-	encoded, err := json.Marshal(templatedSendRequest(uuid.New()))
-	require.NoError(t, err)
+func TestCreateTemplateMessageRequestMarshalsFromWhenSet(t *testing.T) {
+	message := templateSendRequest(uuid.New())
+	message.From = &common.SenderAddress{Email: "sender@example.com"}
 
-	// The API rejects a template_id combined with any content field.
-	var request map[string]any
-	require.NoError(t, json.Unmarshal(encoded, &request))
-	assert.NotContains(t, request, "text_content")
-	assert.NotContains(t, request, "html_content")
-	assert.NotContains(t, request, "amp_content")
+	request := marshalToMap(t, message)
+
+	assert.Equal(t, map[string]interface{}{"email": "sender@example.com"}, request["from"])
 }
 
-func TestCreateMessageRequestWithoutSenderSendsEmptyFromEmail(t *testing.T) {
-	templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+func TestCreateTemplateMessageRequestOmitsSubjectWhenEmpty(t *testing.T) {
+	// The API uses the template's subject when the request gives none.
+	request := marshalToMap(t, templateSendRequest(uuid.New()))
 
-	encoded, err := json.Marshal(CreateMessageRequest{
+	assert.NotContains(t, request, "subject")
+}
+
+func TestCreateMessageRequestAlwaysMarshalsFrom(t *testing.T) {
+	request := marshalToMap(t, CreateMessageRequest{
 		Recipients: []common.Recipient{{Email: "recipient@example.com"}},
-		TemplateID: &templateID,
+		Subject:    "Hello",
 	})
-	require.NoError(t, err)
 
-	// The API reads a from with an empty email on a templated send as "use
-	// the template's sender".
-	var request map[string]any
-	require.NoError(t, json.Unmarshal(encoded, &request))
-	assert.Equal(t, map[string]any{"email": ""}, request["from"])
+	assert.Contains(t, request, "from")
 }

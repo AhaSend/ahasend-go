@@ -66,7 +66,7 @@ func main() {
 
 ## Send from a template
 
-A transactional template made in the dashboard holds the subject, the preview text and both bodies. A send names the template and gives values for its variables:
+A transactional template made in the dashboard holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
 
 ```go
 // Read the template to see which variables a send must give.
@@ -78,24 +78,25 @@ for _, variable := range template.Variables {
     log.Printf("%s (required: %t)", variable.Name, variable.Required)
 }
 
-message := requests.CreateMessageRequest{
-    From: common.SenderAddress{Email: "sender@yourdomain.com"},
+message := requests.CreateTemplateMessageRequest{
+    TemplateID: templateID,
+    From:       &common.SenderAddress{Email: "sender@yourdomain.com"},
     Recipients: []common.Recipient{
         {
             Email:         "recipient@example.com",
             Substitutions: map[string]interface{}{"first_name": "Pat"},
         },
     },
-    TemplateID: &templateID,
 }
 
-response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+response, _, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, message)
 ```
 
-A template can also hold a default sender and reply-to address: `template.From` and `template.ReplyTo`, each nil when the template has none. A send from a template with a sender can leave `From` out:
+A template can also hold a default sender and reply-to address: `template.From` and `template.ReplyTo`, each nil when the template has none. A send from a template with a sender can leave `From` nil:
 
 ```go
-message := requests.CreateMessageRequest{
+message := requests.CreateTemplateMessageRequest{
+    TemplateID: templateID,
     // No From: the send uses the template's sender.
     Recipients: []common.Recipient{
         {
@@ -103,16 +104,15 @@ message := requests.CreateMessageRequest{
             Substitutions: map[string]interface{}{"first_name": "Pat"},
         },
     },
-    TemplateID: &templateID,
 }
 ```
 
-- `TemplateID` cannot be used with `TextContent`, `HtmlContent` or `AmpContent`.
+- The template supplies the body. The request has no content fields and no request-level `Substitutions`.
 - Leave `Subject` empty to use the template's subject, or set it to replace it.
-- Leave `From.Email` empty to use the template's sender; `From.Name` is then ignored too. A `From` with an `Email` replaces the template's sender.
+- Leave `From` nil to use the template's sender. A `From` replaces the template's sender and must have an `Email`.
 - The template's reply-to applies to every send from it, with or without `From`, unless the request sets `ReplyTo` or a `reply-to` entry in `Headers`; either one replaces it.
 - The template's sender is checked as a sender in the request is: its domain must be in your account, have valid DNS records and not be paused.
-- Variable values come from the request's `Substitutions` and from each recipient's. When both give the same variable, the recipient's value is used.
+- Variable values come only from each recipient's `Substitutions`. Every recipient must give a value for each required variable.
 - AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
 - The send fails with:
   - 404 when the template does not exist.
@@ -226,7 +226,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 
 | Service | Use it to | Main methods |
 |---|---|---|
-| `MessagesAPI` | Send and manage email | `CreateMessage`, `GetMessage`, `CancelMessage` |
+| `MessagesAPI` | Send and manage email | `CreateMessage`, `CreateTemplateMessage`, `GetMessage`, `CancelMessage` |
 | `TemplatesAPI` | Read transactional templates | `GetTemplates`, `GetTemplate` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |

@@ -888,21 +888,12 @@ components:
     CreateMessageRequest:
       type: object
       required:
+        - from
         - recipients
+        - subject
       properties:
         from:
-          type: [object, 'null']
-          properties:
-            email:
-              type: string
-              description: An address on a domain defined in your account with valid DNS records. Required, and must not be empty, unless the request names a `template_id` whose template has a default sender.
-            name:
-              type: string
-              description: Display name for the sender
-          description: |
-            The sender. Required, with an `email`, unless the request names a `template_id` whose template carries a default sender of its own: then leave `from` out to use the template's sender. A `from` given here is used even when the template has one.
-
-            On such a request a `from` that is null or has no `email`, or an empty one, counts as absent, name included, so a client that always sends the object can leave the sender to the template. On any other request a `from` without an `email` is rejected.
+          $ref: '#/components/schemas/Address'
         recipients:
           type: array
           items:
@@ -912,30 +903,23 @@ components:
           description: This does not set the To header to multiple addresses, it sends a separate message for each recipient
         reply_to:
           $ref: '#/components/schemas/Address'
-          description: If provided, the reply-to header in headers array must not be provided. On a request naming a `template_id`, either one is used instead of the template's reply-to.
+          description: If provided, the reply-to header in headers array must not be provided
         subject:
           type: string
           description: |
-            Email subject line. Required, except on a request naming a `template_id` whose template carries a subject of its own. A subject given here is used even when the template has one.
+            Email subject line.
 
-            A `{{ variable }}` in a subject resolves, whatever else the subject contains -- an emoji or an accented character included -- for every recipient whose message carries substitutions -- the request's own `substitutions`, that recipient's, or a `template_id`. A recipient with none of those is sent nothing to render, so their subject arrives exactly as written, braces and all.
+            A `{{ variable }}` in a subject resolves, whatever else the subject contains -- an emoji or an accented character included -- for every recipient whose message carries substitutions, the request's own `substitutions` or that recipient's. A recipient with neither is sent nothing to render, so their subject arrives exactly as written, braces and all.
 
             Pad the braces with ordinary spaces: a variable written with non-ASCII whitespace inside them is not reliably recognised.
 
             On a subject that is being resolved and carries an emoji or an accented character, template syntax other than a variable -- `{% ... %}`, `{# ... #}` or an unclosed brace -- is rejected. A substitution value is rejected for any of `{{`, `{%` or `{#`, a `{{ ... }}` included, and so is a subject whose values combine into one of them.
-        template_id:
-          type: string
-          format: uuid
-          description: |
-            A transactional template to send. Its subject, preview text, HTML body and text body become the message, and the request supplies values for the variables the template declares.
-
-            Cannot be combined with `text_content`, `html_content` or `amp_content`. A templated message carries no AMP part.
         text_content:
           type: string
-          description: Plain text content. Required if html_content and template_id are empty
+          description: Plain text content. Required if html_content is empty
         html_content:
           type: string
-          description: HTML content. Required if text_content and template_id are empty
+          description: HTML content. Required if text_content is empty
         amp_content:
           type: string
           description: AMP HTML content
@@ -987,6 +971,86 @@ components:
         text_content: "Welcome {{first_name}}!"
         substitutions:
           first_name: "John"
+
+    CreateTemplateMessageRequest:
+      type: object
+      required:
+        - template_id
+        - recipients
+      properties:
+        template_id:
+          type: string
+          format: uuid
+          description: The ID of one of this account's transactional templates. List Templates returns the IDs.
+        from:
+          $ref: '#/components/schemas/Address'
+          description: The sender. Leave it out to send from the template's default sender. A `from` given here is used even when the template has a default sender, and it must have an `email`.
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recipient'
+          minItems: 1
+          maxItems: 100
+          description: |
+            Each recipient gets a separate message. This does not set the To header to more than one address.
+
+            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values.
+        reply_to:
+          $ref: '#/components/schemas/Address'
+          description: If provided, the reply-to header in headers must not be provided. When the request has neither, the template's reply-to is used.
+        subject:
+          type: string
+          description: |
+            Email subject line. When it is empty or left out, the template's subject is used.
+
+            A `{{ variable }}` in the subject, yours or the template's, resolves for every recipient from that recipient's `substitutions` and the reserved variables, whatever else the subject contains -- an emoji or an accented character included. A variable with no value becomes empty.
+
+            Pad the braces with ordinary spaces: a variable written with non-ASCII whitespace inside them is not reliably recognised.
+
+            On a subject that carries a `{{ variable }}` and an emoji or an accented character, template syntax other than a variable -- `{% ... %}`, `{# ... #}` or an unclosed brace -- is rejected. A substitution value is rejected for any of `{{`, `{%` or `{#`, a `{{ ... }}` included, and so is a subject whose values combine into one of them.
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: File attachments. For an inline image, set the attachment's `content_id` to a value wrapped in angle brackets (e.g. `<image1@example.com>`). The template's HTML can then show it with `cid:` (e.g. `<img src="cid:image1@example.com">`).
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Custom email headers. Each name must be visible ASCII with no space and no colon. reply-to header cannot be provided if reply_to is provided, message-id will be ignored and automatically generated.
+
+            A `{{ variable }}` in a value resolves from the recipient's `substitutions` and the reserved variables. On a template whose design uses `unsubscribe_url`, a `List-Unsubscribe` or `List-Unsubscribe-Post` header given here is dropped.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorizing messages
+        sandbox:
+          type: boolean
+          description: If true, the message will be sent to the sandbox environment
+          default: false
+        sandbox_result:
+          type: string
+          enum: [deliver, bounce, defer, fail, suppress]
+          description: The result of the sandbox send
+        tracking:
+          $ref: '#/components/schemas/Tracking'
+          description: Tracking settings for the message, overrides default account settings
+        retention:
+          $ref: '#/components/schemas/Retention'
+          description: Retention settings for the message, overrides default account settings
+        schedule:
+          $ref: '#/components/schemas/MessageSchedule'
+          description: Schedule for message delivery
+      example:
+        template_id: "0195c2a4-7d3e-7b6a-9f1c-2e4d5a6b7c8d"
+        recipients:
+          - email: "user@example.com"
+            name: "John Doe"
+            substitutions:
+              first_name: "John"
+              order_id: "12345"
 
     CreateConversationMessageRequest:
       type: object
@@ -1311,7 +1375,7 @@ components:
         template_id:
           type: [string, 'null']
           format: uuid
-          description: The transactional template the message was sent from through the API's `template_id`. Null for any other message, including SMTP mail, dashboard test sends and messages sent before this field was added. The template may have been deleted since.
+          description: The transactional template the message was sent from with [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message). Null for any other message, including SMTP mail, dashboard test sends and messages sent before this field was added. The template may have been deleted since.
       required:
         - object
         - created_at
@@ -1384,10 +1448,16 @@ components:
         required:
           type: boolean
           description: |
-            Whether a send has to supply a value for this variable. A variable
-            the design wraps in a fallback is not required, and neither are
-            `email`, `unsubscribe_url` and `view_browser_url`, which the send
-            supplies itself and overwrites any caller-supplied value for.
+            Whether each recipient of a send has to supply a value for this
+            variable. A variable the design wraps in a fallback is not required.
+
+            `email`, `view_browser_url` and `unsubscribe_url` are never
+            required: the send supplies them for each recipient and replaces a
+            value the recipient gives. `email` is the recipient's address and
+            `view_browser_url` is empty. `unsubscribe_url` is a link made for
+            the recipient, and the message then carries `List-Unsubscribe` and
+            `List-Unsubscribe-Post` headers for it; a `List-Unsubscribe` or
+            `List-Unsubscribe-Post` in the request's `headers` is dropped.
 
     Template:
       type: object
@@ -1410,7 +1480,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Pass as `template_id` when sending a message
+          description: Pass as `template_id` to [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) to send this template
         created_at:
           type: string
           format: date-time
@@ -1424,7 +1494,7 @@ components:
           description: Template name, as it appears in the dashboard
         subject:
           type: string
-          description: The stored subject. Empty unless the design carries one, and overridden by a send that names its own `subject`.
+          description: The stored subject, set on the template page. Empty until it is set, and overridden by a send that names its own `subject`.
         preheader:
           type: string
           description: The stored preview text, injected into the delivered HTML when it is set
@@ -1433,9 +1503,10 @@ components:
           items:
             $ref: '#/components/schemas/TemplateVariable'
           description: |
-            Every variable the design uses. A send naming this template must
-            carry a value for each required one, in `substitutions` or in the
-            recipient's own map, or it is rejected in full.
+            Every variable the design uses. A send of this template takes the
+            values only from each recipient's `substitutions`. Every recipient
+            must give a value for each required variable; if one does not, the
+            request is rejected and no message is sent.
         from:
           oneOf:
             - $ref: '#/components/schemas/Address'
@@ -5027,39 +5098,24 @@ paths:
         Creates and sends a message to one or more recipients. This API cannot be used if you want to send a conversational/P2P message and set CC or BCC. Use [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation) instead.
 
         **Validation Requirements:**
-        - Either `template_id`, `text_content` or `html_content` is required
-        - `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
-        - `subject` is required unless a template supplies one
-        - `from` is required unless a template supplies a sender; a `from` with an empty `email` counts as absent
-        - a template named by `template_id` must have a saved design; one with neither an HTML nor a text body is rejected
-        - the sender, `from.email` or the template's, must be from a domain you own with valid DNS records
+        - Either `text_content` or `html_content` is required
+        - `from.email` must be from a domain you own with valid DNS records
         - `retention.metadata` must be between 1 and 30 days
         - `retention.data` must be between 0 and 30 days
         - If `reply_to` is provided, do not include `reply-to` in headers
         - `message-id` header will be ignored and automatically generated
-        - header names must be visible ASCII with no space and no colon; an empty name, or one holding a space, a colon or a line break, is rejected
         - Schedule times must be in RFC3339 format
         - `schedule.first_attempt` must be in the future and within 7 days of the request
         - `schedule.expires` must be in the future and within 8 days of the request
 
-        **Sending a template:**
+        **Headers and subject:**
+        - Header names must be visible ASCII with no space and no colon. An empty name, or one holding a space, a colon or a line break, is rejected.
+        - A substitution value that a header uses must not contain a line break. Such a request is rejected, and the error names the recipient.
+        - A `{{ name }}` in a subject that carries an emoji or an accented character is replaced before the message is built, for each recipient whose message carries substitutions. Such a subject is rejected when it holds template syntax other than `{{ name }}`, when a substitution value holds `{{`, `{%` or `{#`, or when the subject and the values combine into template syntax. See `subject`.
 
-        Name a transactional template with `template_id` and it supplies the subject, the preview text and both bodies, and its default sender and reply-to when it has them. A `subject`, `from` or `reply_to` given in the request is used instead of the template's, and a `reply-to` in `headers` counts as the request's reply-to. Everything else about the envelope -- recipients, attachments, headers, tags, tracking, retention, schedule and sandbox -- applies exactly as it does to an inline send.
-
-        A request with no `from`, or a `from` with an empty `email`, sends from the template's sender. That sender is checked exactly as a `from` in the request is: a domain that is not this account's, has invalid DNS records or is paused fails the send with the same error. A request with no `from` naming a template with no sender is rejected.
-
-        Values for the template's variables come from `substitutions` and from each recipient's own `substitutions`, the recipient's winning where both name a variable. Every variable the template requires must have a value for every recipient; a request missing one is rejected in full, naming each variable and the recipient it is missing for, and nothing is sent. A value for a name the template does not use is accepted and passed through, because your own `subject` and `headers` are substituted too.
-
-        `email` and `view_browser_url` are supplied by AhaSend for each recipient and cannot be overridden: `email` is that recipient's address, and `view_browser_url` is empty until a hosted view of a sent message exists. `unsubscribe_url` is supplied the same way, and a value of your own for it replaced, on a design that uses it; on a design that does not, nothing is minted and your value is passed through like any other name the template does not use. A `template_id` that does not name a transactional template belonging to this account is a 404.
-
-        **Unsubscribe:** the template's design decides, because it is the only thing that knows whether the recipient can see a link. A design that uses `unsubscribe_url` gets a link minted for each recipient: the variable resolves to it, and the message carries `List-Unsubscribe` holding that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so a mail client's own unsubscribe button works. That button suppresses the recipient for the sending domain straight away; following the link opens a confirmation page, and the suppression happens when they confirm. A design that does not use `unsubscribe_url` gets neither header and no substitution -- an unsubscribe header on a password reset advertises a preference the message does not offer.
-
-        You are never asked for the link, and on a message that carries ours a `List-Unsubscribe` or `List-Unsubscribe-Post` of your own in `headers` is dropped however it is spelled. On every other send -- an inline one, or a template whose design does not use the variable -- your header passes through unchanged.
-
-        Authorization uses the domain of the sender, `from.email` or the
-        template's: either `messages:send:all` or the matching
-        domain-specific send role is sufficient. Sending from a template
-        requires no additional scope.
+        Authorization uses the domain in `from.email`: either
+        `messages:send:all` or the matching domain-specific send role is
+        sufficient.
       operationId: createMessage
       tags:
         - Messages
@@ -5178,7 +5234,137 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: |
-            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain. A request naming a `template_id` with no `from`, or a `from` with an empty `email`, is refused with `this api key is not authorized to send messages` when the API key cannot send from any domain.
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/messages/template:
+    post:
+      summary: Create Template Message
+      description: |
+        Sends a stored transactional template to one or more recipients. Each recipient gets a separate message. The template supplies the body. It also supplies the subject, the sender and the reply-to when the request does not give them. To send content that is not stored in a template, use [Create Message](https://ahasend.com/docs/api-reference/messages/create-message).
+
+        **The message:**
+        The message has the template's HTML body, with the template's preview text added, and the template's text body. It has no AMP part. The message records the template: the message's `template_id` (Get Message) is the ID of this template.
+
+        **Variables:**
+        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted.
+
+        Your `subject` and `headers` resolve from the same values. A `{{ name }}` that has no value becomes empty.
+
+        **Reserved variables:**
+        The send supplies `email` and `view_browser_url` for each recipient: `email` is the recipient's address, and `view_browser_url` is empty. When the template's design uses `unsubscribe_url`, the send also supplies it: a link made for each recipient. The message then carries `List-Unsubscribe` with that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so the unsubscribe button of a mail client works. That button suppresses the recipient for the sending domain at once. The link opens a confirmation page, and the suppression happens when the recipient confirms. A `List-Unsubscribe` or `List-Unsubscribe-Post` in your `headers` is dropped, in any letter case. When the design does not use `unsubscribe_url`, no link is made and your headers are sent as you give them.
+
+        A recipient's own value for a reserved variable is replaced.
+
+        **Fields that are not accepted:**
+        These fields at the top of the request are rejected with a 400. Any value except `null` is rejected, `""` and `{}` included.
+        - `substitutions`: `substitutions go on each recipient, not at the top of the request`
+        - `text_content`, `html_content` and `amp_content`: `<field> is not accepted, the template supplies the body`, with the name of the field
+
+        A request with more than one of them gets the error for the first in this list. These fields are checked as soon as the request body is read, before the rest of the request.
+
+        **Sender:**
+        - When the request has no `from`, or `from` is `null`, the message is sent from the template's default sender. When the template has no default sender, the request is rejected with a 400 `from is required because the template has no default sender`.
+        - A `from` given in the request is used even when the template has a default sender. It must have an `email`, and it is checked as on Create Message.
+        - The sender, the request's or the template's, must be from a domain you own with valid DNS records.
+        - When the request has no `reply_to` and no `reply-to` in `headers`, the template's reply-to is used.
+
+        **Subject:**
+        The request's `subject` is used when it is not empty. If not, the template's subject is used. When neither has a subject, the request is rejected with a 400 `the template has no subject, set one on the template page or pass subject`.
+
+        **Headers and subject:**
+        - Header names must be visible ASCII with no space and no colon. An empty name, or one holding a space, a colon or a line break, is rejected.
+        - A substitution value that a header uses must not contain a line break. Such a request is rejected, and the error names the recipient.
+        - A `{{ name }}` in a subject that carries an emoji or an accented character is replaced before the message is built, on every send. Such a subject is rejected when it holds template syntax other than `{{ name }}`, when a substitution value holds `{{`, `{%` or `{#`, or when the subject and the values combine into template syntax. See `subject`.
+
+        **Order of checks:**
+        When the request body is read, the fields that are not accepted are checked first, then the request body against its schema. Then the checks run in this order, and a request that fails more than one gets the error of the first:
+        1. The number of recipients, then the header names.
+        2. A `from` in the request: its domain, as on Create Message.
+        3. No `from`, and an API key that cannot send from any domain: 403 `this api key is not authorized to send messages`.
+        4. A `template_id` that is not one of this account's transactional templates: 404 `template not found`.
+        5. A default sender or reply-to of the template that the send would use and that is not valid: 400 `the template's default sender or reply-to is not valid, edit it on the template page`.
+        6. No `from`: the template's default sender (see Sender) and its domain.
+        7. A template with neither an HTML nor a text body: 400 `template has no content, open it in the editor and save a design`.
+        8. An HTML or text body that holds a `{{`, `{%` or `{#` that cannot be rendered: 400 `template design holds a {{, {% or {# that cannot be rendered, open it in the editor and fix it`.
+        9. The subject (see Subject), then the variables of each recipient (see Variables).
+        10. The sandbox fields, then whether the account can send and whether sending from the domain is paused, as on Create Message.
+
+        The other checks, such as the schedule and the substitution values that headers use, come after these.
+
+        Authorization uses the domain of the sender, `from.email` or the
+        template's default sender: either `messages:send:all` or the matching
+        domain-specific send role is sufficient. Sending a template requires
+        no additional scope.
+      operationId: createTemplateMessage
+      tags:
+        - Messages
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["messages:send:all"]
+        - BearerAuth: ["messages:send:{domain}"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateMessageRequest'
+      responses:
+        '202':
+          description: Message created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMessageResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_variables:
+                  summary: A recipient does not give a required variable
+                  value:
+                    message: "missing required template variables: user@example.com needs first_name, order_id"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Forbidden. For example, the API key cannot send from the domain of the sender, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain. A request with no `from` is refused with `this api key is not authorized to send messages` when the API key cannot send from any domain.
           content:
             application/json:
               schema:
@@ -5189,7 +5375,8 @@ paths:
                   value:
                     message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
         '404':
-          description: The template named by `template_id` does not exist
+          description: |
+            `template not found`: `template_id` is not the ID of one of this account's transactional templates. A deleted template, a campaign design and a template of another account get this answer too.
           content:
             application/json:
               schema:
@@ -5204,6 +5391,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // The template supplies the body, and the subject and sender when the
+              // request leaves them out. Each recipient gives its own variable values.
+              // For a template with no default sender, set From to an address on one of
+              // your domains.
+              response, _, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, requests.CreateTemplateMessageRequest{
+                TemplateID: templateID,
+                Recipients: []common.Recipient{
+                  {
+                    Email: "john@example.com",
+                    Name:  ahasend.String("John Smith"),
+                    Substitutions: map[string]interface{}{
+                      "first_name": "John",
+                      "order_id":   "12345",
+                    },
+                  },
+                },
+                Sandbox: ahasend.Bool(true),
+              })
+              if err != nil {
+                log.Fatalf("Error sending message: %v", err)
+              }
+              // Each recipient gets its own message, or an error saying why it was not sent.
+              for _, message := range response.Data {
+                if message.ID != nil {
+                  fmt.Printf("%s: %s\n", message.Recipient.Email, *message.ID)
+                } else if message.Error != nil {
+                  fmt.Printf("%s: %s\n", message.Recipient.Email, *message.Error)
+                }
+              }
+            }
 
   /v2/accounts/{account_id}/messages/conversation:
     post:
@@ -5393,7 +5637,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
       security:
@@ -5499,7 +5743,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
       security:

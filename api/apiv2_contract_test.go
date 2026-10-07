@@ -1222,12 +1222,15 @@ func TestMessagesAPICreateConversationMessageUsesToField(t *testing.T) {
 	assert.NotContains(t, body, "recipients")
 }
 
-func TestMessagesAPICreateMessageWithoutSenderSendsEmptyFromEmail(t *testing.T) {
+func TestMessagesAPICreateTemplateMessage(t *testing.T) {
 	accountID := uuid.New()
 	templateID := uuid.New()
+	var gotMethod, gotPath, gotIdempotencyKey string
 	var body map[string]interface{}
 	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v2/accounts/"+accountID.String()+"/messages", r.URL.Path)
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotIdempotencyKey = r.Header.Get("Idempotency-Key")
 		err := json.NewDecoder(r.Body).Decode(&body)
 		require.NoError(t, err)
 		w.Header().Set("Content-Type", "application/json")
@@ -1236,41 +1239,85 @@ func TestMessagesAPICreateMessageWithoutSenderSendsEmptyFromEmail(t *testing.T) 
 	})
 	defer cleanup()
 
-	_, _, err := client.MessagesAPI.CreateMessage(context.Background(), accountID, requests.CreateMessageRequest{
+	_, _, err := client.MessagesAPI.CreateTemplateMessage(context.Background(), accountID, requests.CreateTemplateMessageRequest{
+		TemplateID: templateID,
 		Recipients: []common.Recipient{{Email: "recipient@example.com"}},
-		TemplateID: &templateID,
-	})
+	}, WithIdempotencyKey("template-send"))
 
-	// On a templated send, the API reads a from with an empty email as "use
-	// the template's sender".
 	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"email": ""}, body["from"])
+	assert.Equal(t, http.MethodPost, gotMethod)
+	assert.Equal(t, "/v2/accounts/"+accountID.String()+"/messages/template", gotPath)
+	assert.Equal(t, "template-send", gotIdempotencyKey)
 	assert.Equal(t, templateID.String(), body["template_id"])
+	// A request with no from sends from the template's default sender.
+	assert.NotContains(t, body, "from")
 }
 
-func TestOpenAPICreateMessageSenderIsOptional(t *testing.T) {
+func TestOpenAPISendRequestSchemasMatchModels(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "CreateMessageRequest"), modelJSONFields(requests.CreateMessageRequest{}))
+	assert.Equal(t, openAPISchemaProperties(t, "CreateTemplateMessageRequest"), modelJSONFields(requests.CreateTemplateMessageRequest{}))
+}
+
+func TestOpenAPISendRequestSender(t *testing.T) {
 	contents, err := os.ReadFile("../openapi/openapi.yaml")
 	require.NoError(t, err)
 
+	type sendRequestSchema struct {
+		Required   []string `yaml:"required"`
+		Properties struct {
+			From struct {
+				Ref string `yaml:"$ref"`
+			} `yaml:"from"`
+		} `yaml:"properties"`
+	}
 	var spec struct {
 		Components struct {
 			Schemas struct {
-				CreateMessageRequest struct {
-					Required   []string `yaml:"required"`
-					Properties struct {
-						From struct {
-							Type []string `yaml:"type"`
-						} `yaml:"from"`
-					} `yaml:"properties"`
-				} `yaml:"CreateMessageRequest"`
+				CreateMessageRequest         sendRequestSchema `yaml:"CreateMessageRequest"`
+				CreateTemplateMessageRequest sendRequestSchema `yaml:"CreateTemplateMessageRequest"`
 			} `yaml:"schemas"`
 		} `yaml:"components"`
 	}
 	require.NoError(t, yaml.Unmarshal(contents, &spec))
 
-	request := spec.Components.Schemas.CreateMessageRequest
-	assert.NotContains(t, request.Required, "from")
-	assert.ElementsMatch(t, []string{"object", "null"}, request.Properties.From.Type)
+	inline := spec.Components.Schemas.CreateMessageRequest
+	assert.Contains(t, inline.Required, "from")
+	assert.Equal(t, "#/components/schemas/Address", inline.Properties.From.Ref)
+
+	template := spec.Components.Schemas.CreateTemplateMessageRequest
+	assert.NotContains(t, template.Required, "from")
+	assert.Equal(t, "#/components/schemas/Address", template.Properties.From.Ref)
+}
+
+func TestOpenAPICreateTemplateMessageOperation(t *testing.T) {
+	spec := loadOpenAPIContract(t)
+
+	path, ok := spec.Paths["/v2/accounts/{account_id}/messages/template"]
+	require.True(t, ok)
+	operation, ok := path["post"]
+	require.True(t, ok)
+	assert.Equal(t, "createTemplateMessage", operation.OperationID)
+
+	var goSamples int
+	for _, sample := range operation.CodeSamples {
+		if sample.Lang == "go" {
+			goSamples++
+		}
+	}
+	assert.Equal(t, 1, goSamples)
+
+	assert.Equal(t, []map[string][]string{
+		{"BearerAuth": {"messages:send:all"}},
+		{"BearerAuth": {"messages:send:{domain}"}},
+	}, operation.Security)
+
+	actualStatuses := make([]string, 0, len(operation.Responses))
+	for status := range operation.Responses {
+		actualStatuses = append(actualStatuses, status)
+	}
+	sort.Strings(actualStatuses)
+	assert.Equal(t, []string{"202", "400", "401", "403", "404", "409", "422", "500"}, actualStatuses)
+	assert.Contains(t, operation.Responses["202"].Headers, "Idempotent-Replayed")
 }
 
 func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
@@ -1313,7 +1360,8 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 		})
 	}
 
-	// A template_id naming no template of this account is the send's own 404.
-	send := spec.Paths["/v2/accounts/{account_id}/messages"]["post"].Responses
-	assert.Contains(t, send, "404")
+	// A template_id naming no template of this account is the template
+	// send's 404; an inline send names no stored template.
+	assert.Contains(t, spec.Paths["/v2/accounts/{account_id}/messages/template"]["post"].Responses, "404")
+	assert.NotContains(t, spec.Paths["/v2/accounts/{account_id}/messages"]["post"].Responses, "404")
 }

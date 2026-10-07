@@ -9,28 +9,44 @@ import (
 
 // CreateMessageRequest represents a request to create and send an email message.
 type CreateMessageRequest struct {
-	// From is the sender. On a request with a TemplateID, a From with an empty
-	// Email takes the template's stored sender, and its Name is ignored too;
-	// the API rejects the send when the template has no sender. Every other
-	// request must set From.Email.
-	From       common.SenderAddress `json:"from"`
-	Recipients []common.Recipient   `json:"recipients"`
-	// Subject may be left empty on a templated send whose template has a
-	// subject of its own; the API treats an empty subject, sent or omitted, as
-	// "use the template's".
-	Subject string                `json:"subject"`
-	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
-	// TemplateID names a transactional template to send. It supplies the
-	// subject, preview text and both bodies, and the template's sender and
-	// reply-to when it has them. It cannot be combined with TextContent,
-	// HtmlContent or AmpContent.
-	TemplateID    *uuid.UUID              `json:"template_id,omitempty"`
+	From          common.SenderAddress    `json:"from"`
+	Recipients    []common.Recipient      `json:"recipients"`
+	Subject       string                  `json:"subject"`
+	ReplyTo       *common.SenderAddress   `json:"reply_to,omitempty"`
 	TextContent   *string                 `json:"text_content,omitempty"`
 	HtmlContent   *string                 `json:"html_content,omitempty"`
 	AmpContent    *string                 `json:"amp_content,omitempty"`
 	Attachments   []common.Attachment     `json:"attachments,omitempty"`
 	Headers       map[string]string       `json:"headers,omitempty"`
 	Substitutions map[string]interface{}  `json:"substitutions,omitempty"`
+	Tags          []string                `json:"tags,omitempty"`
+	Sandbox       *bool                   `json:"sandbox,omitempty"`
+	SandboxResult *string                 `json:"sandbox_result,omitempty"`
+	Tracking      *common.Tracking        `json:"tracking,omitempty"`
+	Retention     *common.Retention       `json:"retention,omitempty"`
+	Schedule      *common.MessageSchedule `json:"schedule,omitempty"`
+}
+
+// CreateTemplateMessageRequest represents a request to send a stored
+// transactional template to one or more recipients. The template supplies
+// the body, so the request has no content fields and no request-level
+// substitutions: each recipient's Substitutions hold its values for the
+// template's variables.
+type CreateTemplateMessageRequest struct {
+	TemplateID uuid.UUID `json:"template_id"`
+	// From is the sender. Leave it nil to send from the template's default
+	// sender; the API rejects the send when the template has none. A From
+	// given here is used even when the template has a default sender.
+	From       *common.SenderAddress `json:"from,omitempty"`
+	Recipients []common.Recipient    `json:"recipients"`
+	// ReplyTo replaces the template's reply-to. The template's applies when
+	// the request has neither ReplyTo nor a reply-to header.
+	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
+	// Subject replaces the template's subject. Leave it empty to use the
+	// template's.
+	Subject       string                  `json:"subject,omitempty"`
+	Attachments   []common.Attachment     `json:"attachments,omitempty"`
+	Headers       map[string]string       `json:"headers,omitempty"`
 	Tags          []string                `json:"tags,omitempty"`
 	Sandbox       *bool                   `json:"sandbox,omitempty"`
 	SandboxResult *string                 `json:"sandbox_result,omitempty"`

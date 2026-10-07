@@ -59,12 +59,9 @@ CreateMessage Create Message
 Creates and sends a message to one or more recipients.
 
 **Validation Requirements:**
-- One of `template_id`, `text_content` or `html_content` is required
-- `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
-- `subject` is optional when the template has one
-- `from.email` is optional when the template has a sender; an empty one uses the template's
+- Either `text_content` or `html_content` is required
+- `from.email` must be from a domain you own with valid DNS records
 - Header names must be visible ASCII with no space or colon
-- The sender, `from.email` or the template's, must be from a domain you own with valid DNS records
 - `retention.metadata` must be between 1 and 30 days
 - `retention.data` must be between 0 and 30 days
 - If `reply_to` is provided, do not include `reply-to` in headers
@@ -72,8 +69,6 @@ Creates and sends a message to one or more recipients.
 - Schedule times must be in RFC3339 format
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days
-
-See the API reference for the full rules on sending from a template.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -92,6 +87,59 @@ func (a *MessagesAPIService) CreateMessage(
 	config := RequestConfig{
 		Method:       http.MethodPost,
 		PathTemplate: "/v2/accounts/{account_id}/messages",
+		PathParams: map[string]string{
+			"account_id": accountId.String(),
+		},
+		Body:   request,
+		Result: &result,
+	}
+
+	// Apply options
+	applyRequestOptions(&config, opts)
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
+CreateTemplateMessage Create Template Message
+
+Sends a stored transactional template to one or more recipients. Each recipient gets a separate message. The template supplies the body, and the subject, sender and reply-to when the request does not give them.
+
+**Validation Requirements:**
+- `template_id` must be one of this account's transactional templates
+- Each recipient's `substitutions` must give a value for every required variable of the template
+- `substitutions`, `text_content`, `html_content` and `amp_content` are not accepted
+- Without `from`, the template's default sender is used; the template must have one
+- A `from` that is given must have an `email`
+- Without `subject`, the template's subject is used; the template must have one
+- The sender, `from.email` or the template's, must be from a domain you own with valid DNS records
+- Header names must be visible ASCII with no space or colon
+- `retention.metadata` must be between 1 and 30 days
+- `retention.data` must be between 0 and 30 days
+- If `reply_to` is provided, do not include `reply-to` in headers
+- `message-id` header will be ignored and automatically generated
+- Schedule times must be in RFC3339 format
+- `schedule.first_attempt` must be in the future and within 7 days
+- `schedule.expires` must be in the future and within 8 days
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Account ID
+	@param request CreateTemplateMessageRequest - The template and recipients to send to
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return CreateMessageResponse, *http.Response, error
+*/
+func (a *MessagesAPIService) CreateTemplateMessage(
+	ctx context.Context,
+	accountId uuid.UUID,
+	request requests.CreateTemplateMessageRequest,
+	opts ...RequestOption,
+) (*responses.CreateMessageResponse, *http.Response, error) {
+	var result responses.CreateMessageResponse
+
+	config := RequestConfig{
+		Method:       http.MethodPost,
+		PathTemplate: "/v2/accounts/{account_id}/messages/template",
 		PathParams: map[string]string{
 			"account_id": accountId.String(),
 		},
