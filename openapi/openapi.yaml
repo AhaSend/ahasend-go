@@ -5282,7 +5282,7 @@ paths:
         A request with more than one of them gets the error for the first in this list. These fields are checked as soon as the request body is read, before the rest of the request.
 
         **Sender:**
-        - When the request has no `from`, or `from` is `null`, the message is sent from the template's default sender. When the template has no default sender, the request is rejected with a 400 `from is required because the template has no default sender`.
+        - When the request has no `from`, the message is sent from the template's default sender. When the template has no default sender, the request is rejected with a 400 `from is required because the template has no default sender`.
         - A `from` given in the request is used even when the template has a default sender. It must have an `email`, and it is checked as on Create Message.
         - The sender, the request's or the template's, must be from a domain you own with valid DNS records.
         - When the request has no `reply_to` and no `reply-to` in `headers`, the template's reply-to is used.
@@ -5448,6 +5448,20 @@ paths:
                 }
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.messages.sendTemplate({
+              template_id: "00000000-0000-4000-8000-000000000009",
+              recipients: [{ email: "recipient@example.net", substitutions: { first_name: "Ada" } }],
+              sandbox: true,
+            });
+            console.log("Sandbox template message accepted.", { count: result.data.length });
 
   /v2/accounts/{account_id}/messages/conversation:
     post:
@@ -7577,6 +7591,16 @@ paths:
               }
               fmt.Printf("%s paused: %t\n", response.Domain, response.Paused)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const domain = await client.subAccounts.unpauseDomain(subAccountId, "mail.example.com");
+            console.log("Sub-account domain unpaused.", { name: domain.domain, paused: domain.paused });
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/api-keys:
     get:
