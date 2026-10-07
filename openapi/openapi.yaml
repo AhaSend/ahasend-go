@@ -1001,7 +1001,7 @@ components:
         subject:
           type: string
           description: |
-            Email subject line. When it is empty or left out, the template's subject is used.
+            Email subject line. When it is left out, empty or only spaces, the template's subject is used.
 
             A `{{ variable }}` in the subject, yours or the template's, resolves for every recipient from that recipient's `substitutions` and the reserved variables, whatever else the subject contains -- an emoji or an accented character included. A variable with no value becomes empty.
 
@@ -5288,7 +5288,7 @@ paths:
         - When the request has no `reply_to` and no `reply-to` in `headers`, the template's reply-to is used.
 
         **Subject:**
-        The request's `subject` is used when it is not empty. If not, the template's subject is used. When neither has a subject, the request is rejected with a 400 `the template has no subject, set one on the template page or pass subject`.
+        The request's `subject` is used when it holds more than spaces. If not, the template's subject is used. When neither has a subject, the request is rejected with a 400 `the template has no subject, set one on the template page or pass subject`.
 
         **Headers and subject:**
         - Header names must be visible ASCII with no space and no colon. An empty name, or one holding a space, a colon or a line break, is rejected.
