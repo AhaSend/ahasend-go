@@ -1321,16 +1321,49 @@ func TestOpenAPICreateTemplateMessageOperation(t *testing.T) {
 }
 
 func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
-	spec := loadOpenAPIContract(t)
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
 
+	type templateOperationContract struct {
+		operationContract `yaml:",inline"`
+		Parameters        []struct {
+			Ref string `yaml:"$ref"`
+		} `yaml:"parameters"`
+	}
+	var spec struct {
+		Paths map[string]map[string]templateOperationContract `yaml:"paths"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	const (
+		templates = "/v2/accounts/{account_id}/templates"
+		template  = templates + "/{template_id}"
+		draft     = template + "/draft"
+		publish   = template + "/publish"
+		versions  = template + "/versions"
+		version   = versions + "/{version_id}"
+		restore   = version + "/restore"
+	)
 	tests := []struct {
 		path        string
 		method      string
 		operationID string
+		scope       string
+		idempotent  bool
+		raced       bool
 		statuses    []string
 	}{
-		{path: "/v2/accounts/{account_id}/templates", method: "get", operationID: "listTemplates", statuses: []string{"200", "400", "401", "403", "429", "500"}},
-		{path: "/v2/accounts/{account_id}/templates/{template_id}", method: "get", operationID: "getTemplate", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: templates, method: "get", operationID: "listTemplates", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: templates, method: "post", operationID: "createTemplate", scope: "templates:write", idempotent: true, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: template, method: "get", operationID: "getTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: template, method: "put", operationID: "updateTemplate", scope: "templates:write", raced: true, statuses: []string{"200", "400", "401", "403", "404", "429", "500", "503"}},
+		{path: template, method: "delete", operationID: "deleteTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: draft, method: "get", operationID: "getTemplateDraft", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: draft, method: "delete", operationID: "discardTemplateDraft", scope: "templates:write", raced: true, statuses: []string{"200", "400", "401", "403", "404", "429", "500", "503"}},
+		{path: publish, method: "post", operationID: "publishTemplate", scope: "templates:write", idempotent: true, raced: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
+		{path: versions, method: "get", operationID: "listTemplateVersions", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: version, method: "get", operationID: "getTemplateVersion", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: restore, method: "post", operationID: "restoreTemplateVersion", scope: "templates:write", idempotent: true, raced: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
 	}
 
 	for _, tt := range tests {
@@ -1349,7 +1382,7 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 			}
 			assert.Equal(t, 1, goSamples)
 
-			assert.Equal(t, []map[string][]string{{"BearerAuth": {"templates:read"}}}, operation.Security)
+			assert.Equal(t, []map[string][]string{{"BearerAuth": {tt.scope}}}, operation.Security)
 
 			actualStatuses := make([]string, 0, len(operation.Responses))
 			for status := range operation.Responses {
@@ -1357,6 +1390,26 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 			}
 			sort.Strings(actualStatuses)
 			assert.Equal(t, tt.statuses, actualStatuses)
+
+			var takesIdempotencyKey bool
+			for _, parameter := range operation.Parameters {
+				if parameter.Ref == "#/components/parameters/IdempotencyKey" {
+					takesIdempotencyKey = true
+				}
+			}
+			assert.Equal(t, tt.idempotent, takesIdempotencyKey)
+			if tt.idempotent {
+				for status, response := range operation.Responses {
+					if strings.HasPrefix(status, "2") {
+						assert.Contains(t, response.Headers, "Idempotent-Replayed")
+					}
+				}
+				assert.Equal(t, "#/components/responses/IdempotencyConflict", operation.Responses["409"].Ref)
+				assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", operation.Responses["422"].Ref)
+			}
+			if tt.raced {
+				assert.Equal(t, "#/components/responses/TemplateBeingChanged", operation.Responses["503"].Ref)
+			}
 		})
 	}
 
@@ -1364,4 +1417,311 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 	// send's 404; an inline send names no stored template.
 	assert.Contains(t, spec.Paths["/v2/accounts/{account_id}/messages/template"]["post"].Responses, "404")
 	assert.NotContains(t, spec.Paths["/v2/accounts/{account_id}/messages"]["post"].Responses, "404")
+}
+
+func TestOpenAPITemplateSchemasMatchModels(t *testing.T) {
+	tests := []struct {
+		schemas []string
+		model   any
+	}{
+		{schemas: []string{"TemplateContent"}, model: responses.TemplateContent{}},
+		{schemas: []string{"TemplateDraft"}, model: responses.TemplateDraft{}},
+		{schemas: []string{"TemplatePublisher"}, model: responses.TemplatePublisher{}},
+		{schemas: []string{"TemplateVersion"}, model: responses.TemplateVersion{}},
+		// TemplateVersionDetail is an allOf of a $ref to TemplateVersion and
+		// the content fields.
+		{schemas: []string{"TemplateVersionDetail", "TemplateVersion"}, model: responses.TemplateVersionDetail{}},
+		{schemas: []string{"TemplateVersionsResponse"}, model: responses.TemplateVersionsResponse{}},
+		{schemas: []string{"CreateTemplateRequest"}, model: requests.CreateTemplateRequest{}},
+		{schemas: []string{"UpdateTemplateRequest"}, model: requests.UpdateTemplateRequest{}},
+		{schemas: []string{"RestoreTemplateVersionRequest"}, model: requests.RestoreTemplateVersionRequest{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.schemas[0], func(t *testing.T) {
+			assert.Equal(t, openAPISchemaProperties(t, tt.schemas...), modelJSONFields(tt.model))
+		})
+	}
+
+	// The API accepts and ignores text_is_custom in a write, so a read content
+	// can be sent back; the SDK leaves it out.
+	input := openAPISchemaProperties(t, "TemplateContentInput")
+	assert.Equal(t, []string{"html", "mjml", "text", "text_is_custom"}, input)
+	assert.Equal(t, []string{"html", "mjml", "text"}, modelJSONFields(requests.TemplateContentInput{}))
+}
+
+const templateWriteResponseFixture = `{
+	"object":"template",
+	"id":"11111111-1111-4111-8111-111111111111",
+	"created_at":"2026-09-10T10:00:00Z",
+	"updated_at":"2026-09-10T11:00:00Z",
+	"name":"Password reset",
+	"subject":"Reset your password",
+	"preheader":"",
+	"variables":[],
+	"from":null,
+	"reply_to":null,
+	"editor":"html",
+	"has_draft":true,
+	"content":{"html":"<p>Hi</p>","text":"Hi","text_is_custom":false}
+}`
+
+func TestTemplatesAPIEmitsDeclaredTransport(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	versionID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+	keyID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	templatesPath := "/v2/accounts/" + accountID.String() + "/templates"
+	templatePath := templatesPath + "/" + templateID.String()
+	versionPath := templatePath + "/versions/" + versionID.String()
+	versionFixture := `{"object":"template_version","id":"` + versionID.String() + `","version":2,"published_at":"2026-09-12T10:00:00Z","published_by":{"type":"api_key","id":"` + keyID.String() + `"}}`
+
+	assertTemplate := func(t *testing.T, result any) {
+		template := result.(*responses.Template)
+		assert.Equal(t, templateID, template.ID)
+		assert.Equal(t, common.TemplateEditorHTML, template.Editor)
+		assert.True(t, template.HasDraft)
+		require.NotNil(t, template.Content)
+		assert.Equal(t, "<p>Hi</p>", template.Content.HTML)
+	}
+
+	type templateCall func(*APIClient) (any, *http.Response, error)
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		status         int
+		response       string
+		idempotencyKey string
+		wantBody       string
+		call           templateCall
+		assertResult   func(*testing.T, any)
+	}{
+		{
+			name:           "create template",
+			method:         http.MethodPost,
+			path:           templatesPath,
+			status:         http.StatusCreated,
+			response:       templateWriteResponseFixture,
+			idempotencyKey: "create-template",
+			wantBody:       `{"name":"Password reset","subject":"Reset your password","content":{"html":"<p>Hi</p>"}}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.CreateTemplate(context.Background(), accountID, requests.CreateTemplateRequest{
+					Name:    "Password reset",
+					Subject: ahasend.String("Reset your password"),
+					Content: &requests.TemplateContentInput{HTML: ahasend.String("<p>Hi</p>")},
+				}, WithIdempotencyKey("create-template"))
+			},
+			assertResult: assertTemplate,
+		},
+		{
+			name:     "update template",
+			method:   http.MethodPut,
+			path:     templatePath,
+			status:   http.StatusOK,
+			response: templateWriteResponseFixture,
+			wantBody: `{"preheader":"","from":null,"content":{"text":null},"publish":true}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.UpdateTemplate(context.Background(), accountID, templateID, requests.UpdateTemplateRequest{
+					Preheader: ahasend.String(""),
+					From:      &common.SenderAddress{},
+					Content:   &requests.TemplateContentInput{Text: ahasend.String("")},
+					Publish:   true,
+				})
+			},
+			assertResult: assertTemplate,
+		},
+		{
+			name:     "delete template",
+			method:   http.MethodDelete,
+			path:     templatePath,
+			status:   http.StatusOK,
+			response: `{"message":"template deleted"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.DeleteTemplate(context.Background(), accountID, templateID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "template deleted", result.(*common.SuccessResponse).Message)
+			},
+		},
+		{
+			name:     "get template draft",
+			method:   http.MethodGet,
+			path:     templatePath + "/draft",
+			status:   http.StatusOK,
+			response: `{"object":"template_draft","template_id":"` + templateID.String() + `","updated_at":"2026-09-11T10:00:00Z","subject":"New subject","preheader":"","variables":[],"from":null,"reply_to":null,"content":null}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.GetTemplateDraft(context.Background(), accountID, templateID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				draft := result.(*responses.TemplateDraft)
+				assert.Equal(t, templateID, draft.TemplateID)
+				assert.Equal(t, "New subject", draft.Subject)
+				assert.Nil(t, draft.Content)
+			},
+		},
+		{
+			name:     "discard template draft",
+			method:   http.MethodDelete,
+			path:     templatePath + "/draft",
+			status:   http.StatusOK,
+			response: templateWriteResponseFixture,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.DiscardTemplateDraft(context.Background(), accountID, templateID)
+			},
+			assertResult: assertTemplate,
+		},
+		{
+			name:           "publish template",
+			method:         http.MethodPost,
+			path:           templatePath + "/publish",
+			status:         http.StatusOK,
+			response:       templateWriteResponseFixture,
+			idempotencyKey: "publish-template",
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.PublishTemplate(context.Background(), accountID, templateID, WithIdempotencyKey("publish-template"))
+			},
+			assertResult: assertTemplate,
+		},
+		{
+			name:     "get template versions",
+			method:   http.MethodGet,
+			path:     templatePath + "/versions",
+			status:   http.StatusOK,
+			response: `{"object":"list","data":[` + versionFixture + `]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.GetTemplateVersions(context.Background(), accountID, templateID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				versions := result.(*responses.TemplateVersionsResponse)
+				require.Len(t, versions.Data, 1)
+				assert.Equal(t, versionID, versions.Data[0].ID)
+				assert.Equal(t, 2, versions.Data[0].Version)
+				require.NotNil(t, versions.Data[0].PublishedBy)
+				assert.Equal(t, responses.TemplatePublisherTypeAPIKey, versions.Data[0].PublishedBy.Type)
+				assert.Equal(t, keyID, versions.Data[0].PublishedBy.ID)
+			},
+		},
+		{
+			name:     "get template version",
+			method:   http.MethodGet,
+			path:     versionPath,
+			status:   http.StatusOK,
+			response: versionFixture[:len(versionFixture)-1] + `,"subject":"Old subject","preheader":"","variables":[],"from":null,"reply_to":null,"content":{"text":"Hi","text_is_custom":true}}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.GetTemplateVersion(context.Background(), accountID, templateID, versionID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				version := result.(*responses.TemplateVersionDetail)
+				assert.Equal(t, versionID, version.ID)
+				assert.Equal(t, "Old subject", version.Subject)
+				require.NotNil(t, version.Content)
+				assert.Equal(t, "Hi", version.Content.Text)
+				assert.True(t, version.Content.TextIsCustom)
+			},
+		},
+		{
+			name:           "restore template version",
+			method:         http.MethodPost,
+			path:           versionPath + "/restore",
+			status:         http.StatusOK,
+			response:       templateWriteResponseFixture,
+			idempotencyKey: "restore-template",
+			wantBody:       `{"publish":true}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.RestoreTemplateVersion(context.Background(), accountID, templateID, versionID, requests.RestoreTemplateVersionRequest{Publish: true}, WithIdempotencyKey("restore-template"))
+			},
+			assertResult: assertTemplate,
+		},
+		{
+			name:           "restore template version without publishing",
+			method:         http.MethodPost,
+			path:           versionPath + "/restore",
+			status:         http.StatusOK,
+			response:       templateWriteResponseFixture,
+			idempotencyKey: "restore-template",
+			wantBody:       `{}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.TemplatesAPI.RestoreTemplateVersion(context.Background(), accountID, templateID, versionID, requests.RestoreTemplateVersionRequest{}, WithIdempotencyKey("restore-template"))
+			},
+			assertResult: assertTemplate,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedRequest *http.Request
+			var capturedBody []byte
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				capturedRequest = r
+				capturedBody, _ = io.ReadAll(r.Body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.response))
+			})
+			defer cleanup()
+
+			result, httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, httpResponse)
+			require.NotNil(t, capturedRequest)
+			assert.Equal(t, tt.status, httpResponse.StatusCode)
+			assert.Equal(t, tt.method, capturedRequest.Method)
+			assert.Equal(t, tt.path, capturedRequest.URL.EscapedPath())
+			assert.Empty(t, capturedRequest.URL.RawQuery)
+			if tt.idempotencyKey != "" {
+				assert.Equal(t, tt.idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
+			}
+			if tt.wantBody != "" {
+				assert.JSONEq(t, tt.wantBody, string(capturedBody))
+			} else {
+				assert.Empty(t, capturedBody)
+			}
+			if tt.assertResult != nil {
+				tt.assertResult(t, result)
+			}
+		})
+	}
+}
+
+func TestTemplatesAPIRetriesARacedWriteWithItsIdempotencyKey(t *testing.T) {
+	var attempts int
+	var keys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		if attempts == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"message":"template is being changed by another request, try again"}`))
+			return
+		}
+		_, _ = w.Write([]byte(templateWriteResponseFixture))
+	}))
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	cfg := NewConfiguration()
+	cfg.Host = serverURL.Host
+	cfg.Scheme = serverURL.Scheme
+	cfg.APIKey = "test-key"
+	cfg.RetryConfig.Enabled = true
+	cfg.RetryConfig.MaxRetries = 2
+	cfg.RetryConfig.BaseDelay = time.Millisecond
+	cfg.RetryConfig.MaxDelay = time.Millisecond
+	client := NewAPIClientWithConfig(cfg)
+
+	template, httpResponse, err := client.TemplatesAPI.PublishTemplate(context.Background(), uuid.New(), uuid.New())
+
+	require.NoError(t, err)
+	require.NotNil(t, httpResponse)
+	assert.Equal(t, http.StatusOK, httpResponse.StatusCode)
+	assert.Equal(t, "Password reset", template.Name)
+	require.Len(t, keys, 2)
+	assert.NotEmpty(t, keys[0])
+	assert.Equal(t, keys[0], keys[1])
 }

@@ -66,7 +66,7 @@ func main() {
 
 ## Send from a template
 
-A transactional template made in the dashboard holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
+A transactional template, made in the dashboard or through the API, holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
 
 ```go
 // Read the template to see which variables a send must give.
@@ -108,7 +108,7 @@ message := requests.CreateTemplateMessageRequest{
 ```
 
 - The template supplies the body. The request has no content fields and no request-level `Substitutions`.
-- Leave `Subject` empty to use the template's subject, or set it to replace it.
+- Leave `Subject` empty to use the template's published subject, or set it to replace it.
 - Leave `From` nil to use the template's sender. A `From` replaces the template's sender and must have an `Email`.
 - The template's reply-to applies to every send from it, with or without `From`, unless the request sets `ReplyTo` or a `reply-to` entry in `Headers`; either one replaces it.
 - The template's sender is checked as a sender in the request is: its domain must be in your account, have valid DNS records and not be paused.
@@ -116,14 +116,42 @@ message := requests.CreateTemplateMessageRequest{
 - AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
 - The send fails with:
   - 404 when the template does not exist.
-  - 400 when neither the request nor the template has a subject, or the template has no saved design.
+  - 400 when neither the request nor the template has a subject, or the template has no published content.
   - 400 when neither the request nor the template has a sender.
-  - 400 `the template's default sender or reply-to is not valid, edit it on the template page` when a stored value the send uses no longer passes the address checks.
+  - 400 `template's published design holds a {{, {% or {# that cannot be rendered, fix it and publish it` when the published design cannot be rendered.
+  - 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it` when a published value the send uses no longer passes the address checks.
   - 403 `this api key is not authorized to send messages` when the request has no sender and the API key cannot send from any domain.
   - 400 for the whole request when any recipient is missing a required variable.
-- `GetTemplate` and `GetTemplates` need the `templates:read` scope. Sending from a template needs only the normal send scope.
+- Sending from a template needs only the normal send scope.
 
 `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})` lists the account's templates, newest first. For the next page, pass the response's `Pagination.NextCursor` as `After`. For the previous page, pass `Pagination.PreviousCursor` as `Before`.
+
+## Manage templates
+
+A template has a published copy, which sends use, and can have a draft: changes that are not published yet. `TemplatesAPI` writes go to the draft, the same draft the dashboard edits. Set `Publish` to publish the draft in the same request, or call `PublishTemplate`:
+
+```go
+template, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.CreateTemplateRequest{
+    Name:    "Password reset",
+    Subject: ahasend.String("Reset your password, {{ first_name }}"),
+    From:    &common.SenderAddress{Email: "hello@yourdomain.com"},
+    Content: &requests.TemplateContentInput{
+        HTML: ahasend.String(`<p>Hi {{ first_name }}, <a href="{{ reset_url }}">reset your password</a>.</p>`),
+    },
+    Publish: true,
+})
+```
+
+- `Content.MJML` makes an `advanced` template and `Content.HTML` an `html` template. A template with neither must set `Editor`. The editor never changes after create, and the HTML of a `simple` template can only be changed in the dashboard.
+- MJML is compiled in strict mode. Images and stylesheets must use full URLs, such as `https://example.com/logo.png`: the API cannot upload files.
+- Beside a new MJML or HTML, leave `Content.Text` nil to make the text from it.
+- `UpdateTemplate` changes only the fields you set; the name changes at once. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject` and `Preheader`, `&common.SenderAddress{}` for `From` (which also clears the reply-to) and `ReplyTo`. `Content.Text` pointing at `""` makes the text again from the HTML.
+- A publish publishes the whole draft, including changes made in the dashboard.
+- `Template.HasDraft` tells whether a draft exists, and `Template.Content` holds the published content. `GetTemplateDraft` returns the draft, and `DiscardTemplateDraft` drops it.
+- `GetTemplateVersions` lists the published versions, newest first, and `GetTemplateVersion` returns one with its content. `RestoreTemplateVersion` copies a version into the draft; set `Publish` to publish it too.
+- The SDK sends an `Idempotency-Key` with `CreateTemplate`, `PublishTemplate` and `RestoreTemplateVersion`, so a retried request is not applied twice.
+- A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a POST with the same key.
+- Reads need the `templates:read` scope, writes `templates:write`, and `DeleteTemplate` needs `templates:delete`.
 
 ## API keys
 
@@ -227,7 +255,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 | Service | Use it to | Main methods |
 |---|---|---|
 | `MessagesAPI` | Send and manage email | `CreateMessage`, `CreateTemplateMessage`, `GetMessage`, `CancelMessage` |
-| `TemplatesAPI` | Read transactional templates | `GetTemplates`, `GetTemplate` |
+| `TemplatesAPI` | Manage transactional templates, their drafts and versions | `GetTemplates`, `GetTemplate`, `CreateTemplate`, `UpdateTemplate`, `PublishTemplate`, `GetTemplateVersions`, `RestoreTemplateVersion` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
 | `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain`, `GetDomainsWithParams` |
