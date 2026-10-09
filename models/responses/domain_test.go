@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,6 +122,9 @@ func TestDomain_JSONMarshaling(t *testing.T) {
 		assert.NotContains(t, result, "subscription_subdomain")
 		assert.NotContains(t, result, "media_subdomain")
 		assert.NotContains(t, result, "dkim_rotation_interval_days")
+		assert.NotContains(t, result, "dkim_selector")
+		assert.NotContains(t, result, "paused_at")
+		assert.NotContains(t, result, "pause_reason")
 
 		// These should be present
 		assert.Contains(t, result, "object")
@@ -128,6 +132,8 @@ func TestDomain_JSONMarshaling(t *testing.T) {
 		assert.Contains(t, result, "dns_valid")
 		assert.Contains(t, result, "dns_records")
 		assert.Contains(t, result, "rotation_ready")
+		assert.Contains(t, result, "sending_type")
+		assert.Contains(t, result, "paused")
 	})
 }
 
@@ -155,4 +161,116 @@ func TestDNSRecord_JSONMarshaling(t *testing.T) {
 	assert.Equal(t, record.Content, unmarshaled.Content)
 	assert.Equal(t, record.Required, unmarshaled.Required)
 	assert.Equal(t, record.Propagated, unmarshaled.Propagated)
+}
+
+func TestDomain_MarketingFieldsRoundTrip(t *testing.T) {
+	pausedAt := time.Date(2026, 10, 1, 12, 30, 0, 0, time.UTC)
+	selector := "partner1"
+	reason := DomainPauseReasonBounceRate
+
+	domain := Domain{
+		Object:       "domain",
+		ID:           uuid.MustParse("01234567-89ab-cdef-0123-456789abcdef"),
+		Domain:       "example.com",
+		AccountID:    uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+		DNSRecords:   []DNSRecord{},
+		DKIMSelector: &selector,
+		SendingType:  common.DomainSendingTypeMarketing,
+		Paused:       true,
+		PausedAt:     &pausedAt,
+		PauseReason:  &reason,
+	}
+
+	data, err := json.Marshal(domain)
+	require.NoError(t, err)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &raw))
+	assert.Equal(t, "marketing", raw["sending_type"])
+	assert.Equal(t, true, raw["paused"])
+	assert.Equal(t, "2026-10-01T12:30:00Z", raw["paused_at"])
+	assert.Equal(t, "bounce_rate", raw["pause_reason"])
+	assert.Equal(t, "partner1", raw["dkim_selector"])
+
+	var decoded Domain
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	assert.Equal(t, common.DomainSendingTypeMarketing, decoded.SendingType)
+	assert.True(t, decoded.Paused)
+	require.NotNil(t, decoded.PausedAt)
+	assert.True(t, decoded.PausedAt.Equal(pausedAt))
+	require.NotNil(t, decoded.PauseReason)
+	assert.Equal(t, DomainPauseReasonBounceRate, *decoded.PauseReason)
+	require.NotNil(t, decoded.DKIMSelector)
+	assert.Equal(t, "partner1", *decoded.DKIMSelector)
+}
+
+func TestDomain_DecodesSpecPayload(t *testing.T) {
+	// Every required field, with the nullable ones null, as the API sends a
+	// transactional domain that is not paused.
+	payload := `{
+		"object": "domain",
+		"id": "01234567-89ab-cdef-0123-456789abcdef",
+		"created_at": "2026-10-01T12:00:00Z",
+		"updated_at": "2026-10-01T12:00:00Z",
+		"domain": "example.com",
+		"account_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+		"dns_records": [],
+		"last_dns_check_at": null,
+		"dns_valid": true,
+		"tracking_subdomain": null,
+		"return_path_subdomain": null,
+		"subscription_subdomain": null,
+		"media_subdomain": null,
+		"dkim_rotation_interval_days": null,
+		"dkim_selector": null,
+		"rotation_ready": false,
+		"dsn_recipient": null,
+		"sending_type": "transactional",
+		"paused": false,
+		"paused_at": null,
+		"pause_reason": null
+	}`
+
+	var domain Domain
+	require.NoError(t, json.Unmarshal([]byte(payload), &domain))
+	assert.Equal(t, common.DomainSendingTypeTransactional, domain.SendingType)
+	assert.False(t, domain.Paused)
+	assert.Nil(t, domain.PausedAt)
+	assert.Nil(t, domain.PauseReason)
+	assert.Nil(t, domain.DKIMSelector)
+}
+
+func TestDomain_DecodesPayloadWithoutMarketingFields(t *testing.T) {
+	// A server that predates domain sending types and pauses sends none of
+	// these fields. They decode to zero values, not to an error.
+	payload := `{
+		"object": "domain",
+		"id": "01234567-89ab-cdef-0123-456789abcdef",
+		"created_at": "2026-10-01T12:00:00Z",
+		"updated_at": "2026-10-01T12:00:00Z",
+		"domain": "example.com",
+		"account_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+		"dns_records": [],
+		"dns_valid": true,
+		"rotation_ready": false
+	}`
+
+	var domain Domain
+	require.NoError(t, json.Unmarshal([]byte(payload), &domain))
+	assert.Equal(t, "example.com", domain.Domain)
+	assert.Empty(t, domain.SendingType)
+	assert.False(t, domain.Paused)
+	assert.Nil(t, domain.PausedAt)
+	assert.Nil(t, domain.PauseReason)
+	assert.Nil(t, domain.DKIMSelector)
+}
+
+func TestDomain_DecodesUnknownPauseReason(t *testing.T) {
+	payload := `{"object":"domain","sending_type":"marketing","paused":true,"paused_at":"2026-10-01T12:30:00Z","pause_reason":"complaint_rate"}`
+
+	var domain Domain
+	require.NoError(t, json.Unmarshal([]byte(payload), &domain))
+	assert.True(t, domain.Paused)
+	require.NotNil(t, domain.PauseReason)
+	assert.Equal(t, "complaint_rate", *domain.PauseReason)
 }

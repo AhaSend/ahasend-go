@@ -127,16 +127,19 @@ mock-server-validate: ## Validate the OpenAPI spec
 	@echo "$(GREEN)OpenAPI spec is valid!$(RESET)"
 
 # OpenAPI specification
-# The server repository owns openapi.yaml; this SDK owns its Go code samples.
+# The server repository owns openapi.yaml and webhooks.yaml; this SDK owns its
+# Go code samples.
 # REF picks the server branch, e.g. `make sync-spec REF=devel` while a change
 # has not reached master yet.
 SERVER_REPO := AhaSend/AhaSend
 REF ?= master
 
-sync-spec: ## Download the server's openapi.yaml and write the Go code samples into it
-	@echo "$(BLUE)Downloading openapi.yaml from $(SERVER_REPO)@$(REF)...$(RESET)"
+sync-spec: ## Download the server's openapi.yaml and webhooks.yaml and write the Go code samples into openapi.yaml
+	@echo "$(BLUE)Downloading openapi.yaml and webhooks.yaml from $(SERVER_REPO)@$(REF)...$(RESET)"
 	gh api -H 'Accept: application/vnd.github.raw' 'repos/$(SERVER_REPO)/contents/openapi.yaml?ref=$(REF)' > openapi/openapi.yaml.tmp
+	gh api -H 'Accept: application/vnd.github.raw' 'repos/$(SERVER_REPO)/contents/webhooks.yaml?ref=$(REF)' > openapi/webhooks.yaml.tmp
 	mv openapi/openapi.yaml.tmp openapi/openapi.yaml
+	mv openapi/webhooks.yaml.tmp openapi/webhooks.yaml
 	@$(MAKE) code-samples
 
 code-samples: ## Write codesamples/*/main.go into openapi/openapi.yaml

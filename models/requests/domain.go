@@ -1,5 +1,7 @@
 package requests
 
+import "github.com/AhaSend/ahasend-go/models/common"
+
 // CreateDomainRequest represents a request to create a new domain.
 type CreateDomainRequest struct {
 	// Domain is the fully qualified domain name to create.
@@ -16,6 +18,14 @@ type CreateDomainRequest struct {
 	MediaSubdomain *string `json:"media_subdomain,omitempty"`
 	// DKIMRotationIntervalDays is an optional custom DKIM rotation interval in days. Only supported for managed DNS domains on eligible plans.
 	DKIMRotationIntervalDays *int `json:"dkim_rotation_interval_days,omitempty"`
+	// DKIMSelector is an optional custom DKIM selector. Omit it, or point it at an
+	// empty or whitespace-only string, to use the default selector. Only supported
+	// on Platform Partner accounts.
+	DKIMSelector *string `json:"dkim_selector,omitempty"`
+	// SendingType is common.DomainSendingTypeTransactional or
+	// common.DomainSendingTypeMarketing. Omit to create a transactional domain;
+	// the API refuses an empty value.
+	SendingType *string `json:"sending_type,omitempty"`
 }
 
 // UpdateDomainRequest represents a request to update domain settings.
@@ -30,4 +40,22 @@ type UpdateDomainRequest struct {
 	MediaSubdomain *string `json:"media_subdomain,omitempty"`
 	// DKIMRotationIntervalDays is a custom DKIM rotation interval in days. Omit to leave unchanged. Only supported for managed DNS domains on eligible plans.
 	DKIMRotationIntervalDays *int `json:"dkim_rotation_interval_days,omitempty"`
+	// DKIMSelector is a custom DKIM selector. Omit to leave unchanged; point it at
+	// an empty or whitespace-only string to clear the override and use the default
+	// selector. Only supported on Platform Partner accounts.
+	DKIMSelector *string `json:"dkim_selector,omitempty"`
+	// SendingType is common.DomainSendingTypeTransactional or
+	// common.DomainSendingTypeMarketing. Omit to leave unchanged; the API refuses
+	// an empty value. A change applies to new messages within five minutes.
+	SendingType *string `json:"sending_type,omitempty"`
+}
+
+// GetDomainsParams represents query parameters for listing domains.
+type GetDomainsParams struct {
+	// DNSValid filters domains by DNS validation status.
+	DNSValid *bool
+	// SendingType filters domains by sending type: common.DomainSendingTypeTransactional
+	// or common.DomainSendingTypeMarketing.
+	SendingType *string
+	common.PaginationParams
 }

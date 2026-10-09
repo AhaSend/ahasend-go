@@ -66,7 +66,7 @@ func main() {
 
 ## Send from a template
 
-A transactional template made in the dashboard holds the subject, the preview text and both bodies. A send names the template and gives values for its variables:
+A transactional template, made in the dashboard or through the API, holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
 
 ```go
 // Read the template to see which variables a send must give.
@@ -78,31 +78,80 @@ for _, variable := range template.Variables {
     log.Printf("%s (required: %t)", variable.Name, variable.Required)
 }
 
-message := requests.CreateMessageRequest{
-    From: common.SenderAddress{Email: "sender@yourdomain.com"},
+message := requests.CreateTemplateMessageRequest{
+    TemplateID: templateID,
+    From:       &common.SenderAddress{Email: "sender@yourdomain.com"},
     Recipients: []common.Recipient{
         {
             Email:         "recipient@example.com",
             Substitutions: map[string]interface{}{"first_name": "Pat"},
         },
     },
-    TemplateID: &templateID,
 }
 
-response, _, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+response, _, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, message)
 ```
 
-- `TemplateID` cannot be used with `TextContent`, `HtmlContent` or `AmpContent`.
-- Leave `Subject` empty to use the template's subject, or set it to replace it.
-- Variable values come from the request's `Substitutions` and from each recipient's. When both give the same variable, the recipient's value is used.
+A template can also hold a default sender and reply-to address: `template.From` and `template.ReplyTo`, each nil when the template has none. A send from a template with a sender can leave `From` nil:
+
+```go
+message := requests.CreateTemplateMessageRequest{
+    TemplateID: templateID,
+    // No From: the send uses the template's sender.
+    Recipients: []common.Recipient{
+        {
+            Email:         "recipient@example.com",
+            Substitutions: map[string]interface{}{"first_name": "Pat"},
+        },
+    },
+}
+```
+
+- The template supplies the body. The request has no content fields and no request-level `Substitutions`.
+- Leave `Subject` empty to use the template's published subject, or set it to replace it.
+- Leave `From` nil to use the template's sender. A `From` replaces the template's sender and must have an `Email`.
+- The template's reply-to applies to every send from it, with or without `From`, unless the request sets `ReplyTo` or a `reply-to` entry in `Headers`; either one replaces it.
+- The template's sender is checked as a sender in the request is: its domain must be in your account, have valid DNS records and not be paused.
+- Variable values come only from each recipient's `Substitutions`. Every recipient must give a value for each required variable.
 - AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
 - The send fails with:
   - 404 when the template does not exist.
-  - 400 when neither the request nor the template has a subject, or the template has no saved design.
+  - 400 when neither the request nor the template has a subject, or the template has no published content.
+  - 400 when neither the request nor the template has a sender.
+  - 400 `template's published design holds a {{, {% or {# that cannot be rendered, fix it and publish it` when the published design cannot be rendered.
+  - 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it` when a published value the send uses no longer passes the address checks.
+  - 403 `this api key is not authorized to send messages` when the request has no sender and the API key cannot send from any domain.
   - 400 for the whole request when any recipient is missing a required variable.
-- `GetTemplate` and `GetTemplates` need the `templates:read` scope. Sending from a template needs only the normal send scope.
+- Sending from a template needs only the normal send scope.
 
 `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})` lists the account's templates, newest first. For the next page, pass the response's `Pagination.NextCursor` as `After`. For the previous page, pass `Pagination.PreviousCursor` as `Before`.
+
+## Manage templates
+
+A template has a published copy, which sends use, and can have a draft: changes that are not published yet. `TemplatesAPI` writes go to the draft, the same draft the dashboard edits. Set `Publish` to publish the draft in the same request, or call `PublishTemplate`:
+
+```go
+template, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.CreateTemplateRequest{
+    Name:    "Password reset",
+    Subject: ahasend.String("Reset your password, {{ first_name }}"),
+    From:    &common.SenderAddress{Email: "hello@yourdomain.com"},
+    Content: &requests.TemplateContentInput{
+        HTML: ahasend.String(`<p>Hi {{ first_name }}, <a href="{{ reset_url }}">reset your password</a>.</p>`),
+    },
+    Publish: true,
+})
+```
+
+- `Content.MJML` makes an `advanced` template and `Content.HTML` an `html` template. A template with neither must set `Editor`. The editor never changes after create, and the HTML of a `simple` template can only be changed in the dashboard.
+- MJML is compiled in strict mode. Images and stylesheets must use `https://` URLs, such as `https://example.com/logo.png`: the API cannot upload files. A template variable such as `{{ logo_url }}` is fine.
+- Beside a new MJML or HTML, a nil `Content.Text` keeps a custom text, which must still render, and otherwise makes the text from the new HTML. Point `Content.Text` at `""` to make the text again from the new HTML.
+- `UpdateTemplate` changes only the fields you set; the name changes at once. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject` and `Preheader`, `&common.SenderAddress{}` for `From` (which also clears the reply-to) and `ReplyTo`. `Content.Text` pointing at `""` makes the text again from the HTML.
+- A publish publishes the whole draft, including changes made in the dashboard.
+- `Template.HasDraft` tells whether a draft exists, and `Template.Content` holds the published content. `GetTemplateDraft` returns the draft, and `DiscardTemplateDraft` drops it.
+- `GetTemplateVersions` lists the published versions, newest first, and `GetTemplateVersion` returns one with its content. `RestoreTemplateVersion` copies a version into the draft; set `Publish` to publish it too.
+- The SDK sends an `Idempotency-Key` with `CreateTemplate`, `UpdateTemplate`, `PublishTemplate` and `RestoreTemplateVersion`, so a retried request is not applied twice.
+- A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a request with an idempotency key keeps the same key.
+- Reads need the `templates:read` scope, writes `templates:write`, and `DeleteTemplate` needs `templates:delete`.
 
 ## API keys
 
@@ -140,11 +189,26 @@ A parent or partner key that manages sub accounts needs one or more of these sco
 | `sub-accounts:read` | List and read sub accounts |
 | `sub-accounts:write` | Create and update sub accounts |
 | `sub-accounts:delete` | Delete sub accounts |
-| `sub-accounts:suspend` | Suspend and unsuspend sub accounts |
+| `sub-accounts:suspend` | Pause and resume sub accounts (`SuspendSubAccount`, `UnsuspendSubAccount`), and unpause their domains |
 | `sub-accounts:usage` | Read each sub account's usage and cost |
 | `sub-account-api-keys:read` | List and read sub accounts' API keys |
 | `sub-account-api-keys:write` | Create and update sub accounts' API keys |
 | `sub-account-api-keys:delete` | Delete sub accounts' API keys |
+
+### IP allow list
+
+An API key can carry `IPAllowList`, the source IPs that can authenticate with the key:
+
+- Each entry is a CIDR block, such as `203.0.113.0/24`, or a bare IPv4 or IPv6 address (stored as a `/32` or `/128`). Entries are canonicalized (host bits are masked) and de-duplicated.
+- The API refuses the allow-all prefixes `0.0.0.0/0` and `::/0`. At most 100 entries are allowed after de-duplication; the API answers 400 to a longer list.
+- An empty list, the default, allows every source IP.
+- When the list is not empty, the API answers 403 on every v2 endpoint to a request from an IP outside the list, whatever the key's scopes.
+- On `CreateAPIKey` and `CreateSubAccountAPIKey`, leave `IPAllowList` nil or empty to allow every source IP.
+- On `UpdateAPIKey` and `UpdateSubAccountAPIKey`:
+  - A nil `IPAllowList` (omitted from the request) leaves the list as it is.
+  - `&[]string{}` clears the list, so the key works from every IP.
+  - A pointer to a non-empty slice replaces the list.
+- A key that updates its own list so that it no longer covers the caller's IP gets 409. A parent key that updates a sub account key has no such check.
 
 ## Contacts
 
@@ -168,22 +232,40 @@ A parent or partner key that manages sub accounts needs one or more of these sco
 - To stop mail to one member, use `UpsertListContact` with the status `unsubscribed`. This keeps the record of their choice. `DeleteListContact` removes the member and that record with it.
 - A member whose status is `complained` cannot be changed or removed. Both calls return 409.
 
+## Domains
+
+- Each domain has a sending type, `common.DomainSendingTypeTransactional` or `common.DomainSendingTypeMarketing`. The sending type affects deliverability: marketing email from a transactional domain can get your account paused.
+  - On `CreateDomain`, a nil `SendingType` creates a transactional domain.
+  - On `UpdateDomain`, a nil `SendingType` leaves it as it is. A change applies to new messages within five minutes.
+  - The API refuses an empty `SendingType`.
+- To list only one sending type, use `GetDomainsWithParams`:
+
+  ```go
+  response, _, err := client.DomainsAPI.GetDomainsWithParams(ctx, accountID, requests.GetDomainsParams{
+      SendingType: ahasend.String(common.DomainSendingTypeMarketing),
+  })
+  ```
+
+- AhaSend can pause sending from one domain. Then `Paused` is true, `PausedAt` tells when, and `PauseReason` tells why. The only reason today is `responses.DomainPauseReasonBounceRate` (too many recent emails from the domain bounced), but AhaSend can add others: keep a default branch. While a domain is paused, the API refuses new email from it with 403 (except sandbox messages), and you cannot delete or rename it. Your other domains continue to send.
+- A parent account can lift the pause on a sub account's domain with `client.SubAccountsAPI.UnpauseSubAccountDomain(ctx, accountID, subAccountID, "example.com")`. It needs the `sub-accounts:suspend` scope. The call is idempotent: on a domain that is not paused, it changes nothing and returns the domain. The change can take some minutes to apply to new email.
+- `DKIMSelector` on `CreateDomainRequest` and `UpdateDomainRequest` sets a per-domain DKIM selector (Platform Partner accounts only). On create, nil or an empty string uses the default selector. On update, nil leaves it as it is, and a pointer to `""` clears the override. `Domain.DKIMSelector` reports the override, not always the selector used for signing.
+
 ## Services
 
 | Service | Use it to | Main methods |
 |---|---|---|
-| `MessagesAPI` | Send and manage email | `CreateMessage`, `GetMessage`, `CancelMessage` |
-| `TemplatesAPI` | Read transactional templates | `GetTemplates`, `GetTemplate` |
+| `MessagesAPI` | Send and manage email | `CreateMessage`, `CreateTemplateMessage`, `GetMessage`, `CancelMessage` |
+| `TemplatesAPI` | Manage transactional templates, their drafts and versions | `GetTemplates`, `GetTemplate`, `CreateTemplate`, `UpdateTemplate`, `PublishTemplate`, `GetTemplateVersions`, `RestoreTemplateVersion` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
-| `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain` |
+| `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain`, `GetDomainsWithParams` |
 | `WebhooksAPI` | Manage webhooks | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
 | `StatisticsAPI` | Read sending statistics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
 | `SuppressionsAPI` | Manage addresses that must not be emailed | `CreateSuppression`, `DeleteSuppression`, `GetSuppressions` |
 | `RoutesAPI` | Handle incoming email | `CreateRoute`, `UpdateRoute` |
 | `AccountsAPI` | Manage the account and its members | `GetAccount`, `AddAccountMember` |
 | `APIKeysAPI` | Manage API keys | `CreateAPIKey`, `UpdateAPIKey` |
-| `SubAccountsAPI` | Manage sub accounts and their API keys | `ListSubAccounts`, `CreateSubAccount`, `CreateSubAccountAPIKey`, `GetSubAccountsUsage` |
+| `SubAccountsAPI` | Manage sub accounts, their API keys and the pause of their domains | `ListSubAccounts`, `CreateSubAccount`, `CreateSubAccountAPIKey`, `GetSubAccountsUsage`, `UnpauseSubAccountDomain` |
 
 ## Examples
 
@@ -220,6 +302,7 @@ The `webhooks` package checks each request's signature (it follows the Standard 
 package main
 
 import (
+    "errors"
     "log"
     "net/http"
 
@@ -234,7 +317,19 @@ func main() {
 
     http.HandleFunc("/webhooks", func(w http.ResponseWriter, r *http.Request) {
         event, err := verifier.ParseRequest(r)
-        if err != nil {
+        switch {
+        case errors.Is(err, webhooks.ErrUnknownEventType):
+            // Signed, but this SDK version does not know the event type.
+            log.Printf("ignoring webhook: %v", err)
+            w.WriteHeader(http.StatusOK)
+            return
+        case errors.Is(err, webhooks.ErrMissingHeaders),
+            errors.Is(err, webhooks.ErrInvalidSignature),
+            errors.Is(err, webhooks.ErrExpiredTimestamp),
+            errors.Is(err, webhooks.ErrInvalidTimestamp):
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        case err != nil:
             http.Error(w, "invalid webhook", http.StatusBadRequest)
             return
         }
@@ -263,13 +358,17 @@ func main() {
 }
 ```
 
-New values can appear in `DeliveryAttempt.Classification` at any time. Handle the `webhooks.Classification*` values you care about, and keep a `default` case for the rest. Do not reject a request because of a value you do not know: a webhook that fails 100 times in a row is turned off.
+New values can appear in `DeliveryAttempt.Classification` at any time. Handle the `webhooks.Classification*` values you care about, and keep a `default` case for the rest. Do not reject a request because of a value you do not know: when more than 100 attempts in a row fail, retries included, the webhook or route is automatically disabled.
+
+For the same reason, answer 2xx when `ParseRequest` returns `webhooks.ErrUnknownEventType`. The SDK checks the signature first, so that error means a signed event that this SDK version does not know yet. The SDK wraps its errors: compare them with `errors.Is`, not `==`.
+
+For a campaign message, `from` in message events includes the sender's name, as `Name <address>`. In route events, `to` and `reply_to` can carry display names and several addresses, and `spam_score` (a `*float64`) can be below 0 or above 10.
 
 Events:
 - `message.reception`, `message.delivered`, `message.transient_error`, `message.failed`, `message.bounced`, `message.suppressed`, `message.opened`, `message.clicked`
 - `suppression.created`
 - `domain.dns_error`
-- `message.routing`
+- `message.routing` (the SDK also reads the legacy name `route.message` as this event)
 
 ## Settings
 

@@ -59,7 +59,9 @@ info:
     - `suppressions:wipe` - Delete the account's suppressions except protected ones (dangerous)
 
     ### Template Scopes
-    - `templates:read` - Read transactional templates
+    - `templates:read` - Read transactional templates, their drafts and their published versions
+    - `templates:write` - Create and update transactional templates, and publish, discard and restore their drafts
+    - `templates:delete` - Delete transactional templates
 
     ### Contact Scopes
     - `contacts:read` - Read contacts
@@ -131,7 +133,7 @@ info:
     - `sub-accounts:read` - List and read sub accounts under the parent
     - `sub-accounts:write` - Create and update sub accounts
     - `sub-accounts:delete` - Soft-delete sub accounts
-    - `sub-accounts:suspend` - Suspend and unsuspend sub accounts
+    - `sub-accounts:suspend` - Pause and resume sub accounts, and unpause their domains
     - `sub-accounts:usage` - Read per-sub-account usage and allocated cost
     - `sub-account-api-keys:read` - List and read API keys owned by sub accounts
     - `sub-account-api-keys:write` - Create and update API keys owned by sub accounts
@@ -284,6 +286,25 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "idempotency key was already used with a different request payload"
+
+    TemplateBeingChanged:
+      description: |
+        The template changed in the dashboard or through another request
+        while this one was writing it, more often than the request retries
+        by itself. Retry after `Retry-After` seconds; on an operation that
+        takes an `Idempotency-Key`, retry with the same key.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "template is being changed by another request, try again"
 
   schemas:
     ErrorResponse:
@@ -619,6 +640,23 @@ components:
         dsn_recipient:
           type: [string, 'null']
           description: Optional recipient address for delivery status notifications.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. The sending type affects your deliverability. Marketing email from a transactional domain can get your account paused.
+        paused:
+          type: boolean
+          description: Whether sending from the domain is paused. While the domain is paused, new email from it is refused, and you cannot delete or rename it. Your other domains continue to send.
+        paused_at:
+          type: [string, 'null']
+          format: date-time
+          description: When sending from the domain was paused. Null when the domain is not paused.
+        pause_reason:
+          type: [string, 'null']
+          description: |
+            The reason of the pause. Null when the domain is not paused.
+
+            - `bounce_rate`: too many recent emails from the domain bounced.
       required:
         - object
         - id
@@ -637,6 +675,10 @@ components:
         - dkim_selector
         - rotation_ready
         - dsn_recipient
+        - sending_type
+        - paused
+        - paused_at
+        - pause_reason
 
     CreateDomainRequest:
       type: object
@@ -678,6 +720,10 @@ components:
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. Omit to create a transactional domain. Null and empty values are refused.
       example:
         domain: "example.com"
         tracking_subdomain: "click"
@@ -712,6 +758,10 @@ components:
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen. It cannot be changed once the selector locks after DNS verification or while a DKIM key rotation is in progress.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The type of email that you send from the domain. Omit to leave the current value unchanged. Null and empty values are refused. A change applies to new messages in a maximum of five minutes.
       example:
         tracking_subdomain: "click"
         return_path_subdomain: "mail"
@@ -770,7 +820,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content
+          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
       example:
         email: "user@example.com"
         name: "John Doe"
@@ -861,6 +911,7 @@ components:
       required:
         - from
         - recipients
+        - subject
       properties:
         from:
           $ref: '#/components/schemas/Address'
@@ -877,26 +928,19 @@ components:
         subject:
           type: string
           description: |
-            Email subject line. Required, except on a request naming a `template_id` whose template carries a subject of its own. A subject given here is used even when the template has one.
+            Email subject line.
 
-            A `{{ variable }}` in a subject resolves, whatever else the subject contains -- an emoji or an accented character included -- for every recipient whose message carries substitutions -- the request's own `substitutions`, that recipient's, or a `template_id`. A recipient with none of those is sent nothing to render, so their subject arrives exactly as written, braces and all.
+            A `{{ variable }}` in a subject resolves, whatever else the subject contains -- an emoji or an accented character included -- for every recipient whose message carries substitutions, the request's own `substitutions` or that recipient's. A recipient with neither is sent nothing to render, so their subject arrives exactly as written, braces and all.
 
             Pad the braces with ordinary spaces: a variable written with non-ASCII whitespace inside them is not reliably recognised.
 
             On a subject that is being resolved and carries an emoji or an accented character, template syntax other than a variable -- `{% ... %}`, `{# ... #}` or an unclosed brace -- is rejected. A substitution value is rejected for any of `{{`, `{%` or `{#`, a `{{ ... }}` included, and so is a subject whose values combine into one of them.
-        template_id:
-          type: string
-          format: uuid
-          description: |
-            A transactional template to send. Its subject, preview text, HTML body and text body become the message, and the request supplies values for the variables the template declares.
-
-            Cannot be combined with `text_content`, `html_content` or `amp_content`. A templated message carries no AMP part.
         text_content:
           type: string
-          description: Plain text content. Required if html_content and template_id are empty
+          description: Plain text content. Required if html_content is empty
         html_content:
           type: string
-          description: HTML content. Required if text_content and template_id are empty
+          description: HTML content. Required if text_content is empty
         amp_content:
           type: string
           description: AMP HTML content
@@ -913,7 +957,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Global substitutions, recipient substitutions override global
+          description: Global substitutions, recipient substitutions override global. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
         tags:
           type: array
           items:
@@ -948,6 +992,86 @@ components:
         text_content: "Welcome {{first_name}}!"
         substitutions:
           first_name: "John"
+
+    CreateTemplateMessageRequest:
+      type: object
+      required:
+        - template_id
+        - recipients
+      properties:
+        template_id:
+          type: string
+          format: uuid
+          description: The ID of one of this account's transactional templates. List Templates returns the IDs.
+        from:
+          $ref: '#/components/schemas/Address'
+          description: The sender. Leave it out to send from the template's default sender. A `from` given here is used even when the template has a default sender, and it must have an `email`.
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recipient'
+          minItems: 1
+          maxItems: 100
+          description: |
+            Each recipient gets a separate message. This does not set the To header to more than one address.
+
+            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values.
+        reply_to:
+          $ref: '#/components/schemas/Address'
+          description: If provided, the reply-to header in headers must not be provided. When the request has neither, the template's reply-to is used.
+        subject:
+          type: string
+          description: |
+            Email subject line. When it is left out, empty or only spaces, the template's published subject is used.
+
+            A `{{ variable }}` in the subject, yours or the template's, resolves for every recipient from that recipient's `substitutions` and the reserved variables, whatever else the subject contains -- an emoji or an accented character included. A variable with no value becomes empty.
+
+            Pad the braces with ordinary spaces: a variable written with non-ASCII whitespace inside them is not reliably recognised.
+
+            On a subject that carries a `{{ variable }}` and an emoji or an accented character, template syntax other than a variable -- `{% ... %}`, `{# ... #}` or an unclosed brace -- is rejected. A substitution value is rejected for any of `{{`, `{%` or `{#`, a `{{ ... }}` included, and so is a subject whose values combine into one of them.
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: File attachments. For an inline image, set the attachment's `content_id` to a value wrapped in angle brackets (e.g. `<image1@example.com>`). The template's HTML can then show it with `cid:` (e.g. `<img src="cid:image1@example.com">`).
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: |
+            Custom email headers. Each name must be visible ASCII with no space and no colon. reply-to header cannot be provided if reply_to is provided, message-id will be ignored and automatically generated.
+
+            A `{{ variable }}` in a value resolves from the recipient's `substitutions` and the reserved variables. On a template whose design uses `unsubscribe_url`, a `List-Unsubscribe` or `List-Unsubscribe-Post` header given here is dropped.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorizing messages
+        sandbox:
+          type: boolean
+          description: If true, the message will be sent to the sandbox environment
+          default: false
+        sandbox_result:
+          type: string
+          enum: [deliver, bounce, defer, fail, suppress]
+          description: The result of the sandbox send
+        tracking:
+          $ref: '#/components/schemas/Tracking'
+          description: Tracking settings for the message, overrides default account settings
+        retention:
+          $ref: '#/components/schemas/Retention'
+          description: Retention settings for the message, overrides default account settings
+        schedule:
+          $ref: '#/components/schemas/MessageSchedule'
+          description: Schedule for message delivery
+      example:
+        template_id: "0195c2a4-7d3e-7b6a-9f1c-2e4d5a6b7c8d"
+        recipients:
+          - email: "user@example.com"
+            name: "John Doe"
+            substitutions:
+              first_name: "John"
+              order_id: "12345"
 
     CreateConversationMessageRequest:
       type: object
@@ -1269,6 +1393,10 @@ components:
           type: string
           format: uuid
           description: Account ID this message belongs to
+        template_id:
+          type: [string, 'null']
+          format: uuid
+          description: The transactional template the message was sent from with [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message). Null for any other message, including SMTP mail, dashboard test sends and messages sent before this field was added. The template may have been deleted since.
       required:
         - object
         - created_at
@@ -1293,6 +1421,7 @@ components:
         - reference_message_id
         - domain_id
         - account_id
+        - template_id
 
     # Full message schema with content fields
     Message:
@@ -1340,10 +1469,16 @@ components:
         required:
           type: boolean
           description: |
-            Whether a send has to supply a value for this variable. A variable
-            the design wraps in a fallback is not required, and neither are
-            `email`, `unsubscribe_url` and `view_browser_url`, which the send
-            supplies itself and overwrites any caller-supplied value for.
+            Whether each recipient of a send has to supply a value for this
+            variable. A variable the design wraps in a fallback is not required.
+
+            `email`, `view_browser_url` and `unsubscribe_url` are never
+            required: the send supplies them for each recipient and replaces a
+            value the recipient gives. `email` is the recipient's address and
+            `view_browser_url` is empty. `unsubscribe_url` is a link made for
+            the recipient, and the message then carries `List-Unsubscribe` and
+            `List-Unsubscribe-Post` headers for it; a `List-Unsubscribe` or
+            `List-Unsubscribe-Post` in the request's `headers` is dropped.
 
     Template:
       type: object
@@ -1356,6 +1491,10 @@ components:
         - subject
         - preheader
         - variables
+        - from
+        - reply_to
+        - editor
+        - has_draft
       properties:
         object:
           type: string
@@ -1364,7 +1503,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Pass as `template_id` when sending a message
+          description: Pass as `template_id` to [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) to send this template
         created_at:
           type: string
           format: date-time
@@ -1372,24 +1511,414 @@ components:
         updated_at:
           type: string
           format: date-time
-          description: When the template was last saved
+          description: When the template's name or published content last changed
         name:
           type: string
           description: Template name, as it appears in the dashboard
         subject:
           type: string
-          description: The stored subject. Empty unless the design carries one, and overridden by a send that names its own `subject`.
+          description: The published subject, set on the template page. Empty until one is published, and overridden by a send that names its own `subject`.
         preheader:
           type: string
-          description: The stored preview text, injected into the delivered HTML when it is set
+          description: The published preview text, injected into the delivered HTML when it is set
         variables:
           type: array
           items:
             $ref: '#/components/schemas/TemplateVariable'
           description: |
-            Every variable the design uses. A send naming this template must
-            carry a value for each required one, in `substitutions` or in the
-            recipient's own map, or it is rejected in full.
+            Every variable the design uses. A send of this template takes the
+            values only from each recipient's `substitutions`. Every recipient
+            must give a value for each required variable; if one does not, the
+            request is rejected and no message is sent.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The default sender, used by a send that names no `from`. Null when the template has none, and then every send must name one.
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The default reply-to address, used by a send that sets no reply-to, also one that names its own `from`. Null when the template has none. It has the shape of a send request's `reply_to`; its `name` is always empty.
+        editor:
+          $ref: '#/components/schemas/TemplateEditor'
+        has_draft:
+          type: boolean
+          description: Whether the template has a draft, changes saved in the dashboard or through the API that are not published yet. Get Template Draft returns it.
+        content:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateContent'
+            - type: 'null'
+          description: The published content. Null when the published copy has no body, as for a template that was never published. List Templates leaves this field out; every other operation that returns a Template sets it.
+
+    TemplateEditor:
+      type: string
+      enum: [advanced, simple, html]
+      description: |
+        The editor the template is designed with. It never changes after the
+        template is created.
+
+        - `advanced`: designed in MJML, with the dashboard's advanced editor.
+        - `simple`: designed with the dashboard's simple editor. Its HTML is
+          made from the design and can be read but not changed through the API.
+        - `html`: an HTML template, uploaded or written by hand.
+
+    TemplateContent:
+      type: object
+      required:
+        - text_is_custom
+      description: |
+        A template's content. A key that does not apply to the template's
+        editor is left out, and so are `mjml`, `html` and `text` when they are
+        empty.
+      properties:
+        mjml:
+          type: string
+          description: The MJML source. Only for `advanced` templates.
+        html:
+          type: string
+          description: The HTML of an `html` template, or the HTML made from the design of a `simple` template.
+        text:
+          type: string
+          description: The plain text version of the email.
+        text_is_custom:
+          type: boolean
+          description: Whether the text was written rather than made from the HTML. A text made from the HTML is made again whenever the design changes.
+
+    TemplateDraft:
+      type: object
+      required:
+        - object
+        - template_id
+        - updated_at
+        - subject
+        - preheader
+        - variables
+        - from
+        - reply_to
+        - content
+      description: |
+        A template's draft: the changes saved in the dashboard or through the
+        API that are not published yet. Sends use the published copy until the
+        draft is published.
+      properties:
+        object:
+          type: string
+          enum: [template_draft]
+          description: Object type identifier
+        template_id:
+          type: string
+          format: uuid
+          description: The template the draft belongs to
+        updated_at:
+          type: string
+          format: date-time
+          description: When the draft last changed
+        subject:
+          type: string
+          description: The draft's subject
+        preheader:
+          type: string
+          description: The draft's preview text
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+          description: Every variable the draft uses, as a send would require them once the draft is published
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The draft's default sender. Null when it has none.
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The draft's default reply-to address. Null when it has none. Its `name` is always empty.
+        content:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateContent'
+            - type: 'null'
+          description: The draft's content. Null when the draft has no body.
+
+    TemplatePublisher:
+      type: object
+      required:
+        - type
+        - id
+      description: Who published a version.
+      properties:
+        type:
+          type: string
+          enum: [user, api_key]
+          description: '`user` for a version published in the dashboard, `api_key` for one published through the API'
+        id:
+          type: string
+          format: uuid
+          description: The user's ID, as Get Account Members shows it, also for a user removed from the account since; or the API key's ID.
+
+    TemplateVersion:
+      type: object
+      required:
+        - object
+        - id
+        - version
+        - published_at
+        - published_by
+      description: One published version of a template, without its content.
+      properties:
+        object:
+          type: string
+          enum: [template_version]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Version ID
+        version:
+          type: integer
+          description: The version number, counted from 1 for each template
+        published_at:
+          type: string
+          format: date-time
+          description: When the version was published
+        published_by:
+          oneOf:
+            - $ref: '#/components/schemas/TemplatePublisher'
+            - type: 'null'
+          description: Who published the version. Null when this is not known, as for versions made before versions recorded it, or when the user or API key was deleted for good.
+
+    TemplateVersionDetail:
+      allOf:
+        - $ref: '#/components/schemas/TemplateVersion'
+        - type: object
+          required:
+            - subject
+            - preheader
+            - variables
+            - from
+            - reply_to
+            - content
+          properties:
+            subject:
+              type: string
+              description: The version's subject
+            preheader:
+              type: string
+              description: The version's preview text
+            variables:
+              type: array
+              items:
+                $ref: '#/components/schemas/TemplateVariable'
+              description: Every variable the version uses
+            from:
+              oneOf:
+                - $ref: '#/components/schemas/Address'
+                - type: 'null'
+              description: The version's default sender. Null when it has none.
+            reply_to:
+              oneOf:
+                - $ref: '#/components/schemas/Address'
+                - type: 'null'
+              description: The version's default reply-to address. Null when it has none. Its `name` is always empty.
+            content:
+              oneOf:
+                - $ref: '#/components/schemas/TemplateContent'
+                - type: 'null'
+              description: The version's content. Null when the version has no body.
+    TemplateContentInput:
+      type: object
+      additionalProperties: false
+      description: |
+        The content of a template write. It holds at most one of `mjml` and
+        `html`, and at least one of `mjml`, `html` and `text`. The `content`
+        of an `advanced` or `html` draft, or of the Template when it has no
+        draft, can be sent back as it is: an `mjml` or `html` equal to the
+        current one is held to the size limit but not compiled again or held
+        to the HTML checks, and keeps the stored HTML. While a draft exists,
+        the Template's `content` is the published copy's, and sending it back
+        replaces the draft's design. Leave `content` out of a write that does
+        not change it. For a `simple` template, send back only `text`: its
+        `html` can be changed only in the dashboard.
+
+        The text follows these rules:
+        - Beside a new `mjml` or `html`, a missing `text` keeps the draft's
+          text when it is custom, and that text must still render, as a sent
+          text must; otherwise, and on a create, it makes the text from the
+          new HTML. A null `text` makes the text from the new
+          HTML, and so does a `text` equal to a text made from an earlier
+          HTML: the draft's made text, or the published copy's made text when
+          the draft does not hold that text as custom. A read `content` can
+          so be sent back with a changed design. Any other `text` is stored
+          as made when it equals the text made from the new HTML, and as
+          custom otherwise. To keep a made text beside a new design, send the
+          design first and the text in a second request.
+        - Otherwise a `text` equal to the draft's custom text keeps it; one
+          equal to the text made from the draft's HTML is stored as made; any
+          other is stored as custom. A null `text` makes the text again from
+          the draft's HTML, and is refused when there is no HTML.
+
+        Line ends written as CRLF are stored as LF, and a blank text is
+        refused. `mjml`, `html` and a custom `text` each have a size limit.
+      properties:
+        mjml:
+          type: string
+          minLength: 1
+          description: |
+            The MJML source. Only for `advanced` templates. It is compiled in
+            strict mode, and every problem strict validation finds is refused
+            with its line. Images must use full `https://` URLs: the API cannot
+            upload files.
+        html:
+          type: string
+          minLength: 1
+          description: |
+            The HTML. Only for `html` templates; the HTML of a `simple`
+            template can be changed only in the dashboard. Images and
+            stylesheets must use full `https://` URLs: the API cannot upload
+            files.
+        text:
+          type:
+            - string
+            - 'null'
+          description: The plain text version. Null makes it from the HTML.
+        text_is_custom:
+          type: boolean
+          description: Accepted so a read `content` can be sent back, and ignored. The text rules decide it.
+
+    TemplateAddressInput:
+      type: object
+      additionalProperties: false
+      required:
+        - email
+      description: An address in a template write, in the shape a Template answers it.
+      properties:
+        email:
+          type: string
+          format: email
+          description: The email address.
+        name:
+          type: string
+          description: The display name.
+
+    CreateTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: |
+        A new transactional template. Its fields go to its draft, as a
+        dashboard save does; `publish: true` publishes the draft in the same
+        request, so sends use it.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Template name. Spaces around it are dropped.
+        editor:
+          $ref: '#/components/schemas/TemplateEditor'
+          description: Required when `content` holds neither `mjml` nor `html`. `content.mjml` means `advanced` and `content.html` means `html`; an `editor` that disagrees with the content is refused.
+        subject:
+          type:
+            - string
+            - 'null'
+          maxLength: 998
+          description: The subject. Line breaks become spaces and spaces around it are dropped.
+        preheader:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+          description: The preview text. Line breaks become spaces and spaces around it are dropped.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The default sender. `email` must be on a domain of this account with valid DNS records that is not paused.
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The default reply-to address. It needs a `from`, and its `name` must be empty.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+        publish:
+          type: boolean
+          default: false
+          description: Publish the draft once it is written.
+
+    UpdateTemplateRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Changes to a template. A field left out is not changed or checked,
+        apart from a custom text kept beside a new design.
+        Every field but `name` goes to the draft, as a dashboard save does,
+        and a draft equal to the published copy is not kept. The draft is
+        shared with the dashboard: `publish: true`, like Publish Template,
+        publishes the whole draft, including changes made in the dashboard.
+        `name` changes at once, as the last step. The editor never changes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Template name. Spaces around it are dropped.
+        subject:
+          type:
+            - string
+            - 'null'
+          maxLength: 998
+          description: The subject. Null or an empty string clears it. Line breaks become spaces and spaces around it are dropped.
+        preheader:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+          description: The preview text. Null or an empty string clears it. Line breaks become spaces and spaces around it are dropped.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The default sender. It replaces the address and the name together, so a missing `name` clears the name; the reply-to is kept. Null clears the sender and the reply-to. `email` must be on a domain of this account with valid DNS records that is not paused.
+        reply_to:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The default reply-to address. Null clears it. It needs a sender, and its `name` must be empty.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+        publish:
+          type: boolean
+          default: false
+          description: 'Publish the draft once it is written. With only `publish: true`, the request publishes the draft.'
+
+    RestoreTemplateVersionRequest:
+      type: object
+      additionalProperties: false
+      description: Optional. An empty body restores without publishing.
+      properties:
+        publish:
+          type: boolean
+          default: false
+          description: Publish the draft once the version is restored into it.
+
+    TemplateVersionsResponse:
+      type: object
+      required:
+        - object
+        - data
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVersion'
+          description: The template's versions, newest first. A template keeps its 50 most recent versions, so the list is not paginated.
 
     PaginatedTemplatesResponse:
       type: object
@@ -1406,7 +1935,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Template'
-          description: Array of templates
+          description: Array of templates, each without its `content`
         pagination:
           $ref: '#/components/schemas/PaginationInfo'
 
@@ -1630,7 +2159,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
-          description: Reason shown on the sub account suspension record
+          description: Reason for the pause. When this call starts the pause, the dashboard of the sub account shows it as a note.
       example:
         reason: "Customer requested temporary pause"
 
@@ -4146,6 +4675,12 @@ paths:
           description: Filter results by DNS validation status
           schema:
             type: [boolean, 'null']
+        - name: sending_type
+          in: query
+          description: Filter results by sending type
+          schema:
+            type: string
+            enum: [transactional, marketing]
         - name: limit
           in: query
           description: Maximum number of items to return (1-100)
@@ -4659,11 +5194,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot delete the domain, or sending from the domain is paused. You cannot delete a domain while sending from it is paused.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending is paused on the domain 'example.com'. You cannot remove or rename it while sending is paused. Contact support.
         '404':
           description: Domain not found
           content:
@@ -4959,35 +5500,24 @@ paths:
         Creates and sends a message to one or more recipients. This API cannot be used if you want to send a conversational/P2P message and set CC or BCC. Use [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation) instead.
 
         **Validation Requirements:**
-        - Either `template_id`, `text_content` or `html_content` is required
-        - `template_id` cannot be combined with `text_content`, `html_content` or `amp_content`
-        - `subject` is required unless a template supplies one
-        - a template named by `template_id` must have a saved design; one with neither an HTML nor a text body is rejected
+        - Either `text_content` or `html_content` is required
         - `from.email` must be from a domain you own with valid DNS records
         - `retention.metadata` must be between 1 and 30 days
         - `retention.data` must be between 0 and 30 days
         - If `reply_to` is provided, do not include `reply-to` in headers
         - `message-id` header will be ignored and automatically generated
-        - header names must be visible ASCII with no space and no colon; an empty name, or one holding a space, a colon or a line break, is rejected
         - Schedule times must be in RFC3339 format
         - `schedule.first_attempt` must be in the future and within 7 days of the request
         - `schedule.expires` must be in the future and within 8 days of the request
 
-        **Sending a template:**
-
-        Name a transactional template with `template_id` and it supplies the subject, the preview text and both bodies. A subject given in the request is used instead of the template's; everything else about the envelope -- recipients, reply-to, attachments, headers, tags, tracking, retention, schedule and sandbox -- applies exactly as it does to an inline send.
-
-        Values for the template's variables come from `substitutions` and from each recipient's own `substitutions`, the recipient's winning where both name a variable. Every variable the template requires must have a value for every recipient; a request missing one is rejected in full, naming each variable and the recipient it is missing for, and nothing is sent. A value for a name the template does not use is accepted and passed through, because your own `subject` and `headers` are substituted too.
-
-        `email` and `view_browser_url` are supplied by AhaSend for each recipient and cannot be overridden: `email` is that recipient's address, and `view_browser_url` is empty until a hosted view of a sent message exists. `unsubscribe_url` is supplied the same way, and a value of your own for it replaced, on a design that uses it; on a design that does not, nothing is minted and your value is passed through like any other name the template does not use. A `template_id` that does not name a transactional template belonging to this account is a 404.
-
-        **Unsubscribe:** the template's design decides, because it is the only thing that knows whether the recipient can see a link. A design that uses `unsubscribe_url` gets a link minted for each recipient: the variable resolves to it, and the message carries `List-Unsubscribe` holding that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so a mail client's own unsubscribe button works. That button suppresses the recipient for the sending domain straight away; following the link opens a confirmation page, and the suppression happens when they confirm. A design that does not use `unsubscribe_url` gets neither header and no substitution -- an unsubscribe header on a password reset advertises a preference the message does not offer.
-
-        You are never asked for the link, and on a message that carries ours a `List-Unsubscribe` or `List-Unsubscribe-Post` of your own in `headers` is dropped however it is spelled. On every other send -- an inline one, or a template whose design does not use the variable -- your header passes through unchanged.
+        **Headers and subject:**
+        - Header names must be visible ASCII with no space and no colon. An empty name, or one holding a space, a colon or a line break, is rejected.
+        - A substitution value that a header uses must not contain a line break. Such a request is rejected, and the error names the recipient.
+        - A `{{ name }}` in a subject that carries an emoji or an accented character is replaced before the message is built, for each recipient whose message carries substitutions. Such a subject is rejected when it holds template syntax other than `{{ name }}`, when a substitution value holds `{{`, `{%` or `{#`, or when the subject and the values combine into template syntax. See `subject`.
 
         Authorization uses the domain in `from.email`: either
         `messages:send:all` or the matching domain-specific send role is
-        sufficient. Sending from a template requires no additional scope.
+        sufficient.
       operationId: createMessage
       tags:
         - Messages
@@ -5105,13 +5635,150 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/messages/template:
+    post:
+      summary: Create Template Message
+      description: |
+        Sends a stored transactional template to one or more recipients. Each recipient gets a separate message. The template supplies the body. It also supplies the subject, the sender and the reply-to when the request does not give them. To send content that is not stored in a template, use [Create Message](https://ahasend.com/docs/api-reference/messages/create-message).
+
+        **The message:**
+        The message has the template's HTML body, with the template's preview text added, and the template's text body. It has no AMP part. The message records the template: the message's `template_id` (Get Message) is the ID of this template.
+
+        **Variables:**
+        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted.
+
+        Your `subject` and `headers` resolve from the same values. A `{{ name }}` that has no value becomes empty.
+
+        **Reserved variables:**
+        The send supplies `email` and `view_browser_url` for each recipient: `email` is the recipient's address, and `view_browser_url` is empty. When the template's design uses `unsubscribe_url`, the send also supplies it: a link made for each recipient. The message then carries `List-Unsubscribe` with that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so the unsubscribe button of a mail client works. That button suppresses the recipient for the sending domain at once. The link opens a confirmation page, and the suppression happens when the recipient confirms. A `List-Unsubscribe` or `List-Unsubscribe-Post` in your `headers` is dropped, in any letter case. When the design does not use `unsubscribe_url`, no link is made and your headers are sent as you give them.
+
+        A recipient's own value for a reserved variable is replaced.
+
+        **Fields that are not accepted:**
+        These fields at the top of the request are rejected with a 400. Any value except `null` is rejected, `""` and `{}` included.
+        - `substitutions`: `substitutions go on each recipient, not at the top of the request`
+        - `text_content`, `html_content` and `amp_content`: `<field> is not accepted, the template supplies the body`, with the name of the field
+
+        A request with more than one of them gets the error for the first in this list. These fields are checked as soon as the request body is read, before the rest of the request.
+
+        **Sender:**
+        - When the request has no `from`, the message is sent from the template's default sender. When the template has no default sender, the request is rejected with a 400 `from is required because the template has no default sender`.
+        - A `from` given in the request is used even when the template has a default sender. It must have an `email`, and it is checked as on Create Message.
+        - The sender, the request's or the template's, must be from a domain you own with valid DNS records.
+        - When the request has no `reply_to` and no `reply-to` in `headers`, the template's reply-to is used.
+
+        **Subject:**
+        The request's `subject` is used when it holds more than spaces. If not, the template's published subject is used. When neither has a subject, the request is rejected with a 400 `the template has no subject, publish one on the template page or pass subject`.
+
+        **Headers and subject:**
+        - Header names must be visible ASCII with no space and no colon. An empty name, or one holding a space, a colon or a line break, is rejected.
+        - A substitution value that a header uses must not contain a line break. Such a request is rejected, and the error names the recipient.
+        - A `{{ name }}` in a subject that carries an emoji or an accented character is replaced before the message is built, on every send. Such a subject is rejected when it holds template syntax other than `{{ name }}`, when a substitution value holds `{{`, `{%` or `{#`, or when the subject and the values combine into template syntax. See `subject`.
+
+        **Order of checks:**
+        When the request body is read, the fields that are not accepted are checked first, then the request body against its schema. Then the checks run in this order, and a request that fails more than one gets the error of the first:
+        1. The number of recipients, then the header names.
+        2. A `from` in the request: its domain, as on Create Message.
+        3. No `from`, and an API key that cannot send from any domain: 403 `this api key is not authorized to send messages`.
+        4. A `template_id` that is not one of this account's transactional templates: 404 `template not found`.
+        5. A default sender or reply-to of the template that the send would use and that is not valid: 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it`.
+        6. No `from`: the template's default sender (see Sender) and its domain.
+        7. A template with neither an HTML nor a text body: 400 `template has no published content, design it and publish it`.
+        8. An HTML or text body that holds a `{{`, `{%` or `{#` that cannot be rendered: 400 `template's published design holds a {{, {% or {# that cannot be rendered, fix it and publish it`.
+        9. The subject (see Subject), then the variables of each recipient (see Variables).
+        10. The sandbox fields, then whether the account can send and whether sending from the domain is paused, as on Create Message.
+
+        The other checks, such as the schedule and the substitution values that headers use, come after these.
+
+        Authorization uses the domain of the sender, `from.email` or the
+        template's default sender: either `messages:send:all` or the matching
+        domain-specific send role is sufficient. Sending a template requires
+        no additional scope.
+      operationId: createTemplateMessage
+      tags:
+        - Messages
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["messages:send:all"]
+        - BearerAuth: ["messages:send:{domain}"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateMessageRequest'
+      responses:
+        '202':
+          description: Message created successfully
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMessageResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_variables:
+                  summary: A recipient does not give a required variable
+                  value:
+                    message: "missing required template variables: user@example.com needs first_name, order_id"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Forbidden. For example, the API key cannot send from the domain of the sender, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain. A request with no `from` is refused with `this api key is not authorized to send messages` when the API key cannot send from any domain.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
         '404':
-          description: The template named by `template_id` does not exist
+          description: |
+            `template not found`: `template_id` is not the ID of one of this account's transactional templates. A deleted template, a campaign design and a template of another account get this answer too.
           content:
             application/json:
               schema:
@@ -5126,6 +5793,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // The template supplies the body, and the subject and sender when the
+              // request leaves them out. Each recipient gives its own variable values.
+              // For a template with no default sender, set From to an address on one of
+              // your domains.
+              response, _, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, requests.CreateTemplateMessageRequest{
+                TemplateID: templateID,
+                Recipients: []common.Recipient{
+                  {
+                    Email: "john@example.com",
+                    Name:  ahasend.String("John Smith"),
+                    Substitutions: map[string]interface{}{
+                      "first_name": "John",
+                      "order_id":   "12345",
+                    },
+                  },
+                },
+                Sandbox: ahasend.Bool(true),
+              })
+              if err != nil {
+                log.Fatalf("Error sending message: %v", err)
+              }
+              // Each recipient gets its own message, or an error saying why it was not sent.
+              for _, message := range response.Data {
+                if message.ID != nil {
+                  fmt.Printf("%s: %s\n", message.Recipient.Email, *message.ID)
+                } else if message.Error != nil {
+                  fmt.Printf("%s: %s\n", message.Recipient.Email, *message.Error)
+                }
+              }
+            }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const result = await client.messages.sendTemplate({
+              template_id: "00000000-0000-4000-8000-000000000009",
+              recipients: [{ email: "recipient@example.net", substitutions: { first_name: "Ada" } }],
+              sandbox: true,
+            });
+            console.log("Sandbox template message accepted.", { count: result.data.length });
 
   /v2/accounts/{account_id}/messages/conversation:
     post:
@@ -5272,11 +6010,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden. For example, the API key cannot send from the domain, the account cannot send, or sending from the domain is paused. A sandbox message is accepted from a paused domain.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                domain_paused:
+                  summary: Sending from the domain is paused
+                  value:
+                    message: Sending from domain 'example.com' is paused. Check your dashboard for the reason.
         '409':
           $ref: '#/components/responses/IdempotencyConflict'
         '422':
@@ -5309,7 +6053,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
       security:
@@ -5415,7 +6159,7 @@ paths:
         - name: message_id
           in: path
           required: true
-          description: Message API ID. Accepts the generated Message-ID returned by [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message), for example `<uuid@example.com>`, or the bare UUID portion.
+          description: Message API ID. Accepts the generated Message-ID returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message), for example `<uuid@example.com>`, or the bare UUID portion.
           schema:
             type: string
       security:
@@ -5505,7 +6249,8 @@ paths:
       description: |
         Returns a cursor-paginated list of the account's transactional
         templates, newest first. Campaign designs are a different resource and
-        never appear here.
+        never appear here. Each template is listed without its `content`; Get
+        Template returns it.
 
         A template with no design yet is listed like any other; whether it can
         be sent is the send's answer, not this one.
@@ -5620,14 +6365,142 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Create Template
+      description: |
+        Creates a transactional template. Its fields go to its draft, as a
+        dashboard save does, so sends keep failing until it is published: pass
+        `publish: true` to publish it in the same request, or call Publish
+        Template.
+
+        `content.mjml` makes an `advanced` template and `content.html` an `html`
+        template. A template with neither must name its `editor`. The editor never
+        changes after create.
+
+        MJML is compiled in strict mode, and HTML must use full `https://` URLs
+        for its images and stylesheets: the API cannot upload files.
+
+        A create with `publish: true` and nothing to publish is refused and
+        creates nothing.
+      operationId: createTemplate
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: Template created. The Template object is the published copy; `has_draft` says whether the request left a draft.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: 'Invalid request: the body, a field, or a publish with nothing to publish. The message names the field and the problem.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // HTML content makes an html template; MJML would make an advanced one.
+              // The text is made from the HTML when it is left out. Publish makes the
+              // template ready to send at once; without it, the fields stay in a draft.
+              response, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.CreateTemplateRequest{
+                Name:    "Password reset",
+                Subject: ahasend.String("Reset your password, {{ first_name }}"),
+                From: &common.SenderAddress{
+                  Email: "hello@yourdomain.com",
+                  Name:  ahasend.String("Example"),
+                },
+                Content: &requests.TemplateContentInput{
+                  HTML: ahasend.String(`<p>Hi {{ first_name }},</p><p><a href="{{ reset_url }}">Reset your password</a></p>`),
+                },
+                Publish: true,
+              })
+              if err != nil {
+                log.Fatalf("Error creating template: %v", err)
+              }
+              fmt.Printf("Created %s template %s\n", response.Editor, response.ID)
+            }
 
   /v2/accounts/{account_id}/templates/{template_id}:
     get:
       summary: Get Template
       description: |
-        Returns one of the account's transactional templates, including the
-        variable list a send has to satisfy. A campaign design's ID is not
-        addressable here and answers 404.
+        Returns one of the account's transactional templates: its published
+        copy, which is what a send uses, with its content and the variable list
+        a send has to satisfy. `has_draft` says whether changes are waiting to
+        be published; Get Template Draft returns them. A campaign design's ID
+        is not addressable here and answers 404.
       operationId: getTemplate
       tags:
         - Templates
@@ -5734,6 +6607,914 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    put:
+      summary: Update Template
+      description: |
+        Changes a transactional template. Every field but `name` goes to the
+        template's draft, the same draft the dashboard edits, and sends use the
+        published copy until the draft is published: pass `publish: true`, or call
+        Publish Template. A publish publishes the whole draft, including changes
+        made in the dashboard. A draft that ends up equal to the published copy is
+        not kept, and a request that changes nothing changes nothing, so the same
+        request can be repeated safely.
+
+        `name` is not drafted: it changes when the request succeeds, as its last
+        step. A field the request leaves out is neither changed nor checked,
+        apart from a custom text kept beside a new design (see
+        `TemplateContentInput`).
+
+        When the template changes in the dashboard or through another request
+        while this one writes it, the request applies its fields again over the
+        new draft. It answers 503 when that keeps happening; retry it.
+      operationId: updateTemplate
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: Template updated. The Template object is the published copy; `has_draft` says whether a draft is left.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid template_id, an invalid body or field, a request with no changes, or a publish with nothing to publish or a draft that cannot be rendered. The message names the field and the problem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateBeingChanged'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Only the fields you set change. They go to the template's draft, the
+              // same draft the dashboard edits; Publish publishes the whole draft. An
+              // empty ReplyTo clears the reply-to address.
+              response, _, err := client.TemplatesAPI.UpdateTemplate(ctx, accountID, templateID, requests.UpdateTemplateRequest{
+                Subject: ahasend.String("Your password reset link"),
+                ReplyTo: &common.SenderAddress{},
+                Publish: true,
+              })
+              if err != nil {
+                log.Fatalf("Error updating template: %v", err)
+              }
+              fmt.Printf("Updated template %s, has draft: %t\n", response.Name, response.HasDraft)
+            }
+
+    delete:
+      summary: Delete Template
+      description: |
+        Deletes a transactional template, as the dashboard does. Sends of it fail
+        from then on, and a second delete answers 404.
+      operationId: deleteTemplate
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:delete"]
+      responses:
+        '200':
+          description: Template deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.TemplatesAPI.DeleteTemplate(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error deleting template: %v", err)
+              }
+              fmt.Println(response.Message)
+            }
+
+  /v2/accounts/{account_id}/templates/{template_id}/draft:
+    get:
+      summary: Get Template Draft
+      description: |
+        Returns a template's draft: the changes saved in the dashboard or
+        through the API that are not published yet. Sends use the published
+        copy, which Get Template returns, until the draft is published.
+
+        A template with no draft answers 404 `template has no draft`; its
+        `has_draft` is false.
+      operationId: getTemplateDraft
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:read"]
+      responses:
+        '200':
+          description: Template draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDraft'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found (`template not found`), or the template has no draft (`template has no draft`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // A template with no draft returns 404; its HasDraft is false.
+              response, _, err := client.TemplatesAPI.GetTemplateDraft(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error getting template draft: %v", err)
+              }
+              fmt.Printf("Draft subject: %s, changed at %s\n", response.Subject, response.UpdatedAt)
+            }
+
+    delete:
+      summary: Discard Template Draft
+      description: |
+        Discards a template's draft, the changes saved in the dashboard or through
+        the API that are not published yet. A template with no draft is answered
+        as it is, so the request can be repeated safely.
+      operationId: discardTemplateDraft
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:write"]
+      responses:
+        '200':
+          description: The template, with `has_draft` false
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateBeingChanged'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.TemplatesAPI.DiscardTemplateDraft(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error discarding template draft: %v", err)
+              }
+              fmt.Printf("Template %s has draft: %t\n", response.Name, response.HasDraft)
+            }
+
+  /v2/accounts/{account_id}/templates/{template_id}/publish:
+    post:
+      summary: Publish Template
+      description: |
+        Publishes a template's draft, so sends use it, and keeps it as a new
+        version. The whole draft is published, including changes made in the
+        dashboard. A template with no draft has nothing to publish and is answered
+        as it is when its published copy has a body, so the request can be
+        repeated safely.
+
+        The operation takes no request body; one sent is ignored.
+      operationId: publishTemplate
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      responses:
+        '200':
+          description: Template published
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid template_id, a template with nothing to publish (`template has no content to publish`), or a draft whose design holds a `{{`, `{%` or `{#` that cannot be rendered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateBeingChanged'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // The whole draft is published, including changes made in the dashboard.
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries.
+              response, _, err := client.TemplatesAPI.PublishTemplate(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error publishing template: %v", err)
+              }
+              fmt.Printf("Published template %s\n", response.Name)
+            }
+
+  /v2/accounts/{account_id}/templates/{template_id}/versions:
+    get:
+      summary: List Template Versions
+      description: |
+        Returns a template's published versions, newest first, without their
+        content. Every publish of a draft makes a version. A template keeps its
+        50 most recent versions, so the list is not paginated. Get Template
+        Version returns one version with its content.
+      operationId: listTemplateVersions
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:read"]
+      responses:
+        '200':
+          description: Template versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersionsResponse'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Versions come newest first, at most 50, with no pagination.
+              response, _, err := client.TemplatesAPI.GetTemplateVersions(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error listing template versions: %v", err)
+              }
+              for _, version := range response.Data {
+                publisher := "unknown"
+                if version.PublishedBy != nil {
+                  publisher = version.PublishedBy.Type + " " + version.PublishedBy.ID.String()
+                }
+                fmt.Printf("v%d %s published by %s\n", version.Version, version.PublishedAt, publisher)
+              }
+            }
+
+  /v2/accounts/{account_id}/templates/{template_id}/versions/{version_id}:
+    get:
+      summary: Get Template Version
+      description: |
+        Returns one published version of a template with its content.
+      operationId: getTemplateVersion
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+        - name: version_id
+          in: path
+          required: true
+          description: Version ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:read"]
+      responses:
+        '200':
+          description: Template version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersionDetail'
+        '400':
+          description: Invalid template_id or version_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found (`template not found`), or version not found (`template version not found`), also for a version of another template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+              versionID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+
+              response, _, err := client.TemplatesAPI.GetTemplateVersion(ctx, accountID, templateID, versionID)
+              if err != nil {
+                log.Fatalf("Error getting template version: %v", err)
+              }
+              fmt.Printf("v%d subject: %s\n", response.Version, response.Subject)
+              if response.Content != nil {
+                fmt.Println(response.Content.Text)
+              }
+            }
+
+  /v2/accounts/{account_id}/templates/{template_id}/versions/{version_id}/restore:
+    post:
+      summary: Restore Template Version
+      description: |
+        Restores a published version into the template's draft. With
+        `publish: true` the draft is then published, as Publish Template does;
+        a version the publish checks refuse is refused before the restore, and
+        the draft is left as it was.
+      operationId: restoreTemplateVersion
+      tags:
+        - Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Template ID
+          schema:
+            type: string
+            format: uuid
+        - name: version_id
+          in: path
+          required: true
+          description: Version ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreTemplateVersionRequest'
+      responses:
+        '200':
+          description: Version restored. The Template object is the published copy; `has_draft` says whether a draft is left.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '400':
+          description: Invalid template_id or version_id, an invalid body, or a publish the publish checks refuse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Template not found (`template not found`), or version not found (`template version not found`), also for a version of another template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateBeingChanged'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+              versionID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+
+              // The version goes into the draft; Publish then publishes it, so sends use
+              // it again.
+              response, _, err := client.TemplatesAPI.RestoreTemplateVersion(ctx, accountID, templateID, versionID, requests.RestoreTemplateVersionRequest{
+                Publish: true,
+              })
+              if err != nil {
+                log.Fatalf("Error restoring template version: %v", err)
+              }
+              fmt.Printf("Restored template %s, has draft: %t\n", response.Name, response.HasDraft)
+            }
 
   # Account endpoints
   /v2/accounts/{account_id}:
@@ -6933,8 +8714,8 @@ paths:
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/suspend:
     post:
-      summary: Suspend Sub Account
-      description: Suspends a sub account under the parent account
+      summary: Pause Sub Account
+      description: Pauses sending on a sub account under the parent account. The status of the sub account becomes `suspended`.
       operationId: suspendSubAccount
       tags:
         - Sub Accounts
@@ -7008,7 +8789,7 @@ paths:
               $ref: '#/components/schemas/SuspendSubAccountRequest'
       responses:
         '200':
-          description: Sub account suspended successfully
+          description: Sub account paused successfully
           content:
             application/json:
               schema:
@@ -7046,8 +8827,8 @@ paths:
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/unsuspend:
     post:
-      summary: Unsuspend Sub Account
-      description: Unsuspends a sub account under the parent account
+      summary: Resume Sub Account
+      description: Resumes sending on a paused sub account under the parent account
       operationId: unsuspendSubAccount
       tags:
         - Sub Accounts
@@ -7110,11 +8891,85 @@ paths:
 
       responses:
         '200':
-          description: Sub account unsuspended successfully
+          description: Sub account resumed successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubAccount'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: |
+            Forbidden, or AhaSend paused the sub account. Only AhaSend support
+            can resume that pause.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Sub account not found under the parent account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/domains/{domain}/unpause:
+    post:
+      summary: Unpause Sub Account Domain
+      description: |
+        Lifts the pause on a domain of a sub account under the parent account, so that the domain can send again.
+        The call is idempotent: if sending from the domain is not paused, it changes nothing and returns the domain.
+        A change of the pause can take some minutes to apply to new email.
+      operationId: unpauseSubAccountDomain
+      tags:
+        - Sub Accounts
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Parent account ID
+          schema:
+            type: string
+            format: uuid
+        - name: sub_account_id
+          in: path
+          required: true
+          description: Sub account ID
+          schema:
+            type: string
+            format: uuid
+        - name: domain
+          in: path
+          required: true
+          description: Domain name
+          schema:
+            type: string
+            format: hostname
+      security:
+        - BearerAuth: ["sub-accounts:suspend"]
+      responses:
+        '200':
+          description: The domain, with sending not paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
         '400':
           description: Bad request
           content:
@@ -7134,7 +8989,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Sub account not found under the parent account
+          description: Sub account not found under the parent account, or domain not found in the sub account
           content:
             application/json:
               schema:
@@ -7145,6 +9000,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              subAccountID := uuid.MustParse("7d3c9f5e-2a41-4b8e-9c6d-0f1e2a3b4c5d")
+
+              response, _, err := client.SubAccountsAPI.UnpauseSubAccountDomain(ctx, accountID, subAccountID, "example.com")
+              if err != nil {
+                log.Fatalf("Error unpausing sub account domain: %v", err)
+              }
+              fmt.Printf("%s paused: %t\n", response.Domain, response.Paused)
+            }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const subAccountId = "00000000-0000-4000-8000-000000000004";
+            const domain = await client.subAccounts.unpauseDomain(subAccountId, "mail.example.com");
+            console.log("Sub-account domain unpaused.", { name: domain.domain, paused: domain.paused });
 
   /v2/accounts/{account_id}/sub-accounts/{sub_account_id}/api-keys:
     get:
@@ -12717,7 +14612,7 @@ tags:
   - name: Contacts
     description: Read, create, update, batch upsert, and delete account-global contacts
   - name: Templates
-    description: Read the account's transactional templates and the variables a send must supply
+    description: Create, change, publish and delete the account's transactional templates, and read them with their drafts, their published versions and the variables a send must supply
   - name: Lists
     description: Manage contact lists and the contacts on them
   - name: Suppressions

@@ -44,7 +44,8 @@ func (r UpdateSubAccountRequest) Validate() error {
 	return validateOptionalInt64Range("monthly_credit", r.MonthlyCredit, minMonthlyCredit, maxMonthlyCredit)
 }
 
-// SuspendSubAccountRequest represents a request to suspend a sub account.
+// SuspendSubAccountRequest represents a request to pause sending on a sub account.
+// When the call starts the pause, the sub account's dashboard shows Reason as a note.
 type SuspendSubAccountRequest struct {
 	Reason string `json:"reason"`
 }

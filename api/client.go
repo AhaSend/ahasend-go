@@ -96,6 +96,10 @@ type RequestConfig struct {
 
 	// Internal: Endpoint type for rate limiting classification
 	endpointType EndpointType
+
+	// Internal: the operation takes an Idempotency-Key although it is not a
+	// POST, so a key is generated for it as for a POST
+	idempotent bool
 }
 
 // RequestOption allows modifying RequestConfig using functional options pattern
@@ -592,8 +596,9 @@ func (c *APIClient) applyHeaders(ctx context.Context, req *http.Request, config 
 		req.Header.Set("Idempotency-Key", idempotencyKey.(string))
 	}
 
-	// Auto-generate idempotency key for POST requests if not already set and auto-generation is enabled
-	if config.Method == http.MethodPost {
+	// Auto-generate idempotency key for POST requests, and for other operations
+	// that take a key, if not already set and auto-generation is enabled
+	if config.Method == http.MethodPost || config.idempotent {
 		if req.Header.Get("Idempotency-Key") == "" && c.cfg.IdempotencyConfig.AutoGenerate {
 			req.Header.Set("Idempotency-Key", c.idempotencyHelper.GenerateKey())
 		}

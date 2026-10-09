@@ -64,27 +64,35 @@ func main() {
 
 	// The template supplies the subject, preview text and both bodies, so the
 	// request carries no content. Leave Subject empty to use the template's.
-	message := requests.CreateMessageRequest{
-		From: common.SenderAddress{
-			Email: "sender@yourdomain.com",
-			Name:  ahasend.String("Your Name"),
-		},
+	// Each recipient gives its own values for the template's variables.
+	message := requests.CreateTemplateMessageRequest{
+		TemplateID: templateID,
 		Recipients: []common.Recipient{
 			{
-				Email: "recipient@example.com",
-				Name:  ahasend.String("Recipient Name"),
-				// A recipient's value wins over the request's for the same name
-				Substitutions: map[string]interface{}{"first_name": "Pat"},
+				Email:         "recipient@example.com",
+				Name:          ahasend.String("Recipient Name"),
+				Substitutions: map[string]interface{}{"first_name": "Pat", "company": "Your Company"},
 			},
 		},
-		TemplateID:    &templateID,
-		Substitutions: map[string]interface{}{"company": "Your Company"},
-		Tags:          []string{"template", "test"},
+		Tags: []string{"template", "test"},
+	}
+
+	// A template with a default sender supplies it when From is nil. A
+	// template without one needs a sender in the request. The template's
+	// reply-to applies whenever the request sets no ReplyTo and no reply-to
+	// header, From or not.
+	if template.From != nil {
+		fmt.Printf("Sending from the template's sender: %s\n", template.From.Email)
+	} else {
+		message.From = &common.SenderAddress{
+			Email: "sender@yourdomain.com",
+			Name:  ahasend.String("Your Name"),
+		}
 	}
 
 	// Send the email
 	fmt.Println("Sending email from template...")
-	response, httpResp, err := client.MessagesAPI.CreateMessage(ctx, accountID, message)
+	response, httpResp, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, message)
 
 	if err != nil {
 		// A missing required variable rejects the whole request, naming each
