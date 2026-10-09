@@ -1356,7 +1356,7 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 		{path: templates, method: "get", operationID: "listTemplates", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
 		{path: templates, method: "post", operationID: "createTemplate", scope: "templates:write", idempotent: true, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
 		{path: template, method: "get", operationID: "getTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
-		{path: template, method: "put", operationID: "updateTemplate", scope: "templates:write", raced: true, statuses: []string{"200", "400", "401", "403", "404", "429", "500", "503"}},
+		{path: template, method: "put", operationID: "updateTemplate", scope: "templates:write", idempotent: true, raced: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
 		{path: template, method: "delete", operationID: "deleteTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: draft, method: "get", operationID: "getTemplateDraft", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: draft, method: "delete", operationID: "discardTemplateDraft", scope: "templates:write", raced: true, statuses: []string{"200", "400", "401", "403", "404", "429", "500", "503"}},
@@ -1515,19 +1515,20 @@ func TestTemplatesAPIEmitsDeclaredTransport(t *testing.T) {
 			assertResult: assertTemplate,
 		},
 		{
-			name:     "update template",
-			method:   http.MethodPut,
-			path:     templatePath,
-			status:   http.StatusOK,
-			response: templateWriteResponseFixture,
-			wantBody: `{"preheader":"","from":null,"content":{"text":null},"publish":true}`,
+			name:           "update template",
+			method:         http.MethodPut,
+			path:           templatePath,
+			status:         http.StatusOK,
+			response:       templateWriteResponseFixture,
+			idempotencyKey: "update-template",
+			wantBody:       `{"preheader":"","from":null,"content":{"text":null},"publish":true}`,
 			call: func(client *APIClient) (any, *http.Response, error) {
 				return client.TemplatesAPI.UpdateTemplate(context.Background(), accountID, templateID, requests.UpdateTemplateRequest{
 					Preheader: ahasend.String(""),
 					From:      &common.SenderAddress{},
 					Content:   &requests.TemplateContentInput{Text: ahasend.String("")},
 					Publish:   true,
-				})
+				}, WithIdempotencyKey("update-template"))
 			},
 			assertResult: assertTemplate,
 		},
@@ -1687,41 +1688,65 @@ func TestTemplatesAPIEmitsDeclaredTransport(t *testing.T) {
 }
 
 func TestTemplatesAPIRetriesARacedWriteWithItsIdempotencyKey(t *testing.T) {
-	var attempts int
-	var keys []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts++
-		keys = append(keys, r.Header.Get("Idempotency-Key"))
-		w.Header().Set("Content-Type", "application/json")
-		if attempts == 1 {
-			w.Header().Set("Retry-After", "1")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"message":"template is being changed by another request, try again"}`))
-			return
-		}
-		_, _ = w.Write([]byte(templateWriteResponseFixture))
-	}))
-	defer server.Close()
-	serverURL, err := url.Parse(server.URL)
-	require.NoError(t, err)
+	tests := []struct {
+		name string
+		call func(*APIClient) (*responses.Template, *http.Response, error)
+	}{
+		{
+			name: "publish template",
+			call: func(client *APIClient) (*responses.Template, *http.Response, error) {
+				return client.TemplatesAPI.PublishTemplate(context.Background(), uuid.New(), uuid.New())
+			},
+		},
+		{
+			name: "update template",
+			call: func(client *APIClient) (*responses.Template, *http.Response, error) {
+				return client.TemplatesAPI.UpdateTemplate(context.Background(), uuid.New(), uuid.New(), requests.UpdateTemplateRequest{
+					Subject: ahasend.String("Reset your password"),
+				})
+			},
+		},
+	}
 
-	cfg := NewConfiguration()
-	cfg.Host = serverURL.Host
-	cfg.Scheme = serverURL.Scheme
-	cfg.APIKey = "test-key"
-	cfg.RetryConfig.Enabled = true
-	cfg.RetryConfig.MaxRetries = 2
-	cfg.RetryConfig.BaseDelay = time.Millisecond
-	cfg.RetryConfig.MaxDelay = time.Millisecond
-	client := NewAPIClientWithConfig(cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int
+			var keys []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				keys = append(keys, r.Header.Get("Idempotency-Key"))
+				w.Header().Set("Content-Type", "application/json")
+				if attempts == 1 {
+					w.Header().Set("Retry-After", "1")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					_, _ = w.Write([]byte(`{"message":"template is being changed by another request, try again"}`))
+					return
+				}
+				_, _ = w.Write([]byte(templateWriteResponseFixture))
+			}))
+			defer server.Close()
+			serverURL, err := url.Parse(server.URL)
+			require.NoError(t, err)
 
-	template, httpResponse, err := client.TemplatesAPI.PublishTemplate(context.Background(), uuid.New(), uuid.New())
+			cfg := NewConfiguration()
+			cfg.Host = serverURL.Host
+			cfg.Scheme = serverURL.Scheme
+			cfg.APIKey = "test-key"
+			cfg.RetryConfig.Enabled = true
+			cfg.RetryConfig.MaxRetries = 2
+			cfg.RetryConfig.BaseDelay = time.Millisecond
+			cfg.RetryConfig.MaxDelay = time.Millisecond
+			client := NewAPIClientWithConfig(cfg)
 
-	require.NoError(t, err)
-	require.NotNil(t, httpResponse)
-	assert.Equal(t, http.StatusOK, httpResponse.StatusCode)
-	assert.Equal(t, "Password reset", template.Name)
-	require.Len(t, keys, 2)
-	assert.NotEmpty(t, keys[0])
-	assert.Equal(t, keys[0], keys[1])
+			template, httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, httpResponse)
+			assert.Equal(t, http.StatusOK, httpResponse.StatusCode)
+			assert.Equal(t, "Password reset", template.Name)
+			require.Len(t, keys, 2)
+			assert.NotEmpty(t, keys[0])
+			assert.Equal(t, keys[0], keys[1])
+		})
+	}
 }

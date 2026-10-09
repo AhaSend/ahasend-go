@@ -148,7 +148,7 @@ It returns 503 when the template keeps changing while the request writes it.
 	@param accountId Account ID
 	@param templateId Template ID
 	@param request UpdateTemplateRequest - the fields to change
-	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@param opts ...RequestOption - optional request options, including WithIdempotencyKey
 	@return Template, *http.Response, error
 */
 func (a *TemplatesAPIService) UpdateTemplate(
@@ -166,6 +166,7 @@ func (a *TemplatesAPIService) UpdateTemplate(
 		PathParams:   templatePathParams(accountId, templateId),
 		Body:         request,
 		Result:       &result,
+		idempotent:   true,
 	}
 	applyRequestOptions(&config, opts)
 

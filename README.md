@@ -143,14 +143,14 @@ template, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.
 ```
 
 - `Content.MJML` makes an `advanced` template and `Content.HTML` an `html` template. A template with neither must set `Editor`. The editor never changes after create, and the HTML of a `simple` template can only be changed in the dashboard.
-- MJML is compiled in strict mode. Images and stylesheets must use full URLs, such as `https://example.com/logo.png`: the API cannot upload files.
-- Beside a new MJML or HTML, leave `Content.Text` nil to make the text from it.
+- MJML is compiled in strict mode. Images and stylesheets must use `https://` URLs, such as `https://example.com/logo.png`: the API cannot upload files. A template variable such as `{{ logo_url }}` is fine.
+- Beside a new MJML or HTML, a nil `Content.Text` keeps a custom text, which must still render, and otherwise makes the text from the new HTML. Point `Content.Text` at `""` to make the text again from the new HTML.
 - `UpdateTemplate` changes only the fields you set; the name changes at once. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject` and `Preheader`, `&common.SenderAddress{}` for `From` (which also clears the reply-to) and `ReplyTo`. `Content.Text` pointing at `""` makes the text again from the HTML.
 - A publish publishes the whole draft, including changes made in the dashboard.
 - `Template.HasDraft` tells whether a draft exists, and `Template.Content` holds the published content. `GetTemplateDraft` returns the draft, and `DiscardTemplateDraft` drops it.
 - `GetTemplateVersions` lists the published versions, newest first, and `GetTemplateVersion` returns one with its content. `RestoreTemplateVersion` copies a version into the draft; set `Publish` to publish it too.
-- The SDK sends an `Idempotency-Key` with `CreateTemplate`, `PublishTemplate` and `RestoreTemplateVersion`, so a retried request is not applied twice.
-- A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a POST with the same key.
+- The SDK sends an `Idempotency-Key` with `CreateTemplate`, `UpdateTemplate`, `PublishTemplate` and `RestoreTemplateVersion`, so a retried request is not applied twice.
+- A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a request with an idempotency key keeps the same key.
 - Reads need the `templates:read` scope, writes `templates:write`, and `DeleteTemplate` needs `templates:delete`.
 
 ## API keys

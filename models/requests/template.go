@@ -26,16 +26,19 @@ type GetTemplatesParams struct {
 // in the dashboard.
 type TemplateContentInput struct {
 	// MJML is the MJML source, only for advanced templates. It is compiled in
-	// strict mode. Images must use full URLs, such as https://.
+	// strict mode. Images and stylesheets must use https:// URLs; a template
+	// variable such as {{ logo_url }} is fine.
 	MJML *string `json:"mjml,omitempty"`
 	// HTML is the HTML, only for html templates. Images and stylesheets must
-	// use full URLs, such as https://.
+	// use https:// URLs; a template variable such as {{ logo_url }} is fine.
 	HTML *string `json:"html,omitempty"`
 	// Text is the plain text version. Beside a new MJML or HTML, a nil Text
-	// makes the text from it; otherwise a nil Text keeps the text. Point it at
-	// "" to make the text again from the HTML. Any other value sets the text,
-	// except that beside a new MJML or HTML a text equal to the text made from
-	// the old HTML is made again from the new one.
+	// keeps a custom text, which must still render as a sent text must;
+	// otherwise, and on a create, it makes the text from the new HTML.
+	// Without a new MJML or HTML, a nil Text keeps the text. Point it at ""
+	// (sent as null) to make the text again from the HTML. Any other value
+	// sets the text, except that beside a new MJML or HTML a text equal to the
+	// text made from the old HTML is made again from the new one.
 	Text *string `json:"text,omitempty"`
 }
 
@@ -84,9 +87,10 @@ type CreateTemplateRequest struct {
 }
 
 // UpdateTemplateRequest represents a partial update to a transactional
-// template. A nil field is not changed or checked. Every field but Name goes
-// to the template's draft, the same draft the dashboard edits; Name changes
-// at once. The editor cannot change.
+// template. A nil field is not changed or checked, apart from a custom text
+// kept beside a new design (see TemplateContentInput.Text). Every field but
+// Name goes to the template's draft, the same draft the dashboard edits; Name
+// changes at once. The editor cannot change.
 type UpdateTemplateRequest struct {
 	// Name is the template name.
 	Name *string `json:"name,omitempty"`

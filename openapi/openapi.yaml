@@ -1511,7 +1511,7 @@ components:
         updated_at:
           type: string
           format: date-time
-          description: When the template's name, tags or published content last changed
+          description: When the template's name or published content last changed
         name:
           type: string
           description: Template name, as it appears in the dashboard
@@ -1742,14 +1742,17 @@ components:
         `html` can be changed only in the dashboard.
 
         The text follows these rules:
-        - Beside a new `mjml` or `html`, a missing or null `text` makes the
-          text from the new HTML. So does a `text` equal to a text made from
-          an earlier HTML: the draft's made text, or the published copy's
-          made text when the draft does not hold that text as custom. A read
-          `content` can so be sent back with a changed design. Any other
-          `text` is stored as made when it equals the text made from the new
-          HTML, and as custom otherwise. To keep a made text beside a new
-          design, send the design first and the text in a second request.
+        - Beside a new `mjml` or `html`, a missing `text` keeps the draft's
+          text when it is custom, and that text must still render, as a sent
+          text must; otherwise, and on a create, it makes the text from the
+          new HTML. A null `text` makes the text from the new
+          HTML, and so does a `text` equal to a text made from an earlier
+          HTML: the draft's made text, or the published copy's made text when
+          the draft does not hold that text as custom. A read `content` can
+          so be sent back with a changed design. Any other `text` is stored
+          as made when it equals the text made from the new HTML, and as
+          custom otherwise. To keep a made text beside a new design, send the
+          design first and the text in a second request.
         - Otherwise a `text` equal to the draft's custom text keeps it; one
           equal to the text made from the draft's HTML is stored as made; any
           other is stored as custom. A null `text` makes the text again from
@@ -1849,7 +1852,8 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Changes to a template. A field left out is not changed or checked.
+        Changes to a template. A field left out is not changed or checked,
+        apart from a custom text kept beside a new design.
         Every field but `name` goes to the draft, as a dashboard save does,
         and a draft equal to the published copy is not kept. The draft is
         shared with the dashboard: `publish: true`, like Publish Template,
@@ -6615,7 +6619,9 @@ paths:
         request can be repeated safely.
 
         `name` is not drafted: it changes when the request succeeds, as its last
-        step. A field the request leaves out is neither changed nor checked.
+        step. A field the request leaves out is neither changed nor checked,
+        apart from a custom text kept beside a new design (see
+        `TemplateContentInput`).
 
         When the template changes in the dashboard or through another request
         while this one writes it, the request applies its fields again over the
@@ -6638,6 +6644,7 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
       security:
         - BearerAuth: ["templates:write"]
       requestBody:
@@ -6649,6 +6656,9 @@ paths:
       responses:
         '200':
           description: Template updated. The Template object is the published copy; `has_draft` says whether a draft is left.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
           content:
             application/json:
               schema:
@@ -6677,6 +6687,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
           description: Too many requests
           content:
@@ -7158,9 +7172,9 @@ paths:
       summary: List Template Versions
       description: |
         Returns a template's published versions, newest first, without their
-        content. Every publish makes a version. A template keeps its 50 most
-        recent versions, so the list is not paginated. Get Template Version
-        returns one version with its content.
+        content. Every publish of a draft makes a version. A template keeps its
+        50 most recent versions, so the list is not paginated. Get Template
+        Version returns one version with its content.
       operationId: listTemplateVersions
       tags:
         - Templates
