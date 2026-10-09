@@ -782,7 +782,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by the [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
         id:
           type: string
           description: Internal AhaSend message ID
@@ -876,7 +876,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by the [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
         url:
           type: string
           description: The URL that was clicked

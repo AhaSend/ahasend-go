@@ -19,11 +19,10 @@ type GetTemplatesParams struct {
 //
 // The content of a draft, or of a template with no draft, can be sent back
 // with its non-empty fields set: an MJML or HTML equal to the stored one keeps
-// the stored HTML. While
-// a draft exists, a template's content is the published one, and sending it
-// back replaces the draft's design, so leave Content nil when it does not
-// change. For a simple template, send only Text: its HTML can be changed only
-// in the dashboard.
+// the stored HTML. While a draft exists, a template's content is the published
+// one, and sending it back replaces the draft's design, so leave Content nil
+// when it does not change. For a simple template, send only Text: its HTML can
+// be changed only in the dashboard.
 type TemplateContentInput struct {
 	// MJML is the MJML source, only for advanced templates. It is compiled in
 	// strict mode. Images and stylesheets must use https:// URLs; a template
