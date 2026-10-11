@@ -37,6 +37,9 @@ var (
 	// ErrExpiredTimestamp is returned when the webhook timestamp is outside the
 	// tolerance window, in either direction: too old, or too far in the future
 	ErrExpiredTimestamp = errors.New("webhook timestamp outside tolerance")
+	// ErrInvalidTimestamp is returned when the webhook timestamp header is not a
+	// Unix timestamp in seconds
+	ErrInvalidTimestamp = errors.New("invalid webhook timestamp")
 	// ErrInvalidPayload is returned when the webhook payload cannot be parsed
 	ErrInvalidPayload = errors.New("invalid webhook payload")
 	// ErrUnknownEventType is returned when the webhook event type is not recognized
@@ -76,7 +79,7 @@ func (v *WebhookVerifier) Verify(payload []byte, headers http.Header) error {
 	// Parse and validate timestamp
 	timestamp, err := strconv.ParseInt(msgTimestamp, 10, 64)
 	if err != nil {
-		return fmt.Errorf("invalid timestamp: %w", err)
+		return fmt.Errorf("%w: %v", ErrInvalidTimestamp, err)
 	}
 
 	// Standard Webhooks requires the timestamp to be within tolerance of now in
@@ -214,7 +217,8 @@ func (v *WebhookVerifier) Parse(payload []byte, headers http.Header) (WebhookEve
 		}
 		return &event, nil
 
-	// Route events
+	// Route events. route.message is the legacy name of message.routing.
+	// webhooks.yaml no longer lists it, but it stays accepted as input.
 	case "message.routing", "route.message":
 		var event RouteMessageEvent
 		if err := json.Unmarshal(payload, &event); err != nil {

@@ -265,9 +265,9 @@ func (a *SubAccountsAPIService) DeleteSubAccount(
 }
 
 /*
-SuspendSubAccount Suspend Sub Account
+SuspendSubAccount Pause Sub Account
 
-Suspends a sub account under the parent account.
+Pauses sending on a sub account under the parent account. The status of the sub account becomes `suspended`.
 
 Validation Requirements:
 - `reason` must be provided and non-empty
@@ -275,7 +275,7 @@ Validation Requirements:
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Parent account ID
 	@param subAccountId Sub account ID
-	@param request SuspendSubAccountRequest - The suspension details
+	@param request SuspendSubAccountRequest - The pause details
 	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
 	@return SubAccount, *http.Response, error
 */
@@ -307,9 +307,10 @@ func (a *SubAccountsAPIService) SuspendSubAccount(
 }
 
 /*
-UnsuspendSubAccount Unsuspend Sub Account
+UnsuspendSubAccount Resume Sub Account
 
-Unsuspends a sub account under the parent account.
+Resumes sending on a paused sub account under the parent account. A pause that
+AhaSend started can only be resumed by AhaSend support; the call answers 403.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Parent account ID
@@ -331,6 +332,47 @@ func (a *SubAccountsAPIService) UnsuspendSubAccount(
 		PathParams: map[string]string{
 			"account_id":     accountId.String(),
 			"sub_account_id": subAccountId.String(),
+		},
+		Result: &result,
+	}
+
+	// Apply options
+	applyRequestOptions(&config, opts)
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
+UnpauseSubAccountDomain Unpause Sub Account Domain
+
+Lifts the pause on a domain of a sub account under the parent account, so that the domain can send again.
+The call is idempotent: if sending from the domain is not paused, it changes nothing and returns the domain.
+A change of the pause can take some minutes to apply to new email.
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Parent account ID
+	@param subAccountId Sub account ID
+	@param domain Domain name
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return Domain, *http.Response, error
+*/
+func (a *SubAccountsAPIService) UnpauseSubAccountDomain(
+	ctx context.Context,
+	accountId uuid.UUID,
+	subAccountId uuid.UUID,
+	domain string,
+	opts ...RequestOption,
+) (*responses.Domain, *http.Response, error) {
+	var result responses.Domain
+
+	config := RequestConfig{
+		Method:       http.MethodPost,
+		PathTemplate: "/v2/accounts/{account_id}/sub-accounts/{sub_account_id}/domains/{domain}/unpause",
+		PathParams: map[string]string{
+			"account_id":     accountId.String(),
+			"sub_account_id": subAccountId.String(),
+			"domain":         domain,
 		},
 		Result: &result,
 	}

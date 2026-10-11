@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/AhaSend/ahasend-go/internal/prismmock"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -142,6 +143,49 @@ func Test_ahasend_DomainsAPIService(t *testing.T) {
 		resp, httpRes, err := apiClient.DomainsAPI.GetDomains(auth, accountId, nil, nil, nil)
 
 		validatePrismResponse(t, resp, httpRes, err)
+
+	})
+
+	t.Run("Test DomainsAPIService GetDomainsWithParams", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		sendingType := common.DomainSendingTypeMarketing
+
+		resp, httpRes, err := apiClient.DomainsAPI.GetDomainsWithParams(auth, accountId, requests.GetDomainsParams{
+			SendingType: &sendingType,
+		})
+
+		// Prism validates the sending_type value against the specification.
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, httpRes.StatusCode)
+		require.NotNil(t, resp)
+
+	})
+
+	t.Run("Test DomainsAPIService CreateDomain with sending type", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		sendingType := common.DomainSendingTypeMarketing
+		createDomainRequest := requests.CreateDomainRequest{
+			Domain:      "example.com",
+			SendingType: &sendingType,
+		}
+
+		resp, httpRes, err := apiClient.DomainsAPI.CreateDomain(auth, accountId, createDomainRequest)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusCreated, httpRes.StatusCode)
+		require.NotNil(t, resp)
 
 	})
 

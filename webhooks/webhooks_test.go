@@ -75,6 +75,29 @@ func TestWebhookVerification(t *testing.T) {
 		assert.ErrorIs(t, err, ErrExpiredTimestamp)
 	})
 
+	t.Run("malformed timestamp", func(t *testing.T) {
+		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{}}`
+
+		for _, timestamp := range []string{"not-a-number", "1714989016.5", "2024-05-06T09:50:16Z"} {
+			t.Run(timestamp, func(t *testing.T) {
+				headers := http.Header{}
+				headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
+				headers.Set("webhook-timestamp", timestamp)
+				headers.Set("webhook-signature", generateSignature(t, verifier, headers.Get("webhook-id"), timestamp, payload))
+
+				err := verifier.Verify([]byte(payload), headers)
+				assert.ErrorIs(t, err, ErrInvalidTimestamp)
+				assert.NotErrorIs(t, err, ErrExpiredTimestamp)
+				// The parse error stays in the message.
+				assert.Contains(t, err.Error(), timestamp)
+
+				event, err := verifier.Parse([]byte(payload), headers)
+				assert.ErrorIs(t, err, ErrInvalidTimestamp)
+				assert.Nil(t, event)
+			})
+		}
+	})
+
 	t.Run("missing headers", func(t *testing.T) {
 		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{}}`
 
@@ -551,6 +574,119 @@ func TestWebhookParsing(t *testing.T) {
 		routeEvent, ok := event.(*RouteMessageEvent)
 		require.True(t, ok)
 		assert.Equal(t, "route.message", routeEvent.Type)
+	})
+
+	t.Run("parse message event with a sender name in from", func(t *testing.T) {
+		payload := `{
+			"type": "message.delivered",
+			"timestamp": "2026-10-01T09:50:16.687031577Z",
+			"data": {
+				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+				"event": "on_delivered",
+				"from": "Acme News <news@example.com>",
+				"recipient": "recipient@example.com",
+				"subject": "October news",
+				"message_id_header": "<campaign-1@example.com>",
+				"id": "407926766d2711f09b30960002cafe7c"
+			}
+		}`
+
+		event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+		require.NoError(t, err)
+		data := GetMessageEventData(event)
+		require.NotNil(t, data)
+		assert.Equal(t, "Acme News <news@example.com>", data.From)
+	})
+
+	t.Run("parse message.clicked event with a sender name in from", func(t *testing.T) {
+		payload := `{
+			"type": "message.clicked",
+			"timestamp": "2026-10-01T09:50:16.687031577Z",
+			"data": {
+				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+				"event": "on_clicked",
+				"from": "\"Acme, Inc.\" <news@example.com>",
+				"recipient": "recipient@example.com",
+				"subject": "October news",
+				"message_id_header": "<campaign-1@example.com>",
+				"url": "https://example.com/offer",
+				"user_agent": "Mozilla/5.0",
+				"ip": "203.0.113.7",
+				"id": "407926766d2711f09b30960002cafe7c",
+				"is_bot": false
+			}
+		}`
+
+		event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+		require.NoError(t, err)
+		clickedEvent, ok := event.(*MessageClickedEvent)
+		require.True(t, ok)
+		assert.Equal(t, `"Acme, Inc." <news@example.com>`, clickedEvent.Data.From)
+	})
+
+	t.Run("parse route event with display names and several addresses", func(t *testing.T) {
+		payload := `{
+			"type": "message.routing",
+			"route_id": "550e8400-e29b-41d4-a716-446655440000",
+			"timestamp": "2026-10-01T13:15:46.404433272Z",
+			"data": {
+				"id": "route-msg-grouped",
+				"from": "Jane Doe <jane@example.org>",
+				"reply_to": "\"Doe, Jane\" <jane@example.org>, team@example.org",
+				"to": "Support <support@yourdomain.com>, sales@yourdomain.com",
+				"subject": "Several recipients",
+				"message_id": "<grouped@example.org>",
+				"size": 512,
+				"spam_score": -1.5,
+				"bounce": false,
+				"html_body": "",
+				"plain_body": ""
+			}
+		}`
+
+		event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+		require.NoError(t, err)
+		routeEvent, ok := event.(*RouteMessageEvent)
+		require.True(t, ok)
+		assert.Equal(t, "Jane Doe <jane@example.org>", routeEvent.Data.From)
+		require.NotNil(t, routeEvent.Data.ReplyTo)
+		assert.Equal(t, `"Doe, Jane" <jane@example.org>, team@example.org`, *routeEvent.Data.ReplyTo)
+		assert.Equal(t, "Support <support@yourdomain.com>, sales@yourdomain.com", routeEvent.Data.To)
+		require.NotNil(t, routeEvent.Data.SpamScore)
+		assert.Equal(t, -1.5, *routeEvent.Data.SpamScore)
+	})
+
+	t.Run("parse route event spam scores, in and out of 0 to 10, at full float64 precision", func(t *testing.T) {
+		for _, score := range []string{"-1.5", "12.25", "7.3", "0"} {
+			t.Run(score, func(t *testing.T) {
+				payload := `{
+					"type": "message.routing",
+					"timestamp": "2026-10-01T13:15:46.404433272Z",
+					"data": {
+						"id": "route-msg-score",
+						"from": "jane@example.org",
+						"to": "support@yourdomain.com",
+						"subject": "Score",
+						"message_id": "<score@example.org>",
+						"size": 100,
+						"spam_score": ` + score + `,
+						"bounce": false,
+						"html_body": "",
+						"plain_body": ""
+					}
+				}`
+
+				event, err := verifier.Parse([]byte(payload), createValidHeaders(payload))
+				require.NoError(t, err)
+				routeEvent, ok := event.(*RouteMessageEvent)
+				require.True(t, ok)
+				require.NotNil(t, routeEvent.Data.SpamScore)
+				want, err := strconv.ParseFloat(score, 64)
+				require.NoError(t, err)
+				// 7.3 has no exact float32 form, so this fails for a float32 field.
+				assert.Equal(t, want, *routeEvent.Data.SpamScore)
+			})
+		}
 	})
 
 	t.Run("parse unknown event type", func(t *testing.T) {

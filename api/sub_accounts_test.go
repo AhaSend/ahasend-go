@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/AhaSend/ahasend-go"
+	"github.com/AhaSend/ahasend-go/internal/prismmock"
 	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/google/uuid"
@@ -330,6 +332,42 @@ func TestSubAccountsAPISuccessPaths(t *testing.T) {
 		assert.Equal(t, http.StatusOK, httpResp.StatusCode)
 		require.NotNil(t, resp)
 		assert.Equal(t, "active", resp.Status)
+	})
+
+	t.Run("UnpauseSubAccountDomain", func(t *testing.T) {
+		client, cleanup := newSubAccountsTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, subAccountPath+"/domains/example.com/unpause", r.URL.Path)
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(fmt.Sprintf(`{
+				"object": "domain",
+				"id": "5b8f3a2c-1d4e-4f6a-9b7c-8d9e0f1a2b3c",
+				"created_at": "2024-01-01T00:00:00Z",
+				"updated_at": "2024-01-02T00:00:00Z",
+				"domain": "example.com",
+				"account_id": "%s",
+				"dns_records": [],
+				"dns_valid": true,
+				"rotation_ready": false,
+				"sending_type": "transactional",
+				"paused": false,
+				"paused_at": null,
+				"pause_reason": null
+			}`, subAccountID.String())))
+		})
+		defer cleanup()
+
+		resp, httpResp, err := client.SubAccountsAPI.UnpauseSubAccountDomain(context.Background(), accountID, subAccountID, "example.com")
+
+		require.NoError(t, err)
+		require.NotNil(t, httpResp)
+		assert.Equal(t, http.StatusOK, httpResp.StatusCode)
+		require.NotNil(t, resp)
+		assert.Equal(t, "example.com", resp.Domain)
+		assert.Equal(t, subAccountID, resp.AccountID)
+		assert.False(t, resp.Paused)
 	})
 }
 
@@ -868,4 +906,35 @@ func TestSubAccountAPIKeyErrorTypes(t *testing.T) {
 			})
 		}
 	}
+}
+
+func Test_ahasend_SubAccountsAPIService(t *testing.T) {
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "true" {
+		t.Skip("Skipping API integration tests (SKIP_INTEGRATION_TESTS=true)")
+	}
+
+	configuration := NewConfiguration()
+	configuration.Host = prismmock.Addr() // Point to the Prism mock server
+	configuration.Scheme = "http"         // Use HTTP for mock server
+	apiClient := NewAPIClientWithConfig(configuration)
+
+	// Create authentication context
+	auth := context.WithValue(context.Background(), ContextAccessToken, "test-api-key")
+
+	t.Run("Test SubAccountsAPIService UnpauseSubAccountDomain", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		resp, httpRes, err := apiClient.SubAccountsAPI.UnpauseSubAccountDomain(auth, uuid.New(), uuid.New(), "example.com")
+
+		// Prism validates the path against the specification and answers
+		// with a Domain built from its schema.
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, httpRes.StatusCode)
+		require.NotNil(t, resp)
+
+	})
 }

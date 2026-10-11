@@ -23,7 +23,7 @@ info:
 
     - `webhook-id`: Unique identifier for the webhook event (used as idempotency key)
     - `webhook-timestamp`: Unix timestamp when the webhook was sent
-    - `webhook-signature`: HMAC-SHA256 signature of the payload using the resource secret
+    - `webhook-signature`: HMAC-SHA256 signature of the payload using the resource secret, written as `v1,` followed by the signature in standard Base64
 
     ### Verification
 
@@ -35,10 +35,11 @@ info:
 
     ### Retry Policy
 
-    - Failed webhooks are retried **6 times** over **16+ minutes**
+    - Each webhook delivery is tried up to **6 times** in all (the first try and 5 retries), over about **16 minutes**
+    - Each route delivery is tried up to **12 times** in all, over about **11 hours**
     - Only HTTP status codes **200-299** are considered successful
-    - After **100 consecutive failures**, the webhook is automatically disabled
-    - You'll receive an email notification when a webhook is disabled
+    - When more than **100 attempts in a row** fail, retries included, the webhook or route is automatically disabled
+    - You'll receive an email notification when a webhook or route is disabled
 
     ### Payload Format
 
@@ -769,8 +770,9 @@ components:
           description: The specific event that occurred
         from:
           type: string
-          format: email
-          description: Sender email address
+          description: |
+            Sender address. For a campaign message it includes the sender's
+            name, as `Name <address>`.
         recipient:
           type: string
           format: email
@@ -780,7 +782,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by the [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
         id:
           type: string
           description: Internal AhaSend message ID
@@ -862,8 +864,9 @@ components:
           description: The specific event that occurred
         from:
           type: string
-          format: email
-          description: Sender email address
+          description: |
+            Sender address. For a campaign message it includes the sender's
+            name, as `Name <address>`.
         recipient:
           type: string
           format: email
@@ -873,7 +876,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by the [Create Message API](https://ahasend.com/docs/api-reference/messages/create-message))
+          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
         url:
           type: string
           description: The URL that was clicked
@@ -1110,9 +1113,8 @@ components:
       properties:
         type:
           type: string
-          enum: [message.routing, route.message]
-          x-deprecated-values: [route.message]
-          description: The event type. `message.routing` is canonical; legacy `route.message` remains accepted as deprecated input.
+          enum: [message.routing]
+          description: The event type
         timestamp:
           type: string
           format: date-time
@@ -1156,12 +1158,15 @@ components:
           description: Sender mailbox text
         reply_to:
           type: string
-          format: email
-          description: Reply-to email address
+          description: |
+            The message's Reply-To header as received, which may include a
+            display name or several addresses. Empty when the message has none.
         to:
           type: string
-          format: email
-          description: Recipient email address (your route endpoint)
+          description: |
+            The recipient address the route matched. On a route that groups
+            by Message-ID, the message's To header as received instead, which
+            may include display names and several addresses.
         subject:
           type: string
           description: Email subject line
@@ -1173,8 +1178,11 @@ components:
           description: Email size in bytes
         spam_score:
           type: number
-          format: float
-          description: Spam score (0.0 to 10.0)
+          format: double
+          description: |
+            The spam filter's score for the message. Higher means more likely
+            spam; it can be below 0 or above 10. It is 0 when the message was
+            not checked.
         bounce:
           type: boolean
           description: Whether this is a bounce message

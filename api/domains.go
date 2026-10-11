@@ -206,7 +206,7 @@ func (a *DomainsAPIService) GetDomain(
 /*
 GetDomains Get Domains
 
-Returns a list of domains for the account
+Returns a list of domains for the account. Use GetDomainsWithParams to filter by sending type.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -222,32 +222,45 @@ func (a *DomainsAPIService) GetDomains(
 	pagination *common.PaginationParams,
 	opts ...RequestOption,
 ) (*responses.PaginatedDomainsResponse, *http.Response, error) {
+	params := requests.GetDomainsParams{DNSValid: dnsValid}
+	if pagination != nil {
+		params.PaginationParams = *pagination
+	}
+	return a.GetDomainsWithParams(ctx, accountId, params, opts...)
+}
+
+// GetDomainsWithParams returns domains and supports every filter of the list, including the sending type.
+func (a *DomainsAPIService) GetDomainsWithParams(
+	ctx context.Context,
+	accountId uuid.UUID,
+	params requests.GetDomainsParams,
+	opts ...RequestOption,
+) (*responses.PaginatedDomainsResponse, *http.Response, error) {
 	var result responses.PaginatedDomainsResponse
 
 	// Build query parameters
 	queryParams := url.Values{}
-	if dnsValid != nil {
-		queryParams.Set("dns_valid", fmt.Sprintf("%t", *dnsValid))
+	if params.DNSValid != nil {
+		queryParams.Set("dns_valid", fmt.Sprintf("%t", *params.DNSValid))
+	}
+	if params.SendingType != nil {
+		queryParams.Set("sending_type", *params.SendingType)
 	}
 
 	// Handle pagination parameters
-	if pagination != nil {
-		if pagination.Limit != nil {
-			queryParams.Set("limit", fmt.Sprintf("%d", *pagination.Limit))
-		} else {
-			queryParams.Set("limit", "100") // Default value
-		}
-
-		// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
-		if pagination.After != nil {
-			queryParams.Set("after", *pagination.After)
-		} else if pagination.Before != nil {
-			queryParams.Set("before", *pagination.Before)
-		} else if pagination.Cursor != nil {
-			queryParams.Set("cursor", *pagination.Cursor)
-		}
+	if params.Limit != nil {
+		queryParams.Set("limit", fmt.Sprintf("%d", *params.Limit))
 	} else {
 		queryParams.Set("limit", "100") // Default value
+	}
+
+	// Handle pagination parameters - prioritize after/before over cursor for backward compatibility
+	if params.After != nil {
+		queryParams.Set("after", *params.After)
+	} else if params.Before != nil {
+		queryParams.Set("before", *params.Before)
+	} else if params.Cursor != nil {
+		queryParams.Set("cursor", *params.Cursor)
 	}
 
 	config := RequestConfig{

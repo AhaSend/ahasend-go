@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -55,15 +56,24 @@ func webhookHandler(verifier *webhooks.WebhookVerifier) http.HandlerFunc {
 		// Parse and verify the webhook
 		event, err := verifier.ParseRequest(r)
 		if err != nil {
-			log.Printf("Failed to verify webhook: %v", err)
-
-			// Determine appropriate error code
-			switch err {
-			case webhooks.ErrMissingHeaders, webhooks.ErrInvalidSignature, webhooks.ErrExpiredTimestamp:
+			// The SDK wraps these errors, so match them with errors.Is.
+			switch {
+			case errors.Is(err, webhooks.ErrUnknownEventType):
+				// The request is signed, but this SDK version does not know the
+				// event type. Acknowledge it: AhaSend can add event types at any
+				// time, and when more than 100 attempts in a row fail, retries
+				// included, the webhook or route is automatically disabled.
+				log.Printf("Ignoring webhook: %v", err)
+				w.WriteHeader(http.StatusOK)
+			case errors.Is(err, webhooks.ErrMissingHeaders), errors.Is(err, webhooks.ErrInvalidSignature),
+				errors.Is(err, webhooks.ErrExpiredTimestamp), errors.Is(err, webhooks.ErrInvalidTimestamp):
+				log.Printf("Failed to verify webhook: %v", err)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			case webhooks.ErrInvalidPayload, webhooks.ErrUnknownEventType:
+			case errors.Is(err, webhooks.ErrInvalidPayload):
+				log.Printf("Failed to parse webhook: %v", err)
 				http.Error(w, "Bad Request", http.StatusBadRequest)
 			default:
+				log.Printf("Failed to read webhook: %v", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			}
 			return

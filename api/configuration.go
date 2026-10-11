@@ -251,6 +251,8 @@ func NewAPIClientWithConfig(cfg *Configuration) *APIClient {
 	// API Services
 	c.APIKeysAPI = (*APIKeysAPIService)(&c.common)
 	c.AccountsAPI = (*AccountsAPIService)(&c.common)
+	c.CampaignTemplatesAPI = (*CampaignTemplatesAPIService)(&c.common)
+	c.CampaignsAPI = (*CampaignsAPIService)(&c.common)
 	c.ContactsAPI = (*ContactsAPIService)(&c.common)
 	c.DomainsAPI = (*DomainsAPIService)(&c.common)
 	c.ListsAPI = (*ListsAPIService)(&c.common)

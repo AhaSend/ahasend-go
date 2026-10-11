@@ -23,7 +23,11 @@ const templateAPIResponseJSON = `{
 	"name":"Password reset",
 	"subject":"Reset your password",
 	"preheader":"It expires in an hour",
-	"variables":[{"name":"first_name","required":true},{"name":"reset_url","required":false}]
+	"variables":[{"name":"first_name","required":true},{"name":"reset_url","required":false}],
+	"from":null,
+	"reply_to":null,
+	"editor":"html",
+	"has_draft":false
 }`
 
 func Test_ahasend_TemplatesAPIService(t *testing.T) {
@@ -41,6 +45,7 @@ func Test_ahasend_TemplatesAPIService(t *testing.T) {
 	auth := context.WithValue(context.Background(), ContextAccessToken, "test-api-key")
 	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	versionID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
 
 	validatePrismResponse := func(t *testing.T, response any, httpResponse *http.Response, err error) {
 		t.Helper()
@@ -62,6 +67,57 @@ func Test_ahasend_TemplatesAPIService(t *testing.T) {
 
 	t.Run("GetTemplate", func(t *testing.T) {
 		response, httpResponse, err := apiClient.TemplatesAPI.GetTemplate(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("CreateTemplate", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.CreateTemplate(auth, accountID, requests.CreateTemplateRequest{
+			Name:    "Password reset",
+			Content: &requests.TemplateContentInput{HTML: ahasend.String("<p>Hi</p>")},
+		})
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("UpdateTemplate", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.UpdateTemplate(auth, accountID, templateID, requests.UpdateTemplateRequest{
+			Subject: ahasend.String("Reset your password"),
+			Content: &requests.TemplateContentInput{Text: ahasend.String("")},
+		})
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("DeleteTemplate", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.DeleteTemplate(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("GetTemplateDraft", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.GetTemplateDraft(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("DiscardTemplateDraft", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.DiscardTemplateDraft(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("PublishTemplate", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.PublishTemplate(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("GetTemplateVersions", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.GetTemplateVersions(auth, accountID, templateID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("GetTemplateVersion", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.GetTemplateVersion(auth, accountID, templateID, versionID)
+		validatePrismResponse(t, response, httpResponse, err)
+	})
+
+	t.Run("RestoreTemplateVersion", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.RestoreTemplateVersion(auth, accountID, templateID, versionID, requests.RestoreTemplateVersionRequest{Publish: true})
 		validatePrismResponse(t, response, httpResponse, err)
 	})
 }

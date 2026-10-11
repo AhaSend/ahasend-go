@@ -92,6 +92,31 @@ func Test_ahasend_MessagesAPIService(t *testing.T) {
 
 	})
 
+	t.Run("Test MessagesAPIService CreateTemplateMessage", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+		createTemplateMessageRequest := requests.CreateTemplateMessageRequest{
+			TemplateID: uuid.New(),
+			Recipients: []common.Recipient{
+				{
+					Email:         "recipient@example.com",
+					Name:          ahasend.String("Test Recipient"),
+					Substitutions: map[string]interface{}{"first_name": "Test"},
+				},
+			},
+		}
+
+		resp, httpRes, err := apiClient.MessagesAPI.CreateTemplateMessage(auth, accountId, createTemplateMessageRequest)
+
+		validatePrismResponse(t, resp, httpRes, err)
+
+	})
+
 	t.Run("Test MessagesAPIService GetMessages", func(t *testing.T) {
 
 		// Skip test when not running against a real API

@@ -52,6 +52,9 @@ type Message struct {
 	ReferenceMessageID   *int64          `json:"reference_message_id,omitempty"`
 	DomainID             uuid.UUID       `json:"domain_id"`
 	AccountID            uuid.UUID       `json:"account_id"`
+	// TemplateID is the transactional template the message was sent from, or
+	// nil for a message sent without one.
+	TemplateID *uuid.UUID `json:"template_id,omitempty"`
 }
 
 // DeliveryEvent represents a single delivery attempt for a message

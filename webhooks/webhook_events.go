@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// MessageEventData contains the common data for message webhook events
+// MessageEventData contains the common data for message webhook events.
+// For a campaign message, From includes the sender's name, as "Name <address>".
 type MessageEventData struct {
 	AccountID       string  `json:"account_id"`
 	Event           string  `json:"event"`
@@ -29,7 +30,8 @@ type MessageEventData struct {
 	DeliveryAttempt *DeliveryAttempt `json:"delivery_attempt,omitempty"`
 }
 
-// MessageClickedEventData contains data specific to message clicked events
+// MessageClickedEventData contains data specific to message clicked events.
+// For a campaign message, From includes the sender's name, as "Name <address>".
 type MessageClickedEventData struct {
 	AccountID       string `json:"account_id"`
 	Event           string `json:"event"`
@@ -52,8 +54,8 @@ type MessageClickedEventData struct {
 // arrive. The underlying type is string precisely so that an unfamiliar value
 // decodes without error: switch on the values you handle and keep a default
 // branch for the rest. Never reject a delivery because the value is
-// unrecognized — a webhook endpoint that answers 400 is disabled after 100
-// consecutive failures.
+// unrecognized — when more than 100 attempts in a row fail, retries included,
+// the webhook or route is automatically disabled.
 type DeliveryAttemptClassification string
 
 const (
@@ -182,7 +184,17 @@ type RouteAttachment struct {
 	Data        string `json:"data"`
 }
 
-// RouteEventData contains data for route webhook events
+// RouteEventData contains data for route webhook events.
+//
+// ReplyTo is the message's Reply-To header as received, which may include a
+// display name or several addresses. To is the recipient address the route
+// matched; on a route that groups by Message-ID it is the message's To header
+// as received, which may include display names and several addresses. Parse
+// both as address lists, not as single bare addresses.
+//
+// SpamScore is the spam filter's score for the message. Higher means more
+// likely spam; it can be below 0 or above 10. It is 0 when the message was not
+// checked.
 type RouteEventData struct {
 	ID                 string   `json:"id"`
 	From               string   `json:"from"`
@@ -191,7 +203,7 @@ type RouteEventData struct {
 	Subject            string   `json:"subject"`
 	MessageID          string   `json:"message_id"`
 	Size               int      `json:"size"`
-	SpamScore          *float32 `json:"spam_score,omitempty"`
+	SpamScore          *float64 `json:"spam_score,omitempty"`
 	Bounce             bool     `json:"bounce"`
 	CC                 *string  `json:"cc,omitempty"`
 	Date               *string  `json:"date,omitempty"`
