@@ -255,6 +255,10 @@ type APIClient struct {
 
 	AccountsAPI *AccountsAPIService
 
+	CampaignTemplatesAPI *CampaignTemplatesAPIService
+
+	CampaignsAPI *CampaignsAPIService
+
 	ContactsAPI *ContactsAPIService
 
 	DomainsAPI *DomainsAPIService
@@ -321,6 +325,8 @@ func NewAPIClient(opts ...ClientOption) *APIClient {
 	// API Services
 	c.APIKeysAPI = (*APIKeysAPIService)(&c.common)
 	c.AccountsAPI = (*AccountsAPIService)(&c.common)
+	c.CampaignTemplatesAPI = (*CampaignTemplatesAPIService)(&c.common)
+	c.CampaignsAPI = (*CampaignsAPIService)(&c.common)
 	c.ContactsAPI = (*ContactsAPIService)(&c.common)
 	c.DomainsAPI = (*DomainsAPIService)(&c.common)
 	c.ListsAPI = (*ListsAPIService)(&c.common)

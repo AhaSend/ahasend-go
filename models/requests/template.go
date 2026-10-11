@@ -51,7 +51,7 @@ func (c TemplateContentInput) MarshalJSON() ([]byte, error) {
 	}{MJML: c.MJML, HTML: c.HTML}
 
 	var err error
-	if wire.Text, err = encodeText(c.Text); err != nil {
+	if wire.Text, err = encodeString(c.Text); err != nil {
 		return nil, err
 	}
 
@@ -147,16 +147,16 @@ type RestoreTemplateVersionRequest struct {
 	Publish bool `json:"publish,omitempty"`
 }
 
-// encodeText leaves a nil text out, sends a text that points at "" as null,
-// and any other text as itself.
-func encodeText(text *string) (json.RawMessage, error) {
+// encodeString leaves a nil string out, sends a string that points at "" as
+// null, and any other string as itself.
+func encodeString(value *string) (json.RawMessage, error) {
 	switch {
-	case text == nil:
+	case value == nil:
 		return nil, nil
-	case *text == "":
+	case *value == "":
 		return json.RawMessage("null"), nil
 	}
-	return json.Marshal(*text)
+	return json.Marshal(*value)
 }
 
 // encodeAddress leaves a nil address out, sends an empty address as null, and
