@@ -342,8 +342,9 @@ Each address gets the design with placeholders for the contact's fields. A
 campaign with any issue but unsubscribe_link_missing is refused with 400 and
 the issues; AsCampaignNotReady returns them. An account can send 50 test
 emails per day (UTC), counted per address, from the API and the dashboard
-together; past that the request returns 429 with the message
-"daily test send limit reached".
+together. Past that, the request returns 429; its message currently reads
+"daily test send limit reached". The limit clears only when the UTC day
+changes, and the client retries the 429 as it retries any 429.
 
 With an idempotency key, a 2xx answer is replayed, so a retry with the same
 key sends nothing again. A 4xx answer is not stored, so a retry with the same
