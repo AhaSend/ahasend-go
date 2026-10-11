@@ -856,7 +856,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
+          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are.
       example:
         email: "user@example.com"
         name: "John Doe"
@@ -993,7 +993,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Global substitutions, recipient substitutions override global. Values are inserted as they are, with no HTML escaping; escape any value that comes from your users.
+          description: Global substitutions, recipient substitutions override global. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are.
         tags:
           type: array
           items:
@@ -1508,11 +1508,11 @@ components:
             Whether each recipient of a send has to supply a value for this
             variable. A variable the design wraps in a fallback is not required.
 
-            `email`, `view_browser_url` and `unsubscribe_url` are never
-            required: the send supplies them for each recipient and replaces a
-            value the recipient gives. `email` is the recipient's address and
-            `view_browser_url` is empty. `unsubscribe_url` is a link made for
-            the recipient, and the message then carries `List-Unsubscribe` and
+            `email` and `unsubscribe_url` are never required: the send
+            supplies them for each recipient and replaces a value the
+            recipient gives. `email` is the recipient's address.
+            `unsubscribe_url` is a link made for the recipient, and the
+            message then carries `List-Unsubscribe` and
             `List-Unsubscribe-Post` headers for it; a `List-Unsubscribe` or
             `List-Unsubscribe-Post` in the request's `headers` is dropped.
 
@@ -2108,7 +2108,7 @@ components:
             - `preheader_missing`: the campaign has no preview text.
             - `design_missing`: the campaign has no design, or its design has no HTML.
             - `text_broken`: the subject, the preview text or the design holds template syntax that cannot be rendered, so every message would fail.
-            - `unsubscribe_link_missing`: the HTML uses neither `{{ unsubscribe_url }}` nor `{{ unsubscribe_link }}`, with or without filters.
+            - `unsubscribe_link_missing`: the HTML does not use `{{ unsubscribe_url }}`, with or without filters.
         message:
           type: string
           description: What to do, in the words the dashboard uses.
@@ -6410,7 +6410,7 @@ paths:
         Your `subject` and `headers` resolve from the same values. A `{{ name }}` that has no value becomes empty.
 
         **Reserved variables:**
-        The send supplies `email` and `view_browser_url` for each recipient: `email` is the recipient's address, and `view_browser_url` is empty. When the template's design uses `unsubscribe_url`, the send also supplies it: a link made for each recipient. The message then carries `List-Unsubscribe` with that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so the unsubscribe button of a mail client works. That button suppresses the recipient for the sending domain at once. The link opens a confirmation page, and the suppression happens when the recipient confirms. A `List-Unsubscribe` or `List-Unsubscribe-Post` in your `headers` is dropped, in any letter case. When the design does not use `unsubscribe_url`, no link is made and your headers are sent as you give them.
+        The send supplies `email` for each recipient: the recipient's address. When the template's design uses `unsubscribe_url`, the send also supplies it: a link made for each recipient. The message then carries `List-Unsubscribe` with that link and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so the unsubscribe button of a mail client works. That button suppresses the recipient for the sending domain at once. The link opens a confirmation page, and the suppression happens when the recipient confirms. A `List-Unsubscribe` or `List-Unsubscribe-Post` in your `headers` is dropped, in any letter case. When the design does not use `unsubscribe_url`, no link is made and your headers are sent as you give them.
 
         A recipient's own value for a reserved variable is replaced.
 
@@ -6441,10 +6441,10 @@ paths:
         2. A `from` in the request: its domain, as on Create Message.
         3. No `from`, and an API key that cannot send from any domain: 403 `this api key is not authorized to send messages`.
         4. A `template_id` that is not one of this account's transactional templates: 404 `template not found`.
-        5. A default sender or reply-to of the template that the send would use and that is not valid: 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it`.
-        6. No `from`: the template's default sender (see Sender) and its domain.
-        7. A template with neither an HTML nor a text body: 400 `template has no published content, design it and publish it`.
-        8. An HTML or text body that holds a `{{`, `{%` or `{#` that cannot be rendered: 400 `template's published design holds a {{, {% or {# that cannot be rendered, fix it and publish it`.
+        5. A template with neither an HTML nor a text body: 400 `template has no published content, design it and publish it`.
+        6. An HTML or text body that holds a `{{`, `{%` or `{#` that cannot be rendered: 400 `template's published design holds a {{, {% or {# that cannot be rendered, fix it and publish it`.
+        7. A default sender or reply-to of the template that the send would use and that is not valid: 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it`.
+        8. No `from`: the template's default sender (see Sender) and its domain.
         9. The subject (see Subject), then the variables of each recipient (see Variables).
         10. The sandbox fields, then whether the account can send and whether sending from the domain is paused, as on Create Message.
 

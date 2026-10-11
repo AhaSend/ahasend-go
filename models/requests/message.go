@@ -9,15 +9,18 @@ import (
 
 // CreateMessageRequest represents a request to create and send an email message.
 type CreateMessageRequest struct {
-	From          common.SenderAddress    `json:"from"`
-	Recipients    []common.Recipient      `json:"recipients"`
-	Subject       string                  `json:"subject"`
-	ReplyTo       *common.SenderAddress   `json:"reply_to,omitempty"`
-	TextContent   *string                 `json:"text_content,omitempty"`
-	HtmlContent   *string                 `json:"html_content,omitempty"`
-	AmpContent    *string                 `json:"amp_content,omitempty"`
-	Attachments   []common.Attachment     `json:"attachments,omitempty"`
-	Headers       map[string]string       `json:"headers,omitempty"`
+	From        common.SenderAddress  `json:"from"`
+	Recipients  []common.Recipient    `json:"recipients"`
+	Subject     string                `json:"subject"`
+	ReplyTo     *common.SenderAddress `json:"reply_to,omitempty"`
+	TextContent *string               `json:"text_content,omitempty"`
+	HtmlContent *string               `json:"html_content,omitempty"`
+	AmpContent  *string               `json:"amp_content,omitempty"`
+	Attachments []common.Attachment   `json:"attachments,omitempty"`
+	Headers     map[string]string     `json:"headers,omitempty"`
+	// Substitutions are values for every recipient; a recipient's own
+	// Substitutions replace them. They are HTML-escaped in the HTML and AMP
+	// bodies, as Recipient.Substitutions are.
 	Substitutions map[string]interface{}  `json:"substitutions,omitempty"`
 	Tags          []string                `json:"tags,omitempty"`
 	Sandbox       *bool                   `json:"sandbox,omitempty"`

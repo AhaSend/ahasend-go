@@ -113,7 +113,8 @@ message := requests.CreateTemplateMessageRequest{
 - The template's reply-to applies to every send from it, with or without `From`, unless the request sets `ReplyTo` or a `reply-to` entry in `Headers`; either one replaces it.
 - The template's sender is checked as a sender in the request is: its domain must be in your account, have valid DNS records and not be paused.
 - Variable values come only from each recipient's `Substitutions`. Every recipient must give a value for each required variable.
-- AhaSend fills in `email`, `view_browser_url` and `unsubscribe_url` itself.
+- AhaSend fills in `email` and `unsubscribe_url` itself.
+- In the HTML body, each value is HTML-escaped. Write `{{ name|safe }}` in the design to insert a value as HTML. The subject and the text body get values as they are.
 - The send fails with:
   - 404 when the template does not exist.
   - 400 when neither the request nor the template has a subject, or the template has no published content.
