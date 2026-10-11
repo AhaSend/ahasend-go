@@ -59,9 +59,15 @@ info:
     - `suppressions:wipe` - Delete the account's suppressions except protected ones (dangerous)
 
     ### Template Scopes
-    - `templates:read` - Read transactional templates, their drafts and their published versions
-    - `templates:write` - Create and update transactional templates, and publish, discard and restore their drafts
-    - `templates:delete` - Delete transactional templates
+    - `templates:read` - Read transactional templates, their drafts and their published versions, and campaign templates
+    - `templates:write` - Create and update transactional templates, and publish, discard and restore their drafts; create and update campaign templates
+    - `templates:delete` - Delete transactional templates and campaign templates
+
+    ### Campaign Scopes
+    - `campaigns:read` - Read campaigns, their stats and their recipients
+    - `campaigns:write` - Create, update and duplicate campaigns
+    - `campaigns:delete` - Delete draft campaigns
+    - `campaigns:send` - Send, unschedule and test-send campaigns
 
     ### Contact Scopes
     - `contacts:read` - Read contacts
@@ -286,6 +292,36 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "idempotency key was already used with a different request payload"
+
+    CampaignConflict:
+      description: |
+        Either the campaign's status does not allow the request (for most
+        requests, the campaign is not a draft; for an unschedule, it is not
+        validating or scheduled, or it has queued mail), or an execution
+        with this idempotency key is still in progress. The in-progress case
+        is identified only by `Idempotent-Replayed: false` plus a positive
+        integer `Retry-After`; retry it after that many seconds with the same
+        key. A new status conflict has neither header; a stored replay of
+        one has `Idempotent-Replayed: true` (a test send's status conflict is
+        not stored, so it is never replayed). The message is not a stable
+        discriminator.
+      headers:
+        Idempotent-Replayed:
+          description: |
+            `false` with a positive `Retry-After` means an execution is in
+            progress. `true` means a stored status 409 was replayed. Absent
+            means a fresh status conflict.
+          schema:
+            type: string
+            enum: ['true', 'false']
+        Retry-After:
+          $ref: '#/components/headers/IdempotencyRetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "campaign is not a draft"
 
     TemplateBeingChanged:
       description: |
@@ -1936,6 +1972,708 @@ components:
           items:
             $ref: '#/components/schemas/Template'
           description: Array of templates, each without its `content`
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    # Campaign Template Schemas
+    CampaignTemplate:
+      type: object
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - name
+        - editor
+      description: A design a campaign copies when it is made from it. A campaign template has no draft, no versions, no subject and no sender; the campaign owns its subject and sender.
+      properties:
+        object:
+          type: string
+          enum: [campaign_template]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Campaign template ID
+        created_at:
+          type: string
+          format: date-time
+          description: When the campaign template was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the campaign template last changed
+        name:
+          type: string
+          description: Campaign template name, as it appears in the dashboard
+        editor:
+          $ref: '#/components/schemas/TemplateEditor'
+        content:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateContent'
+            - type: 'null'
+          description: The content. Null when the campaign template has neither HTML nor text, as for one created without content. A campaign can be made from the campaign template only once it has HTML. List Campaign Templates leaves this field out; every other operation that returns a CampaignTemplate sets it.
+
+    CreateCampaignTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: A new campaign template.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Campaign template name. Spaces around it are dropped.
+        editor:
+          $ref: '#/components/schemas/TemplateEditor'
+          description: Required when `content` holds neither `mjml` nor `html`. `content.mjml` means `advanced` and `content.html` means `html`; an `editor` that disagrees with the content is refused.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+          description: The content, by the rules of `TemplateContentInput`. A campaign template has no draft, so where those rules name the draft, they mean the campaign template itself.
+
+    UpdateCampaignTemplateRequest:
+      type: object
+      additionalProperties: false
+      description: Changes to a campaign template. A field left out is not changed or checked. The editor never changes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Campaign template name. Spaces around it are dropped.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+          description: The content, by the rules of `TemplateContentInput`. A campaign template has no draft, so where those rules name the draft, they mean the campaign template itself. For a `simple` campaign template, send only `text`.
+
+    PaginatedCampaignTemplatesResponse:
+      type: object
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTemplate'
+          description: Array of campaign templates, each without its `content`
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    # Campaign Schemas
+    CampaignStatus:
+      type: string
+      enum: [draft, validating, waiting_for_review, scheduled, sending, paused, sent, canceled, failed]
+      description: |
+        Where the campaign is in its life. Only a `draft` can be changed or
+        deleted.
+
+        - `draft`: being prepared.
+        - `validating`: scheduled, and its lists are being checked.
+        - `waiting_for_review`: held for a review before it sends.
+        - `scheduled`: accepted, waiting for its send time.
+        - `sending`: sending now.
+        - `paused`: sending stopped for now; `status_reason` says why.
+        - `sent`: every message was sent.
+        - `canceled`: stopped before it finished; `status_reason` says why.
+        - `failed`: could not be sent; `status_reason` says why.
+
+    CampaignIssue:
+      type: object
+      required:
+        - code
+        - message
+      description: A reason the campaign cannot be sent yet.
+      properties:
+        code:
+          type: string
+          enum:
+            - sender_missing
+            - lists_missing
+            - subject_missing
+            - preheader_missing
+            - design_missing
+            - text_broken
+            - unsubscribe_link_missing
+          description: |
+            - `sender_missing`: the campaign has no complete sender, or its domain was deleted.
+            - `lists_missing`: the campaign has no list that still exists.
+            - `subject_missing`: the campaign has no subject.
+            - `preheader_missing`: the campaign has no preview text.
+            - `design_missing`: the campaign has no design, or its design has no HTML.
+            - `text_broken`: the subject, the preview text or the design holds template syntax that cannot be rendered, so every message would fail.
+            - `unsubscribe_link_missing`: the HTML uses neither `{{ unsubscribe_url }}` nor `{{ unsubscribe_link }}`, with or without filters.
+        message:
+          type: string
+          description: What to do, in the words the dashboard uses.
+
+    CampaignListItem:
+      type: object
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - name
+        - subject
+        - preheader
+        - from
+        - reply_to
+        - status
+        - status_reason
+        - send_at
+        - send_resumes_at
+        - finished_at
+      description: A campaign as List Campaigns returns it, without its lists, content and issues.
+      properties:
+        object:
+          type: string
+          enum: [campaign]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Campaign ID
+        created_at:
+          type: string
+          format: date-time
+          description: When the campaign was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the campaign's own fields last changed
+        name:
+          type: string
+          description: Campaign name, as it appears in the dashboard. Recipients do not see it.
+        subject:
+          type:
+            - string
+            - 'null'
+          description: The subject line. Null until one is set.
+        preheader:
+          type:
+            - string
+            - 'null'
+          description: The preview text, which most inboxes show after the subject. Null until one is set.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/Address'
+            - type: 'null'
+          description: The sender. Null until a complete sender is set, and when its domain was deleted. `name` is an empty string when the campaign has no sender name, so the object can be sent back as it is.
+        reply_to:
+          type:
+            - string
+            - 'null'
+          format: email
+          description: The reply-to address. Null when none is set.
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        status_reason:
+          type:
+            - string
+            - 'null'
+          description: Why the campaign is in its status, when there is a reason to give. Null otherwise.
+        send_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When the campaign sends or sent, in UTC. Null until it is scheduled.
+        send_resumes_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When a send that reached the account's daily marketing limit continues, in UTC. Null otherwise.
+        finished_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When the send ended, in UTC. Null until then.
+
+    Campaign:
+      allOf:
+        - $ref: '#/components/schemas/CampaignListItem'
+        - type: object
+          required:
+            - list_ids
+            - editor
+            - content
+            - ready
+            - issues
+          properties:
+            list_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: The lists the campaign sends to, in the order they were saved. A list that was deleted is left out.
+            editor:
+              oneOf:
+                - $ref: '#/components/schemas/TemplateEditor'
+                - type: 'null'
+              description: The editor of the campaign's design. Null while the campaign has no design.
+            content:
+              oneOf:
+                - $ref: '#/components/schemas/TemplateContent'
+                - type: 'null'
+              description: The content of the campaign's design. Null while it has no design, or its design has neither HTML nor text.
+            ready:
+              type:
+                - boolean
+                - 'null'
+              description: Whether the draft has no issue, so it can be sent. Null unless the campaign is a draft.
+            issues:
+              oneOf:
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/CampaignIssue'
+                - type: 'null'
+              description: The reasons the draft cannot be sent yet, in a fixed order; empty when it is ready. Null unless the campaign is a draft.
+
+    CreateCampaignRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: |
+        A new draft campaign. Every field but `name` can be set later with
+        Update Campaign. The design comes from at most one source: an
+        `editor`, `content`, both, or a `template_id`. With none of them the
+        campaign has no design yet.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Campaign name. Spaces around it are dropped.
+        subject:
+          type:
+            - string
+            - 'null'
+          description: The subject line. Line breaks become spaces and spaces around it are dropped; an empty subject is no subject.
+        preheader:
+          type:
+            - string
+            - 'null'
+          description: The preview text, cleaned as `subject` is.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The sender. `email` must be on a domain of this account with valid DNS. A paused domain is accepted here and refused when the campaign is sent.
+        reply_to:
+          type:
+            - string
+            - 'null'
+          format: email
+          description: The reply-to address, an address only, without a display name.
+        list_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+          description: The lists to send to, in order. A list named twice counts once. Each must be a list of this account.
+        editor:
+          $ref: '#/components/schemas/TemplateEditor'
+          description: The editor of the design. Without `content` the campaign gets an empty design of this editor, which the dashboard's editor opens. With `content`, it is required when the content holds neither `mjml` nor `html`, and must agree with it otherwise. Not accepted with `template_id`, whose editor the design keeps.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+          description: The content of the design, by the rules of `TemplateContentInput`. A campaign has no draft, so where those rules name the draft, they mean the campaign's design. Not accepted with `template_id`.
+        template_id:
+          type: string
+          format: uuid
+          description: A campaign template whose design the campaign copies. The copy is the campaign's own; later changes to the template do not reach it. A campaign template with no HTML is refused.
+
+    UpdateCampaignRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Changes to a draft campaign. A field left out is neither changed nor
+        checked. The design's editor never changes.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Campaign name. Spaces around it are dropped.
+        subject:
+          type:
+            - string
+            - 'null'
+          description: The subject line, cleaned as on create. Null clears it.
+        preheader:
+          type:
+            - string
+            - 'null'
+          description: The preview text, cleaned as on create. Null clears it.
+        from:
+          oneOf:
+            - $ref: '#/components/schemas/TemplateAddressInput'
+            - type: 'null'
+          description: The sender, as on create. Null clears the sender; `reply_to` stays as it is.
+        reply_to:
+          type:
+            - string
+            - 'null'
+          format: email
+          description: The reply-to address, as on create. Null clears it.
+        list_ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+          description: The lists to send to, which replace the campaign's lists, as on create.
+        content:
+          $ref: '#/components/schemas/TemplateContentInput'
+          description: The content of the design, by the rules of `TemplateContentInput`, in the design's editor. For a `simple` design, send only `text`. A campaign with no design yet needs `mjml` or `html`, which sets its editor.
+
+    DuplicateCampaignRequest:
+      type: object
+      additionalProperties: false
+      description: The copy's name. Without one the copy is named `Copy of` and the source's name, cut to 255 characters.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Name of the copy. Spaces around it are dropped.
+
+    PaginatedCampaignsResponse:
+      type: object
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignListItem'
+          description: Array of campaigns
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    SendCampaignRequest:
+      type: object
+      additionalProperties: false
+      description: When to send. Without `send_at` the campaign is sent now.
+      properties:
+        send_at:
+          type: string
+          format: date-time
+          description: The time to send, in RFC 3339, at least 1 minute ahead. `null` is refused.
+
+    CampaignSend:
+      allOf:
+        - $ref: '#/components/schemas/Campaign'
+        - type: object
+          required:
+            - warnings
+          properties:
+            warnings:
+              type: array
+              items:
+                type: string
+              description: Things the send accepted but you should know, such as an account that cannot send right now while the campaign is sent later, or a design its view-in-browser page cannot show. Empty when there is none.
+
+    CampaignNotReady:
+      type: object
+      required:
+        - message
+      description: A refusal. A campaign with issues is refused with `campaign is not ready to send` and the issues that block the request; every other refusal has only `message`.
+      properties:
+        message:
+          type: string
+          description: Error message
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignIssue'
+          description: The issues that block the request, in the order of `CampaignIssue`. For a test, every issue but `unsubscribe_link_missing`.
+      example:
+        message: "campaign is not ready to send"
+        issues:
+          - code: subject_missing
+            message: Add a subject before you send the campaign.
+
+    TestCampaignRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - to
+      description: The addresses to send a test to.
+      properties:
+        to:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: 1 to 5 addresses, counted after addresses that differ only in case are dropped. An entry may carry a display name, such as `Ann <ann@example.com>`; the test goes to the address alone.
+
+    CampaignTestFailure:
+      type: object
+      required:
+        - email
+        - message
+      description: An address the mail server refused.
+      properties:
+        email:
+          type: string
+          description: The address as the mail server reported it, which can be one the request did not hold.
+        message:
+          type: string
+          description: Why the address was refused
+
+    CampaignTest:
+      type: object
+      required:
+        - object
+        - sent_to
+        - failed
+        - result_unknown
+      description: What a test send did.
+      properties:
+        object:
+          type: string
+          enum: [campaign_test]
+          description: Object type identifier
+        sent_to:
+          type: array
+          items:
+            type: string
+          description: The addresses the mail server accepted
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTestFailure'
+          description: The addresses the mail server refused
+        result_unknown:
+          type: boolean
+          description: True when the mail server took the request but its answer could not be read. The test may have gone out; `sent_to` and `failed` are empty. Check the inboxes before you send another.
+
+    CampaignStatsReport:
+      type: object
+      required:
+        - computed_at
+        - recipients
+        - openers
+        - clickers
+        - bounces
+        - deferrals
+        - by_status
+        - by_bounce_classification
+      description: The campaign's stored report, which is recounted from its recipients from time to time.
+      properties:
+        computed_at:
+          type: string
+          format: date-time
+          description: When the report was counted
+        recipients:
+          type: integer
+          description: The recipients the report counted, the base of `bounce_rate` and `deferral_rate`
+        openers:
+          type: integer
+          description: Contacts who opened, each once, without bots
+        clickers:
+          type: integer
+          description: Contacts who clicked, each once, without bots
+        bounces:
+          type: integer
+          description: Recipients that bounced or failed
+        deferrals:
+          type: integer
+          description: Recipients whose delivery was deferred
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Recipients by status, under the names the dashboard's report shows, such as `Queued`, `Delivered`, `Bounced` or `Administratively Bounced`. Each name is a `status` of List Campaign Recipients.
+        by_bounce_classification:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Bounces by bounce classification. `Unknown` counts the bounces with no classification and has no recipient page; every other key is a `bounce_classification` of List Campaign Recipients.
+
+    CampaignStatsRates:
+      type: object
+      required:
+        - open_rate
+        - click_rate
+        - bounce_rate
+        - deferral_rate
+      description: Percentages from 0 to 100 with two decimals. Each is null while `report` is null or its base is zero.
+      properties:
+        open_rate:
+          type:
+            - number
+            - 'null'
+          description: Openers out of `delivered`, at most 100
+        click_rate:
+          type:
+            - number
+            - 'null'
+          description: Clickers out of `delivered`, at most 100
+        bounce_rate:
+          type:
+            - number
+            - 'null'
+          description: Bounces out of `report.recipients`
+        deferral_rate:
+          type:
+            - number
+            - 'null'
+          description: Deferrals out of `report.recipients`
+
+    CampaignStats:
+      type: object
+      required:
+        - object
+        - campaign_id
+        - recipients
+        - delivered
+        - opens
+        - clicks
+        - unsubscribes
+        - complaints
+        - report
+        - rates
+        - recount_failed
+      description: |
+        The numbers of a campaign. The counters are live; `report` is the
+        stored report, which is recounted from time to time. A request
+        never counts: when the report is missing or old, it asks for a
+        recount and answers what is stored, so read again later for the
+        new numbers.
+      properties:
+        object:
+          type: string
+          enum: [campaign_stats]
+          description: Object type identifier
+        campaign_id:
+          type: string
+          format: uuid
+          description: Campaign ID
+        recipients:
+          type: integer
+          description: Recipients the campaign sends to
+        delivered:
+          type: integer
+          description: Messages delivered
+        opens:
+          type: integer
+          description: Opens, without bots
+        clicks:
+          type: integer
+          description: Clicks, without bots
+        unsubscribes:
+          type: integer
+          description: Recipients who unsubscribed
+        complaints:
+          type: integer
+          description: Recipients who marked the message as spam
+        report:
+          oneOf:
+            - $ref: '#/components/schemas/CampaignStatsReport'
+            - type: 'null'
+          description: The stored report. Null until the campaign's first recount.
+        rates:
+          $ref: '#/components/schemas/CampaignStatsRates'
+        recount_failed:
+          type: boolean
+          description: True while the last recount of the report failed, so `report` may be old.
+
+    CampaignRecipient:
+      type: object
+      required:
+        - object
+        - contact_id
+        - email
+        - list_name
+        - status
+        - bounce_classification
+        - bounce_reason
+        - bounce_message
+        - attempts
+        - created_at
+        - updated_at
+      description: A recipient of a campaign.
+      properties:
+        object:
+          type: string
+          enum: [campaign_recipient]
+          description: Object type identifier
+        contact_id:
+          type: string
+          format: uuid
+          description: Contact ID
+        email:
+          type: string
+          description: The address the campaign sent to
+        list_name:
+          type: string
+          description: Name of the list the contact was sent to from
+        status:
+          type: string
+          description: The status, under the name the dashboard's report shows, as a key of `by_status`
+        bounce_classification:
+          type:
+            - string
+            - 'null'
+          description: The bounce classification. Null when it has none.
+        bounce_reason:
+          type:
+            - string
+            - 'null'
+          description: The bounce reason. Null when it has none.
+        bounce_message:
+          type:
+            - string
+            - 'null'
+          description: The receiving server's bounce message. Null when it has none.
+        attempts:
+          type: integer
+          description: Delivery attempts
+        created_at:
+          type: string
+          format: date-time
+          description: When the recipient was added to the send
+        updated_at:
+          type: string
+          format: date-time
+          description: When the recipient last changed
+
+    PaginatedCampaignRecipientsResponse:
+      type: object
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+          description: Object type identifier
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignRecipient'
+          description: Array of recipients, by contact ID, the highest first
         pagination:
           $ref: '#/components/schemas/PaginationInfo'
 
@@ -6492,6 +7230,21 @@ paths:
               fmt.Printf("Created %s template %s\n", response.Editor, response.ID)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const template = await client.templates.create({
+              name: "Welcome email",
+              subject: "Welcome, {{ first_name }}",
+              content: { html: "<p>Hello {{ first_name }}, welcome aboard.</p>" },
+              publish: true,
+            });
+            console.log("Template created.", { id: template.id, editor: template.editor });
+
   /v2/accounts/{account_id}/templates/{template_id}:
     get:
       summary: Get Template
@@ -6745,6 +7498,22 @@ paths:
               fmt.Printf("Updated template %s, has draft: %t\n", response.Name, response.HasDraft)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            // Fields go to the template's draft; publish: true also publishes it.
+            const template = await client.templates.update(templateId, {
+              subject: "Welcome to the team, {{ first_name }}",
+              preheader: null,
+              publish: true,
+            });
+            console.log("Template updated.", { id: template.id, hasDraft: template.has_draft });
+
     delete:
       summary: Delete Template
       description: |
@@ -6843,6 +7612,16 @@ paths:
               }
               fmt.Println(response.Message)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const result = await client.templates.delete(templateId);
+            console.log("Template deleted.", { message: result.message });
 
   /v2/accounts/{account_id}/templates/{template_id}/draft:
     get:
@@ -6948,6 +7727,16 @@ paths:
               fmt.Printf("Draft subject: %s, changed at %s\n", response.Subject, response.UpdatedAt)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const draft = await client.templates.getDraft(templateId);
+            console.log("Template draft found.", { templateId: draft.template_id, subject: draft.subject });
+
     delete:
       summary: Discard Template Draft
       description: |
@@ -7048,6 +7837,16 @@ paths:
               }
               fmt.Printf("Template %s has draft: %t\n", response.Name, response.HasDraft)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const template = await client.templates.discardDraft(templateId);
+            console.log("Template draft discarded.", { id: template.id, hasDraft: template.has_draft });
 
   /v2/accounts/{account_id}/templates/{template_id}/publish:
     post:
@@ -7167,6 +7966,17 @@ paths:
               fmt.Printf("Published template %s\n", response.Name)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const template = await client.templates.publish(templateId);
+            console.log("Template published.", { id: template.id, hasDraft: template.has_draft });
+
   /v2/accounts/{account_id}/templates/{template_id}/versions:
     get:
       summary: List Template Versions
@@ -7276,6 +8086,16 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const versions = await client.templates.listVersions(templateId);
+            console.log("Template versions listed.", { count: versions.data.length });
+
   /v2/accounts/{account_id}/templates/{template_id}/versions/{version_id}:
     get:
       summary: Get Template Version
@@ -7384,6 +8204,17 @@ paths:
                 fmt.Println(response.Content.Text)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const versionId = "00000000-0000-4000-8000-000000000012";
+            const version = await client.templates.getVersion(templateId, versionId);
+            console.log("Template version found.", { id: version.id, version: version.version });
 
   /v2/accounts/{account_id}/templates/{template_id}/versions/{version_id}/restore:
     post:
@@ -7514,6 +8345,1931 @@ paths:
                 log.Fatalf("Error restoring template version: %v", err)
               }
               fmt.Printf("Restored template %s, has draft: %t\n", response.Name, response.HasDraft)
+            }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            const versionId = "00000000-0000-4000-8000-000000000012";
+            const template = await client.templates.restoreVersion(templateId, versionId, { publish: true });
+            console.log("Template version restored.", { id: template.id, hasDraft: template.has_draft });
+
+  # Campaign template endpoints
+  /v2/accounts/{account_id}/campaign-templates:
+    get:
+      summary: List Campaign Templates
+      description: |
+        Returns a cursor-paginated list of the account's campaign templates,
+        newest first. Transactional templates are a different resource and
+        never appear here. Each campaign template is listed without its
+        `content`; Get Campaign Template returns it.
+      operationId: listCampaignTemplates
+      tags:
+        - Campaign Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Pagination cursor for the next page. Provide the value from `next_cursor` in the response.
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page. Provide the value from `previous_cursor` in the response.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["templates:read"]
+      responses:
+        '200':
+          description: Paginated campaign templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCampaignTemplatesResponse'
+        '400':
+          description: Invalid limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // Campaign templates are listed without their content; Get Campaign
+              // Template returns it.
+              response, _, err := client.CampaignTemplatesAPI.ListCampaignTemplates(ctx, accountID, requests.ListCampaignTemplatesParams{
+                Limit: ahasend.Int32(100),
+              })
+              if err != nil {
+                log.Fatalf("Error listing campaign templates: %v", err)
+              }
+              for _, template := range response.Data {
+                fmt.Printf("%s %s (%s)\n", template.ID, template.Name, template.Editor)
+              }
+            }
+
+    post:
+      summary: Create Campaign Template
+      description: |
+        Creates a campaign template. A campaign template has no draft: what
+        the request sets is what a campaign made from the template copies.
+
+        `content.mjml` makes an `advanced` campaign template and
+        `content.html` an `html` one. A campaign template with neither must
+        name its `editor`; without `content` it is created with an empty
+        design, which the dashboard's editor opens. The editor never changes
+        after create.
+
+        MJML is compiled in strict mode, and HTML must use full `https://`
+        URLs for its images and stylesheets: the API cannot upload files.
+      operationId: createCampaignTemplate
+      tags:
+        - Campaign Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignTemplateRequest'
+      responses:
+        '201':
+          description: Campaign template created
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTemplate'
+        '400':
+          description: 'Invalid request: the body or a field. The message names the field and the problem.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // HTML content makes an html campaign template; MJML would make an
+              // advanced one. The text is made from the HTML when it is left out.
+              response, _, err := client.CampaignTemplatesAPI.CreateCampaignTemplate(ctx, accountID, requests.CreateCampaignTemplateRequest{
+                Name: "Monthly newsletter",
+                Content: &requests.TemplateContentInput{
+                  HTML: ahasend.String(`<p>Hi {{ first_name }},</p><p>Here is our news.</p><p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>`),
+                },
+              })
+              if err != nil {
+                log.Fatalf("Error creating campaign template: %v", err)
+              }
+              fmt.Printf("Created %s campaign template %s\n", response.Editor, response.ID)
+            }
+
+  /v2/accounts/{account_id}/campaign-templates/{template_id}:
+    get:
+      summary: Get Campaign Template
+      description: |
+        Returns one of the account's campaign templates with its content. A
+        transactional template's ID is not addressable here and answers 404.
+      operationId: getCampaignTemplate
+      tags:
+        - Campaign Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Campaign template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:read"]
+      responses:
+        '200':
+          description: Campaign template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTemplate'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.CampaignTemplatesAPI.GetCampaignTemplate(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error getting campaign template: %v", err)
+              }
+              // A campaign can be made from the template only once it has HTML.
+              hasHTML := response.Content != nil && response.Content.HTML != ""
+              fmt.Printf("%s (%s), has HTML: %t\n", response.Name, response.Editor, hasHTML)
+            }
+
+    put:
+      summary: Update Campaign Template
+      description: |
+        Changes a campaign template's name, its content, or both. A field the
+        request leaves out is neither changed nor checked. The change applies
+        at once; campaigns already made from the template keep their own
+        copies. A name or content equal to the stored one changes nothing, so
+        the same request can be repeated safely. The editor never changes.
+
+        The design of a `simple` campaign template can be changed only in the
+        dashboard: send only `content.text` for one. A design saved later in
+        the dashboard, also from an editor opened before this request,
+        replaces the design this request wrote.
+      operationId: updateCampaignTemplate
+      tags:
+        - Campaign Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Campaign template ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["templates:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignTemplateRequest'
+      responses:
+        '200':
+          description: Campaign template updated
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTemplate'
+        '400':
+          description: Invalid template_id, an invalid body or field, or a request with no changes. The message names the field and the problem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Only the fields you set change, at once. Campaigns already made from
+              // the template keep their own copies.
+              response, _, err := client.CampaignTemplatesAPI.UpdateCampaignTemplate(ctx, accountID, templateID, requests.UpdateCampaignTemplateRequest{
+                Name: ahasend.String("Monthly newsletter, 2026"),
+              })
+              if err != nil {
+                log.Fatalf("Error updating campaign template: %v", err)
+              }
+              fmt.Printf("Updated campaign template %s\n", response.Name)
+            }
+
+    delete:
+      summary: Delete Campaign Template
+      description: |
+        Deletes a campaign template, as the dashboard does. Campaigns made
+        from it keep their own copies, and a second delete answers 404.
+      operationId: deleteCampaignTemplate
+      tags:
+        - Campaign Templates
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: template_id
+          in: path
+          required: true
+          description: Campaign template ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["templates:delete"]
+      responses:
+        '200':
+          description: Campaign template deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid template_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `templates:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Campaigns made from the template keep their own copies.
+              response, _, err := client.CampaignTemplatesAPI.DeleteCampaignTemplate(ctx, accountID, templateID)
+              if err != nil {
+                log.Fatalf("Error deleting campaign template: %v", err)
+              }
+              fmt.Println(response.Message)
+            }
+
+  /v2/accounts/{account_id}/campaigns:
+    get:
+      summary: List Campaigns
+      description: |
+        Returns a cursor-paginated list of the account's marketing campaigns,
+        newest first. Each campaign is listed without its lists, content and
+        issues; Get Campaign returns them.
+      operationId: listCampaigns
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Only campaigns in this status.
+          schema:
+            $ref: '#/components/schemas/CampaignStatus'
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Pagination cursor for the next page. Provide the value from `next_cursor` in the response.
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page. Provide the value from `previous_cursor` in the response.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["campaigns:read"]
+      responses:
+        '200':
+          description: Paginated campaigns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCampaignsResponse'
+        '400':
+          description: Invalid status, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // Leave Status nil to list campaigns in every status.
+              response, _, err := client.CampaignsAPI.ListCampaigns(ctx, accountID, requests.ListCampaignsParams{
+                Status: ahasend.String(common.CampaignStatusScheduled),
+                Limit:  ahasend.Int32(100),
+              })
+              if err != nil {
+                log.Fatalf("Error listing campaigns: %v", err)
+              }
+              for _, campaign := range response.Data {
+                if campaign.SendAt != nil {
+                  fmt.Printf("%s %s sends at %s\n", campaign.ID, campaign.Name, campaign.SendAt)
+                }
+              }
+            }
+
+    post:
+      summary: Create Campaign
+      description: |
+        Creates a draft marketing campaign. Every field but `name` is
+        optional and can be set later with Update Campaign; the campaign
+        answers its `issues` until it is ready to send.
+
+        The design comes from `content` (`content.mjml` makes an `advanced`
+        design and `content.html` an `html` one), from an `editor` alone (an
+        empty design the dashboard's editor opens), or from a campaign
+        template named by `template_id`, which the campaign copies. MJML is
+        compiled in strict mode, and HTML must use full `https://` URLs for
+        its images and stylesheets: the API cannot upload files.
+
+        The subject, preview text, sender and reply-to are checked by the
+        rules of the dashboard, and their refusals use the dashboard's
+        sentences.
+      operationId: createCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: Campaign created
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: 'Invalid request: the body or a field, a list or campaign template that does not exist. The message names the field and the problem.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              listID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+              templateID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+
+              // The campaign copies the campaign template's design; later changes to
+              // the template do not reach it. Every field but Name can be set later.
+              response, _, err := client.CampaignsAPI.CreateCampaign(ctx, accountID, requests.CreateCampaignRequest{
+                Name:      "October newsletter",
+                Subject:   ahasend.String("Our news for October, {{ first_name }}"),
+                Preheader: ahasend.String("Three things we shipped this month"),
+                From: &common.SenderAddress{
+                  Email: "news@yourdomain.com",
+                  Name:  ahasend.String("Example"),
+                },
+                ListIDs:    []uuid.UUID{listID},
+                TemplateID: &templateID,
+              })
+              if err != nil {
+                log.Fatalf("Error creating campaign: %v", err)
+              }
+              fmt.Printf("Created campaign %s, ready: %t\n", response.ID, response.Ready != nil && *response.Ready)
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}:
+    get:
+      summary: Get Campaign
+      description: |
+        Returns one of the account's campaigns with its lists, its content
+        and, for a draft, the issues that keep it from being sent.
+      operationId: getCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["campaigns:read"]
+      responses:
+        '200':
+          description: Campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Invalid campaign_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.CampaignsAPI.GetCampaign(ctx, accountID, campaignID)
+              if err != nil {
+                log.Fatalf("Error getting campaign: %v", err)
+              }
+              fmt.Printf("%s is %s, sending to %d lists\n", response.Name, response.Status, len(response.ListIDs))
+              // A draft lists what keeps it from being sent.
+              for _, issue := range response.Issues {
+                fmt.Printf("%s: %s\n", issue.Code, issue.Message)
+              }
+            }
+
+    put:
+      summary: Update Campaign
+      description: |
+        Changes a draft campaign. A field the request leaves out is neither
+        changed nor checked, and `null` clears `subject`, `preheader`, `from`
+        and `reply_to`. A campaign that is not a draft cannot be changed.
+
+        The change waits for any other change of the same campaign, from the
+        dashboard or the API, and a send that starts after it reads it. The
+        design of a `simple` campaign can be changed only in the dashboard:
+        send only `content.text` for one. Between this request and a
+        dashboard editor open on the same campaign, the later design save
+        wins.
+      operationId: updateCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignRequest'
+      responses:
+        '200':
+          description: Campaign updated
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Invalid campaign_id, an invalid body or field, a list that does not exist, or a request with no changes. The message names the field and the problem.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Only the fields you set change, and only while the campaign is a
+              // draft. A ReplyTo that points at "" clears the reply-to address.
+              response, _, err := client.CampaignsAPI.UpdateCampaign(ctx, accountID, campaignID, requests.UpdateCampaignRequest{
+                Subject: ahasend.String("Our news for October"),
+                ReplyTo: ahasend.String(""),
+              })
+              if err != nil {
+                log.Fatalf("Error updating campaign: %v", err)
+              }
+              fmt.Printf("Updated campaign %s, %d issues left\n", response.Name, len(response.Issues))
+            }
+
+    delete:
+      summary: Delete Campaign
+      description: |
+        Deletes a draft campaign with its design and its list choices. A
+        campaign that is not a draft cannot be deleted, and a second delete
+        answers 404.
+      operationId: deleteCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["campaigns:delete"]
+      responses:
+        '200':
+          description: Campaign deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid campaign_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: The campaign is not a draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Only a draft can be deleted.
+              response, _, err := client.CampaignsAPI.DeleteCampaign(ctx, accountID, campaignID)
+              if err != nil {
+                log.Fatalf("Error deleting campaign: %v", err)
+              }
+              fmt.Println(response.Message)
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/duplicate:
+    post:
+      summary: Duplicate Campaign
+      description: |
+        Makes a new draft from a campaign in any status: a copy of its
+        design, its subject, preview text and sender, and its lists that
+        still exist, in the same order. The copy's design is its own.
+      operationId: duplicateCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:write"]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateCampaignRequest'
+      responses:
+        '201':
+          description: Campaign duplicated
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Invalid campaign_id, or an invalid body or name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // The copy is a new draft. Leave Name nil to name it "Copy of" and the
+              // source's name.
+              response, _, err := client.CampaignsAPI.DuplicateCampaign(ctx, accountID, campaignID, requests.DuplicateCampaignRequest{
+                Name: ahasend.String("November newsletter"),
+              })
+              if err != nil {
+                log.Fatalf("Error duplicating campaign: %v", err)
+              }
+              fmt.Printf("Created draft %s %s\n", response.ID, response.Name)
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/send:
+    post:
+      summary: Send Campaign
+      description: |
+        Sends a draft campaign now, or at `send_at`. A campaign with any
+        issue is refused with the issues. The send then checks what would
+        stop the campaign at its send time: its sender domain must still be
+        verified and not paused, the account must be able to send, and its
+        lists must have subscribed contacts. For a send at a later time, a
+        block that a payment or the next billing period can clear is a
+        warning instead of a refusal.
+
+        The campaign moves to `validating` and goes through the same list
+        validation and review as a send from the dashboard, which move it on
+        from there. Read `status` and `status_reason` with Get Campaign. To
+        change the send time, unschedule the campaign and send it again.
+      operationId: sendCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:send"]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCampaignRequest'
+      responses:
+        '202':
+          description: The send was accepted. The campaign is in `validating`, as the send left it.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSend'
+        '400':
+          description: Invalid campaign_id, an invalid body or `send_at`, a campaign with issues (with `issues`), or a check of the send that failed. The message says what to fix, in the dashboard's words for the checks the dashboard shares.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignNotReady'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:send` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Leave SendAt nil to send now.
+              response, _, err := client.CampaignsAPI.SendCampaign(ctx, accountID, campaignID, requests.SendCampaignRequest{
+                SendAt: ahasend.Time(time.Now().Add(24 * time.Hour)),
+              })
+              if notReady, ok := api.AsCampaignNotReady(err); ok {
+                for _, issue := range notReady.Issues {
+                  fmt.Printf("%s: %s\n", issue.Code, issue.Message)
+                }
+                os.Exit(1)
+              }
+              if err != nil {
+                log.Fatalf("Error sending campaign: %v", err)
+              }
+              fmt.Printf("Campaign %s is %s\n", response.ID, response.Status)
+              for _, warning := range response.Warnings {
+                fmt.Println("Warning:", warning)
+              }
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/unschedule:
+    post:
+      summary: Unschedule Campaign
+      description: |
+        Returns a `validating` or `scheduled` campaign to `draft`: it cancels
+        the list validation that runs, or the scheduled send. A campaign that
+        has queued mail, or that is in any other status, cannot be
+        unscheduled. The request takes no body.
+      operationId: unscheduleCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:send"]
+      responses:
+        '200':
+          description: The campaign, back in `draft`
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Invalid campaign_id, or a body that is not an empty JSON object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:send` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // A validating or scheduled campaign goes back to draft. To change the
+              // send time, unschedule it and send it again.
+              response, _, err := client.CampaignsAPI.UnscheduleCampaign(ctx, accountID, campaignID)
+              if err != nil {
+                log.Fatalf("Error unscheduling campaign: %v", err)
+              }
+              fmt.Printf("Campaign %s is %s\n", response.ID, response.Status)
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/test:
+    post:
+      summary: Test Campaign
+      description: |
+        Sends a test of a draft campaign to up to 5 addresses. Each address
+        gets the design with placeholders for the contact's fields; its
+        links lead to a contact that does not exist. A campaign with any
+        issue but `unsubscribe_link_missing` is refused with the issues.
+
+        An account can send 50 test emails per day (UTC), counted per
+        address, from the API and the dashboard together. An address the
+        mail server refused still counts; a test that sent nothing (502)
+        does not.
+
+        With an `Idempotency-Key`, a 2xx answer is stored and replayed, so a
+        retry with the same key sends nothing again. Unlike other
+        operations, a 4xx answer is not stored: it releases the key, so a
+        retry with the same key, for example after the daily limit resets,
+        is answered afresh.
+      operationId: testCampaign
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["campaigns:send"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCampaignRequest'
+      responses:
+        '200':
+          description: What the test send did. With `result_unknown`, the test may have gone out.
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTest'
+        '400':
+          description: Invalid campaign_id, an invalid body or address, no address or more than 5, a campaign with issues (with `issues`), a sender domain that is paused or no longer verified, or an account that cannot send
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignNotReady'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:send` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/CampaignConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests, or the account's daily limit of 50 test emails is reached (`daily test send limit reached`). Neither is stored, so a retry may use the same `Idempotency-Key`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: The mail server could not take the test, and nothing was sent. Retry, with the same `Idempotency-Key` if you sent one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.CampaignsAPI.TestCampaign(ctx, accountID, campaignID, requests.TestCampaignRequest{
+                To: []string{"Ann <ann@yourdomain.com>", "bob@yourdomain.com"},
+              })
+              if err != nil {
+                log.Fatalf("Error sending test: %v", err)
+              }
+              if response.ResultUnknown {
+                fmt.Println("The test may have gone out; check the inboxes before you send another")
+                return
+              }
+              fmt.Printf("Sent to %v\n", response.SentTo)
+              for _, failure := range response.Failed {
+                fmt.Printf("Refused %s: %s\n", failure.Email, failure.Message)
+              }
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/stats:
+    get:
+      summary: Get Campaign Stats
+      description: |
+        Returns the numbers of a campaign: its live counters, its stored
+        report and the rates from both, the numbers the dashboard's report
+        shows. The stored report is recounted from time to time; a request
+        that finds it missing or old asks for a recount and answers what is
+        stored.
+      operationId: getCampaignStats
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["campaigns:read"]
+      responses:
+        '200':
+          description: Campaign stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignStats'
+        '400':
+          description: Invalid campaign_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.CampaignsAPI.GetCampaignStats(ctx, accountID, campaignID)
+              if err != nil {
+                log.Fatalf("Error getting campaign stats: %v", err)
+              }
+              fmt.Printf("Delivered %d of %d\n", response.Delivered, response.Recipients)
+              // A rate is nil until the report is counted and its base is not zero.
+              if response.Rates.OpenRate != nil {
+                fmt.Printf("Open rate: %.2f%%\n", *response.Rates.OpenRate)
+              }
+              if response.Report != nil {
+                for status, count := range response.Report.ByStatus {
+                  fmt.Printf("%s: %d\n", status, count)
+                }
+              }
+            }
+
+  /v2/accounts/{account_id}/campaigns/{campaign_id}/recipients:
+    get:
+      summary: List Campaign Recipients
+      description: |
+        Returns a cursor-paginated list of a campaign's recipients in one
+        status or with one bounce classification, by contact ID, the highest
+        first. Send exactly one of `status` and `bounce_classification`.
+      operationId: listCampaignRecipients
+      tags:
+        - Campaigns
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: campaign_id
+          in: path
+          required: true
+          description: Campaign ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: A status as a key of the stats' `by_status` names it, such as `Queued`, `Delivered` or `Administratively Bounced`.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - name: bounce_classification
+          in: query
+          description: A key of the stats' `by_bounce_classification`, except `Unknown`, which has no recipient page.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Pagination cursor for the next page. Provide the value from `next_cursor` in the response.
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Pagination cursor for the previous page. Provide the value from `previous_cursor` in the response. An empty page past the last recipient has no `previous_cursor`; read the first page with no cursor.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["campaigns:read"]
+      responses:
+        '200':
+          description: Paginated campaign recipients
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCampaignRecipientsResponse'
+        '400':
+          description: Invalid campaign_id, filter, limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `campaigns:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              campaignID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Set exactly one of Status and BounceClassification, each a key of the
+              // campaign's stats report.
+              response, _, err := client.CampaignsAPI.ListCampaignRecipients(ctx, accountID, campaignID, requests.ListCampaignRecipientsParams{
+                Status: ahasend.String("Bounced"),
+                Limit:  ahasend.Int32(100),
+              })
+              if err != nil {
+                log.Fatalf("Error listing campaign recipients: %v", err)
+              }
+              for _, recipient := range response.Data {
+                reason := ""
+                if recipient.BounceReason != nil {
+                  reason = *recipient.BounceReason
+                }
+                fmt.Printf("%s (%s) %s\n", recipient.Email, recipient.ListName, reason)
+              }
             }
 
   # Account endpoints
@@ -14613,6 +17369,10 @@ tags:
     description: Read, create, update, batch upsert, and delete account-global contacts
   - name: Templates
     description: Create, change, publish and delete the account's transactional templates, and read them with their drafts, their published versions and the variables a send must supply
+  - name: Campaign Templates
+    description: Create, change, read and delete the account's campaign templates, the designs a campaign copies when it is made from one
+  - name: Campaigns
+    description: Create, change, read, duplicate, delete, test and send the account's marketing campaigns, and read their stats and recipients
   - name: Lists
     description: Manage contact lists and the contacts on them
   - name: Suppressions

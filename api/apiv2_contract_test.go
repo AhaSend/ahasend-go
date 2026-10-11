@@ -1127,14 +1127,23 @@ func openAPISchemaProperties(t *testing.T, schemaNames ...string) []string {
 	return names
 }
 
-// modelJSONFields returns the sorted JSON names of a struct's fields.
+// modelJSONFields returns the sorted JSON names of a struct's fields,
+// including those of the structs it embeds.
 func modelJSONFields(model any) []string {
-	modelType := reflect.TypeOf(model)
-	names := make([]string, 0, modelType.NumField())
-	for i := 0; i < modelType.NumField(); i++ {
-		name, _, _ := strings.Cut(modelType.Field(i).Tag.Get("json"), ",")
-		names = append(names, name)
+	var names []string
+	var collect func(reflect.Type)
+	collect = func(modelType reflect.Type) {
+		for i := 0; i < modelType.NumField(); i++ {
+			field := modelType.Field(i)
+			if field.Anonymous {
+				collect(field.Type)
+				continue
+			}
+			name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+			names = append(names, name)
+		}
 	}
+	collect(reflect.TypeOf(model))
 	sort.Strings(names)
 	return names
 }
@@ -1747,6 +1756,672 @@ func TestTemplatesAPIRetriesARacedWriteWithItsIdempotencyKey(t *testing.T) {
 			require.Len(t, keys, 2)
 			assert.NotEmpty(t, keys[0])
 			assert.Equal(t, keys[0], keys[1])
+		})
+	}
+}
+
+func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	type campaignResponseContract struct {
+		responseContract `yaml:",inline"`
+		Content          map[string]struct {
+			Schema struct {
+				Ref string `yaml:"$ref"`
+			} `yaml:"schema"`
+		} `yaml:"content"`
+	}
+	type campaignOperationContract struct {
+		OperationID string                              `yaml:"operationId"`
+		CodeSamples []struct{ Lang string }             `yaml:"x-code-samples"`
+		Security    []map[string][]string               `yaml:"security"`
+		Responses   map[string]campaignResponseContract `yaml:"responses"`
+		Parameters  []struct {
+			Ref string `yaml:"$ref"`
+		} `yaml:"parameters"`
+	}
+	var spec struct {
+		Paths map[string]map[string]campaignOperationContract `yaml:"paths"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	const (
+		idempotencyConflict = "#/components/responses/IdempotencyConflict"
+		campaignConflict    = "#/components/responses/CampaignConflict"
+		campaignNotReady    = "#/components/schemas/CampaignNotReady"
+
+		campaignTemplates = "/v2/accounts/{account_id}/campaign-templates"
+		campaignTemplate  = campaignTemplates + "/{template_id}"
+		campaigns         = "/v2/accounts/{account_id}/campaigns"
+		campaign          = campaigns + "/{campaign_id}"
+	)
+	tests := []struct {
+		path        string
+		method      string
+		operationID string
+		scope       string
+		idempotent  bool
+		// conflict is the response a 409 of an idempotent operation refers
+		// to.
+		conflict string
+		// badRequest is the schema of a 400 that is not an ErrorResponse.
+		badRequest string
+		statuses   []string
+	}{
+		{path: campaignTemplates, method: "get", operationID: "listCampaignTemplates", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: campaignTemplates, method: "post", operationID: "createCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: campaignTemplate, method: "get", operationID: "getCampaignTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: campaignTemplate, method: "put", operationID: "updateCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaignTemplate, method: "delete", operationID: "deleteCampaignTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: campaigns, method: "get", operationID: "listCampaigns", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: campaigns, method: "post", operationID: "createCampaign", scope: "campaigns:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: campaign, method: "get", operationID: "getCampaign", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: campaign, method: "put", operationID: "updateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign, method: "delete", operationID: "deleteCampaign", scope: "campaigns:delete", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
+		{path: campaign + "/duplicate", method: "post", operationID: "duplicateCampaign", scope: "campaigns:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign + "/send", method: "post", operationID: "sendCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"202", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign + "/unschedule", method: "post", operationID: "unscheduleCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign + "/test", method: "post", operationID: "testCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "502"}},
+		{path: campaign + "/stats", method: "get", operationID: "getCampaignStats", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: campaign + "/recipients", method: "get", operationID: "listCampaignRecipients", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			path, ok := spec.Paths[tt.path]
+			require.True(t, ok)
+			operation, ok := path[tt.method]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+
+			var goSamples int
+			for _, sample := range operation.CodeSamples {
+				if sample.Lang == "go" {
+					goSamples++
+				}
+			}
+			assert.Equal(t, 1, goSamples)
+
+			assert.Equal(t, []map[string][]string{{"BearerAuth": {tt.scope}}}, operation.Security)
+
+			actualStatuses := make([]string, 0, len(operation.Responses))
+			for status := range operation.Responses {
+				actualStatuses = append(actualStatuses, status)
+			}
+			sort.Strings(actualStatuses)
+			assert.Equal(t, tt.statuses, actualStatuses)
+
+			var takesIdempotencyKey bool
+			for _, parameter := range operation.Parameters {
+				if parameter.Ref == "#/components/parameters/IdempotencyKey" {
+					takesIdempotencyKey = true
+				}
+			}
+			assert.Equal(t, tt.idempotent, takesIdempotencyKey)
+			if tt.idempotent {
+				for status, response := range operation.Responses {
+					if strings.HasPrefix(status, "2") {
+						assert.Contains(t, response.Headers, "Idempotent-Replayed")
+					}
+				}
+				assert.Equal(t, tt.conflict, operation.Responses["409"].Ref)
+				assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", operation.Responses["422"].Ref)
+			}
+
+			wantBadRequest := "#/components/schemas/ErrorResponse"
+			if tt.badRequest != "" {
+				wantBadRequest = tt.badRequest
+			}
+			assert.Equal(t, wantBadRequest, operation.Responses["400"].Content["application/json"].Schema.Ref)
+		})
+	}
+}
+
+func TestOpenAPICampaignSchemasMatchModels(t *testing.T) {
+	tests := []struct {
+		schemas []string
+		model   any
+	}{
+		{schemas: []string{"CampaignTemplate"}, model: responses.CampaignTemplate{}},
+		{schemas: []string{"PaginatedCampaignTemplatesResponse"}, model: responses.PaginatedCampaignTemplatesResponse{}},
+		{schemas: []string{"CampaignIssue"}, model: responses.CampaignIssue{}},
+		{schemas: []string{"CampaignListItem"}, model: responses.CampaignListItem{}},
+		// Campaign is an allOf of a $ref to CampaignListItem and the draft
+		// fields, and CampaignSend an allOf of a $ref to Campaign and the
+		// warnings.
+		{schemas: []string{"Campaign", "CampaignListItem"}, model: responses.Campaign{}},
+		{schemas: []string{"CampaignSend", "Campaign", "CampaignListItem"}, model: responses.CampaignSend{}},
+		{schemas: []string{"PaginatedCampaignsResponse"}, model: responses.PaginatedCampaignsResponse{}},
+		{schemas: []string{"CampaignNotReady"}, model: responses.CampaignNotReady{}},
+		{schemas: []string{"CampaignTestFailure"}, model: responses.CampaignTestFailure{}},
+		{schemas: []string{"CampaignTest"}, model: responses.CampaignTest{}},
+		{schemas: []string{"CampaignStatsReport"}, model: responses.CampaignStatsReport{}},
+		{schemas: []string{"CampaignStatsRates"}, model: responses.CampaignStatsRates{}},
+		{schemas: []string{"CampaignStats"}, model: responses.CampaignStats{}},
+		{schemas: []string{"CampaignRecipient"}, model: responses.CampaignRecipient{}},
+		{schemas: []string{"PaginatedCampaignRecipientsResponse"}, model: responses.PaginatedCampaignRecipientsResponse{}},
+		{schemas: []string{"CreateCampaignTemplateRequest"}, model: requests.CreateCampaignTemplateRequest{}},
+		{schemas: []string{"UpdateCampaignTemplateRequest"}, model: requests.UpdateCampaignTemplateRequest{}},
+		{schemas: []string{"CreateCampaignRequest"}, model: requests.CreateCampaignRequest{}},
+		{schemas: []string{"UpdateCampaignRequest"}, model: requests.UpdateCampaignRequest{}},
+		{schemas: []string{"DuplicateCampaignRequest"}, model: requests.DuplicateCampaignRequest{}},
+		{schemas: []string{"SendCampaignRequest"}, model: requests.SendCampaignRequest{}},
+		{schemas: []string{"TestCampaignRequest"}, model: requests.TestCampaignRequest{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.schemas[0], func(t *testing.T) {
+			assert.Equal(t, openAPISchemaProperties(t, tt.schemas...), modelJSONFields(tt.model))
+		})
+	}
+}
+
+const campaignTemplateResponseFixture = `{
+	"object":"campaign_template",
+	"id":"44444444-4444-4444-8444-444444444444",
+	"created_at":"2026-10-01T10:00:00Z",
+	"updated_at":"2026-10-01T11:00:00Z",
+	"name":"Monthly newsletter",
+	"editor":"html",
+	"content":{"html":"<p>News</p>","text":"News","text_is_custom":false}
+}`
+
+func TestCampaignTemplatesAPIEmitsDeclaredTransport(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	templateID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	templatesPath := "/v2/accounts/" + accountID.String() + "/campaign-templates"
+	templatePath := templatesPath + "/" + templateID.String()
+
+	assertCampaignTemplate := func(t *testing.T, result any) {
+		template := result.(*responses.CampaignTemplate)
+		assert.Equal(t, templateID, template.ID)
+		assert.Equal(t, common.TemplateEditorHTML, template.Editor)
+		require.NotNil(t, template.Content)
+		assert.Equal(t, "<p>News</p>", template.Content.HTML)
+	}
+
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		status         int
+		response       string
+		idempotencyKey string
+		wantBody       string
+		call           func(*APIClient) (any, *http.Response, error)
+		assertResult   func(*testing.T, any)
+	}{
+		{
+			name:           "create campaign template",
+			method:         http.MethodPost,
+			path:           templatesPath,
+			status:         http.StatusCreated,
+			response:       campaignTemplateResponseFixture,
+			idempotencyKey: "create-campaign-template",
+			wantBody:       `{"name":"Monthly newsletter","content":{"html":"<p>News</p>"}}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignTemplatesAPI.CreateCampaignTemplate(context.Background(), accountID, requests.CreateCampaignTemplateRequest{
+					Name:    "Monthly newsletter",
+					Content: &requests.TemplateContentInput{HTML: ahasend.String("<p>News</p>")},
+				}, WithIdempotencyKey("create-campaign-template"))
+			},
+			assertResult: assertCampaignTemplate,
+		},
+		{
+			name:     "get campaign template",
+			method:   http.MethodGet,
+			path:     templatePath,
+			status:   http.StatusOK,
+			response: campaignTemplateResponseFixture,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignTemplatesAPI.GetCampaignTemplate(context.Background(), accountID, templateID)
+			},
+			assertResult: assertCampaignTemplate,
+		},
+		{
+			name:           "update campaign template",
+			method:         http.MethodPut,
+			path:           templatePath,
+			status:         http.StatusOK,
+			response:       campaignTemplateResponseFixture,
+			idempotencyKey: "update-campaign-template",
+			wantBody:       `{"name":"Monthly newsletter","content":{"text":null}}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignTemplatesAPI.UpdateCampaignTemplate(context.Background(), accountID, templateID, requests.UpdateCampaignTemplateRequest{
+					Name:    ahasend.String("Monthly newsletter"),
+					Content: &requests.TemplateContentInput{Text: ahasend.String("")},
+				}, WithIdempotencyKey("update-campaign-template"))
+			},
+			assertResult: assertCampaignTemplate,
+		},
+		{
+			name:     "delete campaign template",
+			method:   http.MethodDelete,
+			path:     templatePath,
+			status:   http.StatusOK,
+			response: `{"message":"campaign template deleted"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignTemplatesAPI.DeleteCampaignTemplate(context.Background(), accountID, templateID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "campaign template deleted", result.(*common.SuccessResponse).Message)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertDeclaredTransport(t, tt.method, tt.path, tt.status, tt.response, tt.idempotencyKey, tt.wantBody, tt.call, tt.assertResult)
+		})
+	}
+}
+
+const campaignResponseFixture = `{
+	"object":"campaign",
+	"id":"55555555-5555-4555-8555-555555555555",
+	"created_at":"2026-10-01T10:00:00Z",
+	"updated_at":"2026-10-01T11:00:00Z",
+	"name":"October newsletter",
+	"subject":"Our news",
+	"preheader":null,
+	"from":{"email":"news@example.com","name":""},
+	"reply_to":null,
+	"status":"draft",
+	"status_reason":null,
+	"send_at":null,
+	"send_resumes_at":null,
+	"finished_at":null,
+	"list_ids":["66666666-6666-4666-8666-666666666666"],
+	"editor":"html",
+	"content":{"html":"<p>News</p>","text":"News","text_is_custom":false},
+	"ready":false,
+	"issues":[{"code":"preheader_missing","message":"Add a preview text before you send the campaign."}]
+}`
+
+func TestCampaignsAPIEmitsDeclaredTransport(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	campaignID := uuid.MustParse("55555555-5555-4555-8555-555555555555")
+	listID := uuid.MustParse("66666666-6666-4666-8666-666666666666")
+	templateID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	campaignsPath := "/v2/accounts/" + accountID.String() + "/campaigns"
+	campaignPath := campaignsPath + "/" + campaignID.String()
+	sendAt := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
+
+	assertDraft := func(t *testing.T, result any) {
+		campaign := result.(*responses.Campaign)
+		assert.Equal(t, campaignID, campaign.ID)
+		assert.Equal(t, common.CampaignStatusDraft, campaign.Status)
+		assert.Equal(t, []uuid.UUID{listID}, campaign.ListIDs)
+		require.NotNil(t, campaign.Ready)
+		assert.False(t, *campaign.Ready)
+		require.Len(t, campaign.Issues, 1)
+		assert.Equal(t, responses.CampaignIssuePreheaderMissing, campaign.Issues[0].Code)
+	}
+
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		status         int
+		response       string
+		idempotencyKey string
+		wantBody       string
+		call           func(*APIClient) (any, *http.Response, error)
+		assertResult   func(*testing.T, any)
+	}{
+		{
+			name:           "create campaign",
+			method:         http.MethodPost,
+			path:           campaignsPath,
+			status:         http.StatusCreated,
+			response:       campaignResponseFixture,
+			idempotencyKey: "create-campaign",
+			wantBody:       `{"name":"October newsletter","subject":"Our news","from":{"email":"news@example.com"},"list_ids":["66666666-6666-4666-8666-666666666666"],"template_id":"44444444-4444-4444-8444-444444444444"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.CreateCampaign(context.Background(), accountID, requests.CreateCampaignRequest{
+					Name:       "October newsletter",
+					Subject:    ahasend.String("Our news"),
+					From:       &common.SenderAddress{Email: "news@example.com"},
+					ListIDs:    []uuid.UUID{listID},
+					TemplateID: &templateID,
+				}, WithIdempotencyKey("create-campaign"))
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:     "get campaign",
+			method:   http.MethodGet,
+			path:     campaignPath,
+			status:   http.StatusOK,
+			response: campaignResponseFixture,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.GetCampaign(context.Background(), accountID, campaignID)
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:           "update campaign",
+			method:         http.MethodPut,
+			path:           campaignPath,
+			status:         http.StatusOK,
+			response:       campaignResponseFixture,
+			idempotencyKey: "update-campaign",
+			wantBody:       `{"subject":null,"preheader":"See what is new","from":null,"reply_to":null,"list_ids":["66666666-6666-4666-8666-666666666666"]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.UpdateCampaign(context.Background(), accountID, campaignID, requests.UpdateCampaignRequest{
+					Subject:   ahasend.String(""),
+					Preheader: ahasend.String("See what is new"),
+					From:      &common.SenderAddress{},
+					ReplyTo:   ahasend.String(""),
+					ListIDs:   []uuid.UUID{listID},
+				}, WithIdempotencyKey("update-campaign"))
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:     "delete campaign",
+			method:   http.MethodDelete,
+			path:     campaignPath,
+			status:   http.StatusOK,
+			response: `{"message":"campaign deleted"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.DeleteCampaign(context.Background(), accountID, campaignID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "campaign deleted", result.(*common.SuccessResponse).Message)
+			},
+		},
+		{
+			name:           "duplicate campaign",
+			method:         http.MethodPost,
+			path:           campaignPath + "/duplicate",
+			status:         http.StatusCreated,
+			response:       campaignResponseFixture,
+			idempotencyKey: "duplicate-campaign",
+			wantBody:       `{"name":"November newsletter"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.DuplicateCampaign(context.Background(), accountID, campaignID, requests.DuplicateCampaignRequest{
+					Name: ahasend.String("November newsletter"),
+				}, WithIdempotencyKey("duplicate-campaign"))
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:           "duplicate campaign with the default name",
+			method:         http.MethodPost,
+			path:           campaignPath + "/duplicate",
+			status:         http.StatusCreated,
+			response:       campaignResponseFixture,
+			idempotencyKey: "duplicate-campaign",
+			wantBody:       `{}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.DuplicateCampaign(context.Background(), accountID, campaignID, requests.DuplicateCampaignRequest{}, WithIdempotencyKey("duplicate-campaign"))
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:           "send campaign later",
+			method:         http.MethodPost,
+			path:           campaignPath + "/send",
+			status:         http.StatusAccepted,
+			response:       `{"object":"campaign","id":"` + campaignID.String() + `","status":"validating","send_at":"2026-10-20T09:00:00Z","ready":null,"issues":null,"warnings":["the account cannot send right now"]}`,
+			idempotencyKey: "send-campaign",
+			wantBody:       `{"send_at":"2026-10-20T09:00:00Z"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.SendCampaign(context.Background(), accountID, campaignID, requests.SendCampaignRequest{SendAt: &sendAt}, WithIdempotencyKey("send-campaign"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				send := result.(*responses.CampaignSend)
+				assert.Equal(t, campaignID, send.ID)
+				assert.Equal(t, common.CampaignStatusValidating, send.Status)
+				require.NotNil(t, send.SendAt)
+				assert.Equal(t, sendAt, send.SendAt.UTC())
+				assert.Nil(t, send.Ready)
+				assert.Nil(t, send.Issues)
+				assert.Equal(t, []string{"the account cannot send right now"}, send.Warnings)
+			},
+		},
+		{
+			name:           "send campaign now",
+			method:         http.MethodPost,
+			path:           campaignPath + "/send",
+			status:         http.StatusAccepted,
+			response:       `{"object":"campaign","id":"` + campaignID.String() + `","status":"validating","warnings":[]}`,
+			idempotencyKey: "send-campaign",
+			wantBody:       `{}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.SendCampaign(context.Background(), accountID, campaignID, requests.SendCampaignRequest{}, WithIdempotencyKey("send-campaign"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				send := result.(*responses.CampaignSend)
+				require.NotNil(t, send.Warnings)
+				assert.Empty(t, send.Warnings)
+			},
+		},
+		{
+			name:           "unschedule campaign",
+			method:         http.MethodPost,
+			path:           campaignPath + "/unschedule",
+			status:         http.StatusOK,
+			response:       campaignResponseFixture,
+			idempotencyKey: "unschedule-campaign",
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.UnscheduleCampaign(context.Background(), accountID, campaignID, WithIdempotencyKey("unschedule-campaign"))
+			},
+			assertResult: assertDraft,
+		},
+		{
+			name:           "test campaign",
+			method:         http.MethodPost,
+			path:           campaignPath + "/test",
+			status:         http.StatusOK,
+			response:       `{"object":"campaign_test","sent_to":["ann@example.com"],"failed":[{"email":"bob@example.com","message":"mailbox unavailable"}],"result_unknown":false}`,
+			idempotencyKey: "test-campaign",
+			wantBody:       `{"to":["Ann <ann@example.com>","bob@example.com"]}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.TestCampaign(context.Background(), accountID, campaignID, requests.TestCampaignRequest{
+					To: []string{"Ann <ann@example.com>", "bob@example.com"},
+				}, WithIdempotencyKey("test-campaign"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				test := result.(*responses.CampaignTest)
+				assert.Equal(t, []string{"ann@example.com"}, test.SentTo)
+				assert.Equal(t, []responses.CampaignTestFailure{{Email: "bob@example.com", Message: "mailbox unavailable"}}, test.Failed)
+				assert.False(t, test.ResultUnknown)
+			},
+		},
+		{
+			name:     "get campaign stats",
+			method:   http.MethodGet,
+			path:     campaignPath + "/stats",
+			status:   http.StatusOK,
+			response: `{"object":"campaign_stats","campaign_id":"` + campaignID.String() + `","recipients":10,"delivered":9,"opens":4,"clicks":1,"unsubscribes":0,"complaints":0,"report":null,"rates":{"open_rate":null,"click_rate":null,"bounce_rate":null,"deferral_rate":null},"recount_failed":false}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.CampaignsAPI.GetCampaignStats(context.Background(), accountID, campaignID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				stats := result.(*responses.CampaignStats)
+				assert.Equal(t, campaignID, stats.CampaignID)
+				assert.Equal(t, 9, stats.Delivered)
+				assert.Nil(t, stats.Report)
+				assert.Nil(t, stats.Rates.OpenRate)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertDeclaredTransport(t, tt.method, tt.path, tt.status, tt.response, tt.idempotencyKey, tt.wantBody, tt.call, tt.assertResult)
+		})
+	}
+}
+
+// assertDeclaredTransport runs call against a server that answers status and
+// response, and asserts the request had the method, path, idempotency key
+// and body given, and no query.
+func assertDeclaredTransport(
+	t *testing.T,
+	method, path string,
+	status int,
+	response, idempotencyKey, wantBody string,
+	call func(*APIClient) (any, *http.Response, error),
+	assertResult func(*testing.T, any),
+) {
+	t.Helper()
+
+	var capturedRequest *http.Request
+	var capturedBody []byte
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		capturedRequest = r
+		capturedBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(response))
+	})
+	defer cleanup()
+
+	result, httpResponse, err := call(client)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, httpResponse)
+	require.NotNil(t, capturedRequest)
+	assert.Equal(t, status, httpResponse.StatusCode)
+	assert.Equal(t, method, capturedRequest.Method)
+	assert.Equal(t, path, capturedRequest.URL.EscapedPath())
+	assert.Empty(t, capturedRequest.URL.RawQuery)
+	if idempotencyKey != "" {
+		assert.Equal(t, idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
+	}
+	if wantBody != "" {
+		assert.JSONEq(t, wantBody, string(capturedBody))
+	} else {
+		assert.Empty(t, capturedBody)
+	}
+	if assertResult != nil {
+		assertResult(t, result)
+	}
+}
+
+func TestCampaignWritesRetryWithTheirIdempotencyKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		response string
+		call     func(*APIClient) (*http.Response, error)
+	}{
+		{
+			name:     "update campaign template",
+			status:   http.StatusInternalServerError,
+			response: campaignTemplateResponseFixture,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.CampaignTemplatesAPI.UpdateCampaignTemplate(context.Background(), uuid.New(), uuid.New(), requests.UpdateCampaignTemplateRequest{
+					Name: ahasend.String("Monthly newsletter"),
+				})
+				return httpResponse, err
+			},
+		},
+		{
+			name:     "update campaign",
+			status:   http.StatusInternalServerError,
+			response: campaignResponseFixture,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.CampaignsAPI.UpdateCampaign(context.Background(), uuid.New(), uuid.New(), requests.UpdateCampaignRequest{
+					Subject: ahasend.String("Our news"),
+				})
+				return httpResponse, err
+			},
+		},
+		{
+			// A 502 means the mail server took nothing; the API asks for a
+			// retry with the same key.
+			name:     "test campaign",
+			status:   http.StatusBadGateway,
+			response: `{"object":"campaign_test","sent_to":["ann@example.com"],"failed":[],"result_unknown":false}`,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.CampaignsAPI.TestCampaign(context.Background(), uuid.New(), uuid.New(), requests.TestCampaignRequest{
+					To: []string{"ann@example.com"},
+				})
+				return httpResponse, err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int
+			var keys []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				keys = append(keys, r.Header.Get("Idempotency-Key"))
+				w.Header().Set("Content-Type", "application/json")
+				if attempts == 1 {
+					w.WriteHeader(tt.status)
+					_, _ = w.Write([]byte(`{"message":"try again"}`))
+					return
+				}
+				_, _ = w.Write([]byte(tt.response))
+			}))
+			defer server.Close()
+			serverURL, err := url.Parse(server.URL)
+			require.NoError(t, err)
+
+			cfg := NewConfiguration()
+			cfg.Host = serverURL.Host
+			cfg.Scheme = serverURL.Scheme
+			cfg.APIKey = "test-key"
+			cfg.RetryConfig.Enabled = true
+			cfg.RetryConfig.MaxRetries = 2
+			cfg.RetryConfig.BaseDelay = time.Millisecond
+			cfg.RetryConfig.MaxDelay = time.Millisecond
+			client := NewAPIClientWithConfig(cfg)
+
+			httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, httpResponse)
+			assert.Equal(t, http.StatusOK, httpResponse.StatusCode)
+			require.Len(t, keys, 2)
+			assert.NotEmpty(t, keys[0])
+			assert.Equal(t, keys[0], keys[1])
+		})
+	}
+}
+
+func TestCampaignsAPIClassifiesCampaignConflicts(t *testing.T) {
+	tests := []struct {
+		name           string
+		headers        map[string]string
+		wantType       ErrorType
+		wantRetryAfter int
+	}{
+		{name: "fresh status conflict", wantType: ErrorTypeConflict},
+		{name: "replayed status conflict", headers: map[string]string{"Idempotent-Replayed": "true"}, wantType: ErrorTypeConflict},
+		{name: "execution in progress", headers: map[string]string{"Idempotent-Replayed": "false", "Retry-After": "5"}, wantType: ErrorTypeIdempotencyConflict, wantRetryAfter: 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				for key, value := range tt.headers {
+					w.Header().Set(key, value)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"message":"campaign is not a draft"}`))
+			})
+			defer cleanup()
+
+			_, _, err := client.CampaignsAPI.SendCampaign(context.Background(), uuid.New(), uuid.New(), requests.SendCampaignRequest{}, WithIdempotencyKey("send-campaign"))
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr)
+			assert.Equal(t, tt.wantType, apiErr.Type)
+			assert.Equal(t, tt.wantRetryAfter, apiErr.RetryAfter)
+			assert.Equal(t, "campaign is not a draft", apiErr.Message)
+			_, notReady := AsCampaignNotReady(err)
+			assert.False(t, notReady)
 		})
 	}
 }

@@ -38,6 +38,8 @@ func TestClientCreation(t *testing.T) {
 	// Test that all API services are initialized
 	assert.NotNil(t, client.AccountsAPI)
 	assert.NotNil(t, client.APIKeysAPI)
+	assert.NotNil(t, client.CampaignTemplatesAPI)
+	assert.NotNil(t, client.CampaignsAPI)
 	assert.NotNil(t, client.ContactsAPI)
 	assert.NotNil(t, client.DomainsAPI)
 	assert.NotNil(t, client.ListsAPI)
@@ -53,6 +55,8 @@ func TestClientCreation(t *testing.T) {
 
 	defaultClient := NewAPIClient()
 	require.NotNil(t, defaultClient)
+	assert.NotNil(t, defaultClient.CampaignTemplatesAPI)
+	assert.NotNil(t, defaultClient.CampaignsAPI)
 	assert.NotNil(t, defaultClient.ContactsAPI)
 	assert.NotNil(t, defaultClient.ListsAPI)
 	assert.NotNil(t, defaultClient.SubAccountsAPI)

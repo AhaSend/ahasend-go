@@ -153,6 +153,65 @@ template, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.
 - A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a request with an idempotency key keeps the same key.
 - Reads need the `templates:read` scope, writes `templates:write`, and `DeleteTemplate` needs `templates:delete`.
 
+## Campaign templates
+
+A campaign template is a design that a campaign copies when it is made from it. It is a different resource from a transactional template: it has no draft, no versions, no subject and no sender. `CampaignTemplatesAPI` writes change it at once:
+
+```go
+template, _, err := client.CampaignTemplatesAPI.CreateCampaignTemplate(ctx, accountID, requests.CreateCampaignTemplateRequest{
+    Name: "Monthly newsletter",
+    Content: &requests.TemplateContentInput{
+        HTML: ahasend.String(`<p>Hi {{ first_name }}</p><p><a href="{{ unsubscribe_url }}">Unsubscribe</a></p>`),
+    },
+})
+```
+
+- `Content` follows the rules of transactional templates: `Content.MJML` makes an `advanced` campaign template and `Content.HTML` an `html` one, a campaign template with neither must set `Editor`, and the editor never changes. Without `Content`, the campaign template gets an empty design that the dashboard's editor opens.
+- `UpdateCampaignTemplate` changes only the fields you set. Campaigns already made from the template keep their own copies.
+- `ListCampaignTemplates` lists campaign templates without their content; `GetCampaignTemplate` returns it. A campaign can be made from a campaign template only when it has HTML.
+- The SDK sends an `Idempotency-Key` with `CreateCampaignTemplate` and `UpdateCampaignTemplate`, so a retried request is not applied twice.
+- Campaign templates use the template scopes: `templates:read`, `templates:write` and `templates:delete`.
+
+## Campaigns
+
+A campaign sends a design to one or more lists. `CreateCampaign` makes a draft. Every field but `Name` can be set later, and the draft's `Issues` tell what is missing before it can be sent:
+
+```go
+campaign, _, err := client.CampaignsAPI.CreateCampaign(ctx, accountID, requests.CreateCampaignRequest{
+    Name:       "October newsletter",
+    Subject:    ahasend.String("Our news for October"),
+    Preheader:  ahasend.String("Three things we shipped this month"),
+    From:       &common.SenderAddress{Email: "news@yourdomain.com"},
+    ListIDs:    []uuid.UUID{listID},
+    TemplateID: &campaignTemplateID,
+})
+if err != nil {
+    log.Fatal(err)
+}
+for _, issue := range campaign.Issues {
+    log.Printf("%s: %s", issue.Code, issue.Message)
+}
+
+_, _, err = client.CampaignsAPI.SendCampaign(ctx, accountID, campaign.ID, requests.SendCampaignRequest{})
+if notReady, ok := api.AsCampaignNotReady(err); ok {
+    for _, issue := range notReady.Issues {
+        log.Printf("%s: %s", issue.Code, issue.Message)
+    }
+}
+```
+
+- The design comes from `Content`, from `Editor` alone (an empty design), or from a campaign template named by `TemplateID`. The copy is the campaign's own.
+- Only a draft (`common.CampaignStatusDraft`) can be changed or deleted. `UpdateCampaign` changes only the fields you set. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject`, `Preheader` and `ReplyTo`, and `&common.SenderAddress{}` for `From`. The SDK sends each of them as `null`.
+- A field that the API sends as `null` is nil: a campaign's `Subject`, `Preheader`, `From` and `ReplyTo` until they are set, and `Ready` and `Issues` unless the campaign is a draft. A draft that is ready has an empty `Issues`.
+- `SendCampaign` sends now, or at `SendAt`. The campaign goes to `validating` and then through list validation and review, as a send from the dashboard does; read its `Status` and `StatusReason` with `GetCampaign`. The response's `Warnings` tell what the send accepted but you should know. To change the send time, call `UnscheduleCampaign` and send again.
+- `SendCampaign` refuses a campaign with any issue with 400, and `TestCampaign` refuses a campaign with any issue but `unsubscribe_link_missing`. `api.AsCampaignNotReady(err)` returns the issues; every other refusal has only a message.
+- A 409 means the campaign's status does not allow the request, or an earlier request with the same idempotency key is still running. The second case has the type `ErrorTypeIdempotencyConflict` and a `RetryAfter`; retry with the same key after it. A new call makes a new key, so to retry by hand, pass the key yourself with `api.WithIdempotencyKey` on both calls.
+- `TestCampaign` sends a test to up to 5 addresses, with placeholders for the contact's fields. An account can send 50 test emails per day. Past that, the API answers 429 with the message `daily test send limit reached`. The SDK retries it as it retries any 429 and gets the same answer; tell it apart from a rate limit by `APIError.Message`. When `ResultUnknown` is true, the test may have gone out: check the inboxes before you send another.
+- `DuplicateCampaign` makes a new draft from a campaign in any status.
+- `GetCampaignStats` returns live counters and a stored report that is counted again from time to time. `Report` is nil until the first count, and each rate is nil while it has no base. `ListCampaignRecipients` lists the recipients in one `Status` or one `BounceClassification`, each a key of the report's `ByStatus` or `ByBounceClassification`.
+- The SDK sends an `Idempotency-Key` with `CreateCampaign`, `UpdateCampaign`, `DuplicateCampaign`, `SendCampaign`, `UnscheduleCampaign` and `TestCampaign`, so a retried request is not applied twice.
+- Scopes: `campaigns:read` to read campaigns, their stats and their recipients, `campaigns:write` to create, update and duplicate them, `campaigns:delete` to delete drafts, and `campaigns:send` to send, unschedule and test them.
+
 ## API keys
 
 Every request needs an API key. Get one from the [AhaSend dashboard](https://dashboard.ahasend.com). There are three ways to give it to the SDK.
@@ -256,6 +315,8 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 |---|---|---|
 | `MessagesAPI` | Send and manage email | `CreateMessage`, `CreateTemplateMessage`, `GetMessage`, `CancelMessage` |
 | `TemplatesAPI` | Manage transactional templates, their drafts and versions | `GetTemplates`, `GetTemplate`, `CreateTemplate`, `UpdateTemplate`, `PublishTemplate`, `GetTemplateVersions`, `RestoreTemplateVersion` |
+| `CampaignTemplatesAPI` | Manage the designs that campaigns copy | `ListCampaignTemplates`, `GetCampaignTemplate`, `CreateCampaignTemplate`, `UpdateCampaignTemplate`, `DeleteCampaignTemplate` |
+| `CampaignsAPI` | Create, test and send marketing campaigns, and read their results | `ListCampaigns`, `CreateCampaign`, `UpdateCampaign`, `TestCampaign`, `SendCampaign`, `UnscheduleCampaign`, `GetCampaignStats`, `ListCampaignRecipients` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
 | `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain`, `GetDomainsWithParams` |
