@@ -107,11 +107,11 @@ func (tb *TokenBucket) WaitForToken() error {
 }
 
 // WaitForTokenWithContext blocks until a token is available, respecting the
-// rate limit and context cancellation. A caller whose deadline falls before
-// its turn could come returns context.DeadlineExceeded at once. A disabled
-// bucket, or one whose rate is zero or less (which can be set at run time,
-// and would never refill), does not limit: disabling it, or setting such a
-// rate, also lets the waiting callers go.
+// rate limit and context cancellation: a caller whose context ends while it
+// waits leaves the queue and returns the context's error. A disabled bucket,
+// or one whose rate is zero or less (which can be set at run time, and would
+// never refill), does not limit: disabling it, or setting such a rate, also
+// lets the waiting callers go.
 func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 	tb.mu.Lock()
 	if !tb.limits() {
@@ -124,13 +124,6 @@ func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 		tb.tokens--
 		tb.mu.Unlock()
 		return nil
-	}
-	// The earliest this caller's turn can come: after every caller ahead
-	// of it, and its own token
-	earliest := now.Add(tb.durationFor(float64(len(tb.queue)) + 1 - tb.tokens))
-	if deadline, ok := ctx.Deadline(); ok && earliest.After(deadline) {
-		tb.mu.Unlock()
-		return context.DeadlineExceeded
 	}
 	w := &tokenWaiter{turn: make(chan struct{})}
 	tb.queue = append(tb.queue, w)
@@ -154,8 +147,7 @@ func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 			tb.mu.Unlock()
 			return nil
 		}
-		now := time.Now()
-		tb.refill(now)
+		tb.refill(time.Now())
 		if tb.tokens >= 1 {
 			tb.tokens--
 			tb.popFront()
@@ -163,11 +155,6 @@ func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 			return nil
 		}
 		wait := tb.durationFor(1 - tb.tokens)
-		if deadline, ok := ctx.Deadline(); ok && now.Add(wait).After(deadline) {
-			tb.popFront()
-			tb.mu.Unlock()
-			return context.DeadlineExceeded
-		}
 		changed := tb.changed
 		tb.mu.Unlock()
 
@@ -199,7 +186,8 @@ func (tb *TokenBucket) durationFor(tokens float64) time.Duration {
 }
 
 // capacity is the most tokens the bucket holds: its burst capacity, and at
-// least one, so a bucket with no burst still lets one caller through per
+// least one, so a burst of zero or less, which the configuration validation
+// refuses but can be set at run time, still lets one caller through per
 // interval. The caller holds tb.mu.
 func (tb *TokenBucket) capacity() float64 {
 	return math.Max(float64(tb.maxTokens), 1)
@@ -280,22 +268,23 @@ func (tb *TokenBucket) setEnabled(enabled bool) {
 	tb.notifyChanged()
 }
 
-// GetStatus returns the current status of the token bucket
+// GetStatus returns the current status of the token bucket. A bucket that
+// does not limit (disabled, or with a rate of zero or less) reports no next
+// refill time.
 func (tb *TokenBucket) GetStatus(endpointType EndpointType) RateLimitStatus {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	// Calculate next refill time
 	now := time.Now()
-	elapsed := now.Sub(tb.lastRefill)
-	tokensToAdd := elapsed.Seconds() * tb.tokensPerSecond
-	currentTokens := math.Min(tb.tokens+tokensToAdd, float64(tb.maxTokens))
+	currentTokens := tb.tokens
+	if tb.tokensPerSecond > 0 {
+		elapsed := now.Sub(tb.lastRefill)
+		currentTokens = math.Min(currentTokens+elapsed.Seconds()*tb.tokensPerSecond, tb.capacity())
+	}
 
 	var nextRefill time.Time
-	if currentTokens < float64(tb.maxTokens) {
-		tokensNeeded := float64(tb.maxTokens) - currentTokens
-		secondsToWait := tokensNeeded / tb.tokensPerSecond
-		nextRefill = now.Add(time.Duration(secondsToWait * float64(time.Second)))
+	if tb.limits() && currentTokens < tb.capacity() {
+		nextRefill = now.Add(tb.durationFor(tb.capacity() - currentTokens))
 	}
 
 	return RateLimitStatus{
