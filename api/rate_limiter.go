@@ -70,6 +70,11 @@ type TokenBucket struct {
 	lastRefill      time.Time
 	config          RateLimitConfig
 	mu              sync.Mutex
+	// lastAct is when the last caller in the queue leaves
+	lastAct time.Time
+	// changed is closed, and replaced, when the configuration changes, to
+	// wake the callers that wait
+	changed chan struct{}
 }
 
 // NewTokenBucket creates a new token bucket with the specified configuration
@@ -80,6 +85,7 @@ func NewTokenBucket(config RateLimitConfig) *TokenBucket {
 		tokensPerSecond: float64(config.RequestsPerSecond),
 		lastRefill:      time.Now(),
 		config:          config,
+		changed:         make(chan struct{}),
 	}
 }
 
@@ -94,36 +100,57 @@ func (tb *TokenBucket) WaitForToken() error {
 // bucket then goes below zero, and the caller waits until the refill has
 // covered its place in the queue. Callers that wait at the same time
 // therefore leave one after another at the configured rate, never together.
-// A caller whose context ends while it waits gives its token back.
+// A caller whose context would end before its turn returns at once with
+// context.DeadlineExceeded. A caller whose context ends while it waits gives
+// its token back when it is the last in the queue; a place in the middle of
+// the queue stays used, so the callers after it never leave early. Disabling
+// the bucket lets the waiting callers go.
 func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 	tb.mu.Lock()
 
-	// A bucket that never refills would hold its callers forever; the
-	// configuration validation refuses such a rate, and it is not enforced
+	// A rate of zero or less, which can be set at run time, would never
+	// refill the bucket: it is treated as no limit
 	if !tb.config.Enabled || tb.tokensPerSecond <= 0 {
 		tb.mu.Unlock()
 		return nil
 	}
 
-	tb.refill(time.Now())
+	now := time.Now()
+	tb.refill(now)
 	tb.tokens--
 	if tb.tokens >= 0 {
 		tb.mu.Unlock()
 		return nil
 	}
-	wait := time.Duration(-tb.tokens / tb.tokensPerSecond * float64(time.Second))
+	actAt := now.Add(time.Duration(-tb.tokens / tb.tokensPerSecond * float64(time.Second)))
+	if deadline, ok := ctx.Deadline(); ok && actAt.After(deadline) {
+		// This caller is the last in the queue: its token goes back whole
+		tb.tokens++
+		tb.mu.Unlock()
+		return context.DeadlineExceeded
+	}
+	tb.lastAct = actAt
+	changed := tb.changed
 	tb.mu.Unlock()
 
-	timer := time.NewTimer(wait)
+	timer := time.NewTimer(time.Until(actAt))
 	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		tb.mu.Lock()
-		tb.tokens = math.Min(tb.tokens+1, float64(tb.maxTokens))
-		tb.mu.Unlock()
-		return ctx.Err()
-	case <-timer.C:
-		return nil
+	for {
+		select {
+		case <-timer.C:
+			return nil
+		case <-ctx.Done():
+			tb.giveBack(actAt)
+			return ctx.Err()
+		case <-changed:
+			tb.mu.Lock()
+			enabled := tb.config.Enabled
+			changed = tb.changed
+			tb.mu.Unlock()
+			if !enabled {
+				return nil
+			}
+		}
 	}
 }
 
@@ -135,19 +162,67 @@ func (tb *TokenBucket) refill(now time.Time) {
 	tb.lastRefill = now
 }
 
-// UpdateConfig updates the rate limit configuration
+// giveBack returns the token of a caller that stopped waiting for its turn
+// at actAt, when that caller is the last in the queue. A caller with others
+// after it keeps its place used: giving its token back would let the next
+// caller leave together with the last one.
+func (tb *TokenBucket) giveBack(actAt time.Time) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if !actAt.Equal(tb.lastAct) || tb.tokensPerSecond <= 0 {
+		return
+	}
+	tb.tokens = math.Min(tb.tokens+1, float64(tb.maxTokens))
+	tb.lastAct = actAt.Add(-time.Duration(float64(time.Second) / tb.tokensPerSecond))
+}
+
+// notifyChanged wakes the callers that wait, so they see a new
+// configuration. The caller holds tb.mu.
+func (tb *TokenBucket) notifyChanged() {
+	if tb.changed != nil {
+		close(tb.changed)
+	}
+	tb.changed = make(chan struct{})
+}
+
+// UpdateConfig updates the rate limit configuration. A queue of callers
+// built up at the old rate keeps its schedule; the callers after it wait for
+// it to clear and then follow the new rate.
 func (tb *TokenBucket) UpdateConfig(config RateLimitConfig) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
+	oldRate := tb.tokensPerSecond
+	if oldRate > 0 {
+		tb.refill(time.Now())
+	} else {
+		tb.lastRefill = time.Now()
+	}
+	newRate := float64(config.RequestsPerSecond)
+	// A shortfall counts the callers queued at the old rate: expressed at
+	// the new rate, it lasts as long as that queue does
+	if tb.tokens < 0 && oldRate > 0 && newRate > 0 {
+		tb.tokens = tb.tokens * newRate / oldRate
+	}
+
 	tb.config = config
-	tb.tokensPerSecond = float64(config.RequestsPerSecond)
+	tb.tokensPerSecond = newRate
 	tb.maxTokens = config.BurstCapacity
 
 	// Adjust current tokens if new max is lower
 	if tb.tokens > float64(tb.maxTokens) {
 		tb.tokens = float64(tb.maxTokens)
 	}
+	tb.notifyChanged()
+}
+
+// setEnabled turns the bucket on or off. Turning it off lets the callers
+// that wait go.
+func (tb *TokenBucket) setEnabled(enabled bool) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.config.Enabled = enabled
+	tb.notifyChanged()
 }
 
 // GetStatus returns the current status of the token bucket
@@ -274,9 +349,7 @@ func (rl *RateLimiter) SetRateLimit(endpointType EndpointType, requestsPerSecond
 func (rl *RateLimiter) EnableRateLimit(endpointType EndpointType, enabled bool) {
 	bucket := rl.GetBucket(endpointType)
 	if bucket != nil {
-		bucket.mu.Lock()
-		bucket.config.Enabled = enabled
-		bucket.mu.Unlock()
+		bucket.setEnabled(enabled)
 	}
 }
 

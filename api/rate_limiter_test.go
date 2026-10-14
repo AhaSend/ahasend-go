@@ -48,21 +48,110 @@ func TestConcurrentWaitersLeaveAtTheConfiguredRate(t *testing.T) {
 	}
 }
 
-// TestACancelledWaiterGivesItsTokenBack checks that a caller whose context
-// ends while it waits does not hold back the callers after it.
-func TestACancelledWaiterGivesItsTokenBack(t *testing.T) {
+// TestTheLastWaiterGivesItsTokenBack checks that the last caller in the
+// queue, cancelled while it waits, does not hold back the callers after it.
+func TestTheLastWaiterGivesItsTokenBack(t *testing.T) {
 	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 5, BurstCapacity: 1, Enabled: true})
 	require.NoError(t, bucket.WaitForToken())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	assert.ErrorIs(t, bucket.WaitForTokenWithContext(ctx), context.DeadlineExceeded)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(20*time.Millisecond, cancel)
+	assert.ErrorIs(t, bucket.WaitForTokenWithContext(ctx), context.Canceled)
 
 	// The next token is due 200ms after the first; had the cancelled caller
 	// kept its place, this one would wait until 400ms
 	start := time.Now()
 	require.NoError(t, bucket.WaitForToken())
 	assert.Less(t, time.Since(start), 300*time.Millisecond)
+}
+
+// TestAWaiterInTheMiddleKeepsTheQueueSpaced checks that a caller cancelled
+// with others queued after it does not let the next caller leave together
+// with the last one.
+func TestAWaiterInTheMiddleKeepsTheQueueSpaced(t *testing.T) {
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 10, BurstCapacity: 1, Enabled: true})
+	require.NoError(t, bucket.WaitForToken())
+
+	middle, cancel := context.WithCancel(context.Background())
+	middleDone := make(chan error, 1)
+	go func() { middleDone <- bucket.WaitForTokenWithContext(middle) }()
+	time.Sleep(5 * time.Millisecond)
+
+	lastLeft := make(chan time.Time, 1)
+	go func() {
+		assert.NoError(t, bucket.WaitForToken())
+		lastLeft <- time.Now()
+	}()
+	time.Sleep(5 * time.Millisecond)
+
+	cancel()
+	assert.ErrorIs(t, <-middleDone, context.Canceled)
+	require.NoError(t, bucket.WaitForToken())
+	newcomerLeft := time.Now()
+
+	gap := newcomerLeft.Sub(<-lastLeft)
+	if gap < 0 {
+		gap = -gap
+	}
+	assert.GreaterOrEqual(t, gap, 90*time.Millisecond, "two callers left %v apart at 10 requests a second", gap)
+}
+
+// TestAWaiterWhoseDeadlineComesFirstFailsAtOnce checks that a caller whose
+// context ends before its turn returns at once instead of holding a place.
+func TestAWaiterWhoseDeadlineComesFirstFailsAtOnce(t *testing.T) {
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 1, BurstCapacity: 1, Enabled: true})
+	require.NoError(t, bucket.WaitForToken())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	assert.ErrorIs(t, bucket.WaitForTokenWithContext(ctx), context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), 50*time.Millisecond)
+}
+
+// TestDisablingLetsTheWaitingCallersGo checks that turning a bucket off
+// releases the callers already waiting in it.
+func TestDisablingLetsTheWaitingCallersGo(t *testing.T) {
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 1, BurstCapacity: 1, Enabled: true})
+	require.NoError(t, bucket.WaitForToken())
+
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, bucket.WaitForToken())
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	bucket.setEnabled(false)
+	wg.Wait()
+	assert.Less(t, time.Since(start), 500*time.Millisecond)
+}
+
+// TestLoweringTheRateKeepsTheQueueItsSchedule checks that a caller arriving
+// after the rate is lowered waits for the queue built at the old rate and
+// then one interval of the new rate, not for that queue at the new rate.
+func TestLoweringTheRateKeepsTheQueueItsSchedule(t *testing.T) {
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 100, BurstCapacity: 1, Enabled: true})
+	var wg sync.WaitGroup
+	for i := 0; i < 21; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, bucket.WaitForToken())
+		}()
+	}
+	time.Sleep(10 * time.Millisecond)
+	bucket.UpdateConfig(RateLimitConfig{RequestsPerSecond: 10, BurstCapacity: 1, Enabled: true})
+
+	// The queue clears about 200ms in; the next turn at 10/s comes 100ms
+	// later. At the new rate the same queue would take 2s
+	start := time.Now()
+	require.NoError(t, bucket.WaitForToken())
+	assert.Less(t, time.Since(start), 600*time.Millisecond)
+	wg.Wait()
 }
 
 func TestRateLimiterCreation(t *testing.T) {
