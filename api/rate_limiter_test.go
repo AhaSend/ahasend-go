@@ -1,12 +1,69 @@
 package api
 
 import (
+	"context"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestConcurrentWaitersLeaveAtTheConfiguredRate checks that callers waiting
+// at the same time are let through one after another at the bucket's rate,
+// not all together when the next token is due.
+func TestConcurrentWaitersLeaveAtTheConfiguredRate(t *testing.T) {
+	const (
+		rate    = 20
+		burst   = 2
+		callers = 12
+	)
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: rate, BurstCapacity: burst, Enabled: true})
+
+	start := time.Now()
+	var mu sync.Mutex
+	var released []time.Duration
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NoError(t, bucket.WaitForToken())
+			mu.Lock()
+			released = append(released, time.Since(start))
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	sort.Slice(released, func(i, j int) bool { return released[i] < released[j] })
+	// The burst leaves at once; caller k after it leaves no sooner than
+	// k/rate seconds in, give or take timer slack
+	const slack = 15 * time.Millisecond
+	for k := burst; k < callers; k++ {
+		due := time.Duration(k-burst+1) * time.Second / rate
+		assert.GreaterOrEqual(t, released[k], due-slack, "caller %d left at %v, before its turn at %v", k, released[k], due)
+	}
+}
+
+// TestACancelledWaiterGivesItsTokenBack checks that a caller whose context
+// ends while it waits does not hold back the callers after it.
+func TestACancelledWaiterGivesItsTokenBack(t *testing.T) {
+	bucket := NewTokenBucket(RateLimitConfig{RequestsPerSecond: 5, BurstCapacity: 1, Enabled: true})
+	require.NoError(t, bucket.WaitForToken())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	assert.ErrorIs(t, bucket.WaitForTokenWithContext(ctx), context.DeadlineExceeded)
+
+	// The next token is due 200ms after the first; had the cancelled caller
+	// kept its place, this one would wait until 400ms
+	start := time.Now()
+	require.NoError(t, bucket.WaitForToken())
+	assert.Less(t, time.Since(start), 300*time.Millisecond)
+}
 
 func TestRateLimiterCreation(t *testing.T) {
 	rl := NewRateLimiter()

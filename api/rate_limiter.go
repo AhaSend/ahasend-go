@@ -88,62 +88,51 @@ func (tb *TokenBucket) WaitForToken() error {
 	return tb.WaitForTokenWithContext(context.Background())
 }
 
-// WaitForTokenWithContext blocks until a token is available, respecting the rate limit and context cancellation
+// WaitForTokenWithContext blocks until a token is available, respecting the rate limit and context cancellation.
+//
+// Each caller takes its token when it arrives, even when none is left: the
+// bucket then goes below zero, and the caller waits until the refill has
+// covered its place in the queue. Callers that wait at the same time
+// therefore leave one after another at the configured rate, never together.
+// A caller whose context ends while it waits gives its token back.
 func (tb *TokenBucket) WaitForTokenWithContext(ctx context.Context) error {
 	tb.mu.Lock()
 
-	if !tb.config.Enabled {
+	// A bucket that never refills would hold its callers forever; the
+	// configuration validation refuses such a rate, and it is not enforced
+	if !tb.config.Enabled || tb.tokensPerSecond <= 0 {
 		tb.mu.Unlock()
 		return nil
 	}
 
-	// Refill tokens based on elapsed time
-	now := time.Now()
-	elapsed := now.Sub(tb.lastRefill)
-	tokensToAdd := elapsed.Seconds() * tb.tokensPerSecond
-
-	tb.tokens = math.Min(tb.tokens+tokensToAdd, float64(tb.maxTokens))
-	tb.lastRefill = now
-
-	// If we have tokens available, consume one and return
-	if tb.tokens >= 1.0 {
-		tb.tokens -= 1.0
+	tb.refill(time.Now())
+	tb.tokens--
+	if tb.tokens >= 0 {
 		tb.mu.Unlock()
 		return nil
 	}
-
-	// Calculate wait time for the next token
-	waitTime := time.Duration((1.0-tb.tokens)/tb.tokensPerSecond*float64(time.Second)) + time.Millisecond
+	wait := time.Duration(-tb.tokens / tb.tokensPerSecond * float64(time.Second))
 	tb.mu.Unlock()
 
-	// Wait for either the timeout or context cancellation
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
+		tb.mu.Lock()
+		tb.tokens = math.Min(tb.tokens+1, float64(tb.maxTokens))
+		tb.mu.Unlock()
 		return ctx.Err()
-	case <-time.After(waitTime):
-		// Continue to acquire token
+	case <-timer.C:
+		return nil
 	}
+}
 
-	// Re-acquire lock and consume the token
-	tb.mu.Lock()
-	defer tb.mu.Unlock()
-
-	// Refill again after waiting (in case more time passed than expected)
-	now = time.Now()
-	elapsed = now.Sub(tb.lastRefill)
-	tokensToAdd = elapsed.Seconds() * tb.tokensPerSecond
-	tb.tokens = math.Min(tb.tokens+tokensToAdd, float64(tb.maxTokens))
+// refill adds the tokens earned since the last refill, up to the burst
+// capacity. The caller holds tb.mu.
+func (tb *TokenBucket) refill(now time.Time) {
+	elapsed := now.Sub(tb.lastRefill)
+	tb.tokens = math.Min(tb.tokens+elapsed.Seconds()*tb.tokensPerSecond, float64(tb.maxTokens))
 	tb.lastRefill = now
-
-	// Consume a token
-	if tb.tokens >= 1.0 {
-		tb.tokens -= 1.0
-	} else {
-		// This shouldn't happen but handle gracefully
-		tb.tokens = 0
-	}
-
-	return nil
 }
 
 // UpdateConfig updates the rate limit configuration
@@ -184,7 +173,7 @@ func (tb *TokenBucket) GetStatus(endpointType EndpointType) RateLimitStatus {
 		Enabled:           tb.config.Enabled,
 		RequestsPerSecond: tb.config.RequestsPerSecond,
 		BurstCapacity:     tb.config.BurstCapacity,
-		TokensAvailable:   int(math.Floor(currentTokens)),
+		TokensAvailable:   int(math.Max(math.Floor(currentTokens), 0)),
 		NextRefillTime:    nextRefill,
 	}
 }
