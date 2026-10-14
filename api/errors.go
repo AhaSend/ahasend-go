@@ -3,9 +3,11 @@ package api
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ErrorType represents the category of error
@@ -53,7 +55,8 @@ func (e *APIError) Error() string {
 
 // IsRetryable returns true if the error is retryable.
 //
-// Note that the SDK's transport never retries a 4xx on its own, so an
+// Note that the SDK's transport retries no 4xx on its own other than 429
+// (unless RetryConfig.RetryClientErrors is set), so an
 // ErrorTypeIdempotencyConflict is reported as retryable but is not retried
 // automatically: retrying it is the caller's decision, after waiting
 // RetryAfter seconds.
@@ -102,13 +105,22 @@ func classifyErrorType(resp *http.Response) ErrorType {
 	return determineErrorType(resp.StatusCode)
 }
 
-// retryAfterSeconds returns the Retry-After value in seconds for the error
-// types that carry one, and 0 otherwise.
+// retryAfterSeconds returns the Retry-After value in whole seconds, rounded
+// up, for the responses that carry one (a 429, a 503, and a 409 for an
+// idempotent request still in flight), and 0 otherwise.
 func retryAfterSeconds(resp *http.Response, errType ErrorType) int {
 	switch errType {
-	case ErrorTypeRateLimit:
-		if seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil {
-			return seconds
+	case ErrorTypeRateLimit, ErrorTypeServer:
+		if wait, ok := retryAfter(resp); ok {
+			// Seconds are reported as sent, even past what a Duration holds
+			if seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil {
+				return seconds
+			}
+			seconds := wait / time.Second
+			if wait%time.Second != 0 {
+				seconds++
+			}
+			return int(seconds)
 		}
 	case ErrorTypeIdempotencyConflict:
 		if seconds, ok := idempotencyInProgressRetryAfter(resp); ok {
@@ -116,6 +128,36 @@ func retryAfterSeconds(resp *http.Response, errType ErrorType) int {
 		}
 	}
 	return 0
+}
+
+// retryAfter returns the wait a 429 or 503 response asks for in its
+// Retry-After header, given as seconds or as an HTTP date. A date in the past
+// is a wait of zero, and a wait longer than a Duration holds is the longest
+// Duration. Other responses, and a missing or malformed header, report false.
+func retryAfter(resp *http.Response) (time.Duration, bool) {
+	if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != http.StatusServiceUnavailable {
+		return 0, false
+	}
+	value := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if value == "" {
+		return 0, false
+	}
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds < 0 {
+			return 0, false
+		}
+		if seconds > int64(math.MaxInt64/time.Second) {
+			return time.Duration(math.MaxInt64), true
+		}
+		return time.Duration(seconds) * time.Second, true
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		if wait := time.Until(at); wait > 0 {
+			return wait, true
+		}
+		return 0, true
+	}
+	return 0, false
 }
 
 // idempotencyInProgressRetryAfter reports whether a 409 response describes an
