@@ -458,6 +458,8 @@ client := api.NewAPIClient(
 )
 ```
 
+The SDK retries a network error, a 429 and a 5xx. It waits the backoff delay, or the response's `Retry-After` when that is longer. A response whose `Retry-After` is longer than `MaxDelay` is not retried: you get the error with its `RetryAfter`. A TLS certificate the client does not trust, and a context that is cancelled or past its deadline, end the request without a retry. Cancelling the context also ends a wait between tries.
+
 ## Development
 
 Run `make help` to see every command. The common ones:

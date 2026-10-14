@@ -76,7 +76,13 @@ const (
 	BackoffConstant BackoffStrategy = "constant"
 )
 
-// RetryConfig provides comprehensive retry configuration options
+// RetryConfig provides comprehensive retry configuration options.
+//
+// A network error, a 429 and a 5xx are retried. The wait before a retry is
+// the backoff delay, or the response's Retry-After when that is longer; a
+// response whose Retry-After exceeds MaxDelay is returned without a retry.
+// A TLS certificate verification failure and the end of the request's
+// context are never retried.
 type RetryConfig struct {
 	// Enabled controls whether retries are enabled at all
 	Enabled bool `json:"enabled"`

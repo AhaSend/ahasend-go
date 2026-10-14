@@ -43,6 +43,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,11 @@ var (
 	// pathParamsRegex is compiled once for performance in validatePathParams
 	pathParamsRegex = regexp.MustCompile(`\{([^}]+)\}`)
 )
+
+// retryDrainLimit bounds how much of a retried response's body is read before
+// it is closed. A body read to the end lets the next attempt reuse the
+// connection; a longer one is cut off and its connection closed.
+const retryDrainLimit = 64 << 10
 
 // RequestConfig contains all information needed to execute an API request
 type RequestConfig struct {
@@ -651,7 +657,9 @@ func (c *APIClient) applyRateLimit(ctx context.Context, endpointType EndpointTyp
 	return nil
 }
 
-// executeWithRetry executes the request with retry logic and proper body preservation
+// executeWithRetry executes the request with retry logic and proper body
+// preservation, as RetryConfig describes. Every response it does not return
+// has its body closed.
 func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, config RequestConfig, httpClient *http.Client) (*http.Response, error) {
 	// Determine retry configuration
 	var retryConfig RetryConfig
@@ -678,10 +686,9 @@ func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, con
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	var lastErr error
-	var lastResp *http.Response
-
-	for attempt := 0; attempt <= retryConfig.MaxRetries; attempt++ {
+	// shouldRetry refuses once attempt reaches MaxRetries, so the loop always
+	// ends by returning an attempt's own result.
+	for attempt := 0; ; attempt++ {
 		// Clone the request for each attempt
 		reqClone := req.Clone(ctx)
 		if bodyBytes != nil {
@@ -693,51 +700,77 @@ func (c *APIClient) executeWithRetry(ctx context.Context, req *http.Request, con
 		resp, err := httpClient.Do(reqClone)
 
 		// Check if we should retry
-		if !c.shouldRetry(err, resp, retryConfig, attempt) {
+		if !c.shouldRetry(ctx, err, resp, retryConfig, attempt) {
 			return resp, err
 		}
 
-		lastErr = err
-		lastResp = resp
+		// This response is not returned: release it before waiting
+		discardResponse(resp)
 
-		// Calculate delay before next attempt
-		if attempt < retryConfig.MaxRetries {
-			delay := retryConfig.GetDelay(attempt + 1)
-
-			select {
-			case <-ctx.Done():
-				return lastResp, ctx.Err()
-			case <-time.After(delay):
-				// Continue to next attempt
-			}
+		timer := time.NewTimer(retryDelay(resp, retryConfig, attempt+1))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+			// Continue to next attempt
 		}
-	}
-
-	// All retries exhausted
-	if lastErr != nil {
-		return lastResp, lastErr
-	}
-
-	return lastResp, &APIError{
-		Type:       ErrorTypeServer,
-		StatusCode: lastResp.StatusCode,
-		Message:    fmt.Sprintf("Request failed after %d retries", retryConfig.MaxRetries),
 	}
 }
 
+// discardResponse reads up to retryDrainLimit bytes of a response that will
+// not be returned, so its connection can be reused, and closes its body.
+func discardResponse(resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	io.CopyN(io.Discard, resp.Body, retryDrainLimit)
+	resp.Body.Close()
+}
+
+// retryDelay returns the wait before retry number attempt: the backoff delay,
+// or the response's Retry-After when that is longer.
+func retryDelay(resp *http.Response, config RetryConfig, attempt int) time.Duration {
+	delay := config.GetDelay(attempt)
+	if resp != nil {
+		if wait, ok := retryAfter(resp); ok && wait > delay {
+			delay = wait
+		}
+	}
+	return delay
+}
+
+// isCertificateError reports whether err is a failure to verify the server's
+// TLS certificate, which a retry against the same server cannot fix. The
+// tls.CertificateVerificationError of Go 1.20 and later wraps these errors, so
+// matching them covers it too without requiring Go 1.20.
+func isCertificateError(err error) bool {
+	var unknownAuthority x509.UnknownAuthorityError
+	var invalid x509.CertificateInvalidError
+	var hostname x509.HostnameError
+	return errors.As(err, &unknownAuthority) || errors.As(err, &invalid) || errors.As(err, &hostname)
+}
+
 // shouldRetry determines whether a request should be retried based on error and response
-func (c *APIClient) shouldRetry(err error, resp *http.Response, config RetryConfig, attempt int) bool {
+func (c *APIClient) shouldRetry(ctx context.Context, err error, resp *http.Response, config RetryConfig, attempt int) bool {
 	// Don't retry if we've exhausted attempts
 	if attempt >= config.MaxRetries {
 		return false
 	}
 
-	// Network errors are always retryable
+	// Network errors are retryable, except when the caller's context has
+	// ended or the server's certificate is not trusted
 	if err != nil {
-		return true
+		return ctx.Err() == nil && !isCertificateError(err)
 	}
 
 	if resp == nil {
+		return false
+	}
+
+	// A server asking for a longer wait than MaxDelay is not retried, so the
+	// caller gets its error, RetryAfter included
+	if wait, ok := retryAfter(resp); ok && config.MaxDelay > 0 && wait > config.MaxDelay {
 		return false
 	}
 

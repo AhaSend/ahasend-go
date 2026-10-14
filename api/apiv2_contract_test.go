@@ -1744,7 +1744,8 @@ func TestTemplatesAPIRetriesARacedWriteWithItsIdempotencyKey(t *testing.T) {
 			cfg.RetryConfig.Enabled = true
 			cfg.RetryConfig.MaxRetries = 2
 			cfg.RetryConfig.BaseDelay = time.Millisecond
-			cfg.RetryConfig.MaxDelay = time.Millisecond
+			// Above the server's Retry-After of 1s, so the 503 is retried
+			cfg.RetryConfig.MaxDelay = 2 * time.Second
 			client := NewAPIClientWithConfig(cfg)
 
 			template, httpResponse, err := tt.call(client)
