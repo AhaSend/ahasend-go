@@ -632,9 +632,11 @@ func (c *APIClient) applyHeaders(ctx context.Context, req *http.Request, config 
 	return nil
 }
 
-// applyRateLimit applies rate limiting for the specified endpoint type
+// applyRateLimit applies rate limiting for the specified endpoint type,
+// unless rate limiting is turned off for the whole client
+// (Configuration.EnableRateLimit, WithRateLimit, SetGlobalRateLimit)
 func (c *APIClient) applyRateLimit(ctx context.Context, endpointType EndpointType) error {
-	if c.rateLimiter == nil {
+	if c.rateLimiter == nil || !c.rateLimiter.IsEnabled() {
 		return nil
 	}
 

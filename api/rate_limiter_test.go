@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 	"sort"
 	"sync"
 	"testing"
@@ -495,4 +496,35 @@ func TestConfigurationIntegration(t *testing.T) {
 	generalStatus := client.GetRateLimitStatus(GeneralAPI)
 	assert.Equal(t, 200, generalStatus.RequestsPerSecond)
 	assert.Equal(t, 400, generalStatus.BurstCapacity)
+}
+
+// TestTurningRateLimitingOffForTheClientSkipsTheBuckets checks that a client
+// with rate limiting turned off sends requests without waiting for a token,
+// and waits again once it is turned back on.
+func TestTurningRateLimitingOffForTheClientSkipsTheBuckets(t *testing.T) {
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return noContentResponse(req), nil
+	})
+	client := NewAPIClient(
+		WithAPIKey("test-key"),
+		WithHTTPClient(&http.Client{Transport: transport}),
+		WithRateLimit(false),
+	)
+	client.SetGeneralRateLimit(1, 1)
+
+	ping := func() time.Duration {
+		start := time.Now()
+		_, _, err := client.UtilityAPI.Ping(context.Background())
+		require.NoError(t, err)
+		return time.Since(start)
+	}
+
+	// At 1 a second, the second and third pings would wait a second each
+	for i := 0; i < 3; i++ {
+		assert.Less(t, ping(), 200*time.Millisecond)
+	}
+
+	client.SetGlobalRateLimit(true)
+	ping()
+	assert.GreaterOrEqual(t, ping(), 500*time.Millisecond)
 }
