@@ -131,6 +131,40 @@ func TestRetryAfterLongerThanMaxDelayIsNotRetried(t *testing.T) {
 	assert.Equal(t, 60, apiErr.RetryAfter)
 }
 
+func TestRetryAfterIsNotRetriedPastTheMaxDelayLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		maxDelay   time.Duration
+		retryAfter string
+		want       int
+	}{
+		// MaxDelay 0 caps every wait at 0, as it caps the backoff
+		{name: "zero MaxDelay", maxDelay: 0, retryAfter: "120", want: 120},
+		// Too large for a Duration: still past the limit, reported as sent
+		{name: "beyond a Duration", maxDelay: time.Second, retryAfter: "9999999999", want: 9999999999},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int32
+			transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				atomic.AddInt32(&attempts, 1)
+				header := http.Header{"Retry-After": []string{tt.retryAfter}}
+				return statusResponse(req, http.StatusTooManyRequests, header, newTrackedBody(`{}`)), nil
+			})
+
+			client := retryTestClient(transport, fastRetryConfig(tt.maxDelay))
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_, _, err := client.UtilityAPI.Ping(ctx)
+
+			var apiErr *APIError
+			require.True(t, errors.As(err, &apiErr), "expected an *APIError, got %v", err)
+			assert.Equal(t, int32(1), atomic.LoadInt32(&attempts))
+			assert.Equal(t, tt.want, apiErr.RetryAfter)
+		})
+	}
+}
+
 func TestRetryWaitEndsWhenContextIsCancelled(t *testing.T) {
 	var attempts int32
 	var first *trackedBody

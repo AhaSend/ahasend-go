@@ -310,7 +310,8 @@ executes again, which for a side-effecting operation means the effect can happen
 twice. Retrying is safe to automate for reads; for sends, decide whether a
 possible duplicate is worse than a possible miss.
 
-The SDK's transport retries no 4xx on its own other than 429, so this conflict is
+The SDK's transport retries no 4xx on its own other than 429 (unless
+`RetryClientErrors` is set), so this conflict is
 reported but not retried automatically — waiting and retrying is your
 decision.
 

@@ -770,7 +770,7 @@ func (c *APIClient) shouldRetry(ctx context.Context, err error, resp *http.Respo
 
 	// A server asking for a longer wait than MaxDelay is not retried, so the
 	// caller gets its error, RetryAfter included
-	if wait, ok := retryAfter(resp); ok && config.MaxDelay > 0 && wait > config.MaxDelay {
+	if wait, ok := retryAfter(resp); ok && wait > config.MaxDelay {
 		return false
 	}
 

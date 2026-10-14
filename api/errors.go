@@ -3,6 +3,7 @@ package api
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,7 +55,8 @@ func (e *APIError) Error() string {
 
 // IsRetryable returns true if the error is retryable.
 //
-// Note that the SDK's transport retries no 4xx on its own other than 429, so an
+// Note that the SDK's transport retries no 4xx on its own other than 429
+// (unless RetryConfig.RetryClientErrors is set), so an
 // ErrorTypeIdempotencyConflict is reported as retryable but is not retried
 // automatically: retrying it is the caller's decision, after waiting
 // RetryAfter seconds.
@@ -110,7 +112,15 @@ func retryAfterSeconds(resp *http.Response, errType ErrorType) int {
 	switch errType {
 	case ErrorTypeRateLimit, ErrorTypeServer:
 		if wait, ok := retryAfter(resp); ok {
-			return int((wait + time.Second - 1) / time.Second)
+			// Seconds are reported as sent, even past what a Duration holds
+			if seconds, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil {
+				return seconds
+			}
+			seconds := wait / time.Second
+			if wait%time.Second != 0 {
+				seconds++
+			}
+			return int(seconds)
 		}
 	case ErrorTypeIdempotencyConflict:
 		if seconds, ok := idempotencyInProgressRetryAfter(resp); ok {
@@ -122,8 +132,8 @@ func retryAfterSeconds(resp *http.Response, errType ErrorType) int {
 
 // retryAfter returns the wait a 429 or 503 response asks for in its
 // Retry-After header, given as seconds or as an HTTP date. A date in the past
-// is a wait of zero. Other responses, and a missing or malformed header,
-// report false.
+// is a wait of zero, and a wait longer than a Duration holds is the longest
+// Duration. Other responses, and a missing or malformed header, report false.
 func retryAfter(resp *http.Response) (time.Duration, bool) {
 	if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != http.StatusServiceUnavailable {
 		return 0, false
@@ -132,9 +142,12 @@ func retryAfter(resp *http.Response) (time.Duration, bool) {
 	if value == "" {
 		return 0, false
 	}
-	if seconds, err := strconv.Atoi(value); err == nil {
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
 		if seconds < 0 {
 			return 0, false
+		}
+		if seconds > int64(math.MaxInt64/time.Second) {
+			return time.Duration(math.MaxInt64), true
 		}
 		return time.Duration(seconds) * time.Second, true
 	}
