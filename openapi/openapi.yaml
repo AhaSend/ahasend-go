@@ -149,6 +149,9 @@ info:
     - General API endpoints: 100 requests per second, 200 burst
     - Statistics endpoints: 1 request per second, 1 burst
 
+    A request over the limit gets HTTP 429 with a `Retry-After` header: the
+    number of seconds to wait before retrying.
+
     ## Pagination
     List endpoints use cursor-based pagination with the following parameters:
     - `limit`: Maximum number of items to return (default: 100, max: 100)
@@ -833,10 +836,10 @@ components:
         email:
           type: string
           format: email
-          description: Valid email address from a domain defined in your account with valid DNS records
+          description: The email address. A `from` address must be on a domain defined in your account with valid DNS records.
         name:
           type: string
-          description: Display name for the sender
+          description: The display name shown with the address. It can hold any Unicode text; the API encodes it for the header. On a send with substitutions or a template, a name with non-ASCII text can use `{{ name }}` references only; other template syntax in it is refused.
       example:
         email: "noreply@example.com"
         name: "Example Corp"
@@ -852,7 +855,7 @@ components:
           description: Recipient email address
         name:
           type: string
-          description: Display name for the recipient
+          description: Display name for the recipient. It can hold any Unicode text; the API encodes it for the header. On a send with substitutions or a template, a name with non-ASCII text can use `{{ name }}` references only; other template syntax in it is refused.
         substitutions:
           type: object
           additionalProperties: true
@@ -1138,7 +1141,7 @@ components:
             $ref: '#/components/schemas/Address'
           minItems: 1
           maxItems: 50
-          description: This parameter can set the `To` header to multiple addresses. The combined to, cc, and bcc recipient count must not exceed 50.
+          description: Addresses that get a copy of the message without appearing in any of its headers. The combined to, cc, and bcc recipient count must not exceed 50.
         reply_to:
           $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers array must not be provided
@@ -1163,7 +1166,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Custom email headers. Each name must be visible ASCII with no space and no colon. `cc` and `reply-to` headers cannot be provided if `reply_to` or `cc` parameters are provided, message-id will be ignored and automatically generated
+          description: Custom email headers. Each name must be visible ASCII with no space and no colon. `cc` and `reply-to` headers cannot be provided if `reply_to` or `cc` parameters are provided, message-id will be ignored and automatically generated. A `to` header is ignored; the `to` parameter sets the To header.
         tags:
           type: array
           items:
@@ -2100,6 +2103,7 @@ components:
             - preheader_missing
             - design_missing
             - text_broken
+            - text_unchecked
             - unsubscribe_link_missing
           description: |
             - `sender_missing`: the campaign has no complete sender, or its domain was deleted.
@@ -2108,6 +2112,7 @@ components:
             - `preheader_missing`: the campaign has no preview text.
             - `design_missing`: the campaign has no design, or its design has no HTML.
             - `text_broken`: the subject, the preview text or the design holds template syntax that cannot be rendered, so every message would fail.
+            - `text_unchecked`: the subject, the preview text and the design could not be checked right now. Nothing is wrong with them that is known; try again in a moment. Under load it can come and go between reads.
             - `unsubscribe_link_missing`: the HTML does not use `{{ unsubscribe_url }}`, with or without filters.
         message:
           type: string
