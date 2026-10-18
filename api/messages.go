@@ -168,6 +168,7 @@ Creates and sends a conversational message with support for To, CC, and BCC reci
 - If `cc` is provided, do not include `cc` in headers
 - Header names must be visible ASCII with no space or colon
 - `message-id` header will be ignored and automatically generated
+- A `to` header is ignored; the `to` parameter sets the To header
 - Schedule times must be in RFC3339 format
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days

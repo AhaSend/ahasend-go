@@ -259,7 +259,8 @@ SendCampaign Send Campaign
 # Sends a draft campaign now, or at SendAt
 
 A campaign with any issue is refused with 400 and the issues; AsCampaignNotReady
-returns them. The send then checks what would stop the campaign at its send
+returns them. The issue text_unchecked clears by itself: call again in a
+moment. The send then checks what would stop the campaign at its send
 time: its sender domain must still be verified and not paused, the account must
 be able to send, and its lists must have subscribed contacts. For a send at a
 later time, a block that a payment or the next billing period can clear is a
@@ -340,7 +341,8 @@ TestCampaign Test Campaign
 
 Each address gets the design with placeholders for the contact's fields. A
 campaign with any issue but unsubscribe_link_missing is refused with 400 and
-the issues; AsCampaignNotReady returns them. An account can send 50 test
+the issues; AsCampaignNotReady returns them. The issue text_unchecked clears by
+itself: call again in a moment. An account can send 50 test
 emails per day (UTC), counted per address, from the API and the dashboard
 together. Past that, the request returns 429; its message currently reads
 "daily test send limit reached". The limit clears only when the UTC day
