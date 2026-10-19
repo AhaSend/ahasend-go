@@ -19,6 +19,10 @@ import (
 //   - CampaignIssueTextBroken: the subject, the preview text or the design
 //     holds template syntax that cannot be rendered, so every message would
 //     fail.
+//   - CampaignIssueTextUnchecked: the subject, the preview text and the design
+//     could not be checked right now. Nothing is wrong with them that is
+//     known; try again in a moment. Under load it can come and go between
+//     reads.
 //   - CampaignIssueUnsubscribeLinkMissing: the HTML uses neither
 //     {{ unsubscribe_url }} nor {{ unsubscribe_link }}, with or without
 //     filters.
@@ -29,6 +33,7 @@ const (
 	CampaignIssuePreheaderMissing       = "preheader_missing"
 	CampaignIssueDesignMissing          = "design_missing"
 	CampaignIssueTextBroken             = "text_broken"
+	CampaignIssueTextUnchecked          = "text_unchecked"
 	CampaignIssueUnsubscribeLinkMissing = "unsubscribe_link_missing"
 )
 

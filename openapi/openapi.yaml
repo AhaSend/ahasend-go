@@ -149,6 +149,9 @@ info:
     - General API endpoints: 100 requests per second, 200 burst
     - Statistics endpoints: 1 request per second, 1 burst
 
+    A request over the limit gets HTTP 429 with a `Retry-After` header: the
+    number of seconds to wait before retrying.
+
     ## Pagination
     List endpoints use cursor-based pagination with the following parameters:
     - `limit`: Maximum number of items to return (default: 100, max: 100)
@@ -341,6 +344,27 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "template is being changed by another request, try again"
+
+    TemplateCheckBusy:
+      description: |
+        Every message is checked with the template engine before it is sent,
+        and the check could not run right now: the service was busy, or the
+        engine failed. Nothing was sent and nothing is known to be wrong with
+        the message.
+        Send it again after `Retry-After` seconds; on an operation that takes
+        an `Idempotency-Key`, send it with the same key.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "the message could not be checked right now; try again in a moment"
 
   schemas:
     ErrorResponse:
@@ -833,10 +857,10 @@ components:
         email:
           type: string
           format: email
-          description: Valid email address from a domain defined in your account with valid DNS records
+          description: The email address. A `from` address must be on a domain defined in your account with valid DNS records.
         name:
           type: string
-          description: Display name for the sender
+          description: The display name shown with the address. It can hold any Unicode text; the API encodes it for the header. On a send with substitutions or a template, a name with non-ASCII text can use `{{ name }}` references only; other template syntax in it is refused.
       example:
         email: "noreply@example.com"
         name: "Example Corp"
@@ -852,11 +876,11 @@ components:
           description: Recipient email address
         name:
           type: string
-          description: Display name for the recipient
+          description: Display name for the recipient. It can hold any Unicode text; the API encodes it for the header. On a send with substitutions or a template, a name with non-ASCII text can use `{{ name }}` references only; other template syntax in it is refused.
         substitutions:
           type: object
           additionalProperties: true
-          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are.
+          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are. On a template send, to fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
       example:
         email: "user@example.com"
         name: "John Doe"
@@ -1051,7 +1075,7 @@ components:
           description: |
             Each recipient gets a separate message. This does not set the To header to more than one address.
 
-            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values.
+            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values. To fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
         reply_to:
           $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers must not be provided. When the request has neither, the template's reply-to is used.
@@ -1138,7 +1162,7 @@ components:
             $ref: '#/components/schemas/Address'
           minItems: 1
           maxItems: 50
-          description: This parameter can set the `To` header to multiple addresses. The combined to, cc, and bcc recipient count must not exceed 50.
+          description: Addresses that get a copy of the message without appearing in any of its headers. The combined to, cc, and bcc recipient count must not exceed 50.
         reply_to:
           $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers array must not be provided
@@ -1163,7 +1187,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: Custom email headers. Each name must be visible ASCII with no space and no colon. `cc` and `reply-to` headers cannot be provided if `reply_to` or `cc` parameters are provided, message-id will be ignored and automatically generated
+          description: Custom email headers. Each name must be visible ASCII with no space and no colon. `cc` and `reply-to` headers cannot be provided if `reply_to` or `cc` parameters are provided, message-id will be ignored and automatically generated. A `to` header is ignored; the `to` parameter sets the To header.
         tags:
           type: array
           items:
@@ -1498,6 +1522,7 @@ components:
       required:
         - name
         - required
+        - kind
       properties:
         name:
           type: string
@@ -1515,6 +1540,53 @@ components:
             message then carries `List-Unsubscribe` and
             `List-Unsubscribe-Post` headers for it; a `List-Unsubscribe` or
             `List-Unsubscribe-Post` in the request's `headers` is dropped.
+        kind:
+          type: string
+          enum: [value, condition, list]
+          description: |
+            What kind of value to send for this variable.
+
+            - `value`: text or a number that appears in the email, such as a
+              first name.
+            - `condition`: used only to decide whether a part of the email is
+              shown, for example "show this section if `vip` is set". It never
+              appears in the email. To make it set, send a value that is not
+              empty, such as `true` or `"yes"`. To make it not set, leave it
+              out or send `""`, `false`, `0`, `null`, `[]` or `{}`. The strings
+              `"false"` and `"0"` are not empty, so they make it set. A rule
+              can also compare it, for example "show this section if `plan`
+              equals `gold`"; then send a value that meets the rule to show
+              the section.
+            - `list`: an array. A section of the email is repeated once for
+              each element, for example one row per product in an order.
+              `item_fields` names the fields each element should have.
+        item_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Only for a `list` variable. The fields the repeated section uses
+            from each element. Send each element as an object with these
+            fields. A field an element does not have is taken from the
+            variable of the same name in `substitutions`, if there is one.
+
+            For example, if `items` has `item_fields` `["name", "price"]`,
+            send:
+
+            ```json
+            {
+              "items": [
+                {"name": "Linen shirt", "price": "€49"},
+                {"name": "Canvas tote", "price": "€19"}
+              ]
+            }
+            ```
+
+            A section that shows each element as it is, such as a list of
+            tags, uses the field `value`. If `item_fields` is `["value"]`, you
+            can send plain values, such as `["new", "sale"]`. Empty when the
+            section uses nothing from its elements: send one element, of any
+            kind, for each time the section repeats.
 
     Template:
       type: object
@@ -1565,7 +1637,8 @@ components:
             Every variable the design uses. A send of this template takes the
             values only from each recipient's `substitutions`. Every recipient
             must give a value for each required variable; if one does not, the
-            request is rejected and no message is sent.
+            request is rejected and no message is sent. Each variable's `kind`
+            says what shape of value to send.
         from:
           oneOf:
             - $ref: '#/components/schemas/Address'
@@ -1746,7 +1819,11 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/TemplateVariable'
-              description: Every variable the version uses
+              description: |
+                Every variable the version uses, as saved when the version was
+                published. A version published before kinds were recorded shows
+                every variable as `value`, with no `item_fields`; save and
+                publish the template again to get a version that records them.
             from:
               oneOf:
                 - $ref: '#/components/schemas/Address'
@@ -2100,6 +2177,7 @@ components:
             - preheader_missing
             - design_missing
             - text_broken
+            - text_unchecked
             - unsubscribe_link_missing
           description: |
             - `sender_missing`: the campaign has no complete sender, or its domain was deleted.
@@ -2108,6 +2186,7 @@ components:
             - `preheader_missing`: the campaign has no preview text.
             - `design_missing`: the campaign has no design, or its design has no HTML.
             - `text_broken`: the subject, the preview text or the design holds template syntax that cannot be rendered, so every message would fail.
+            - `text_unchecked`: the subject, the preview text and the design could not be checked right now. Nothing is wrong with them that is known; try again in a moment. Under load it can come and go between reads.
             - `unsubscribe_link_missing`: the HTML does not use `{{ unsubscribe_url }}`, with or without filters.
         message:
           type: string
@@ -6361,11 +6440,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                render_refused:
+                  summary: A recipient's values make the content fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6394,6 +6479,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
   /v2/accounts/{account_id}/messages/template:
     post:
@@ -6405,7 +6492,7 @@ paths:
         The message has the template's HTML body, with the template's preview text added, and the template's text body. It has no AMP part. The message records the template: the message's `template_id` (Get Message) is the ID of this template.
 
         **Variables:**
-        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted.
+        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted. To fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
 
         Your `subject` and `headers` resolve from the same values. A `{{ name }}` that has no value becomes empty.
 
@@ -6486,7 +6573,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
@@ -6496,6 +6584,10 @@ paths:
                   summary: A recipient does not give a required variable
                   value:
                     message: "missing required template variables: user@example.com needs first_name, order_id"
+                render_refused:
+                  summary: A recipient's values make the template fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6531,6 +6623,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
       x-code-samples:
         - lang: go
@@ -6736,11 +6830,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                render_refused:
+                  summary: A recipient's values make the content fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6769,6 +6869,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
   /v2/accounts/{account_id}/messages/{message_id}:
     get:
@@ -7301,9 +7403,11 @@ paths:
               if err != nil {
                 log.Fatalf("Error getting template: %v", err)
               }
-              // A send from this template must supply every required variable.
+              // A send from this template must supply every required variable. Kind
+              // says what shape of value to send; a list variable takes a slice of
+              // elements with the fields in ItemFields.
               for _, variable := range response.Variables {
-                fmt.Printf("%s required=%t\n", variable.Name, variable.Required)
+                fmt.Printf("%s required=%t kind=%s item_fields=%v\n", variable.Name, variable.Required, variable.Kind, variable.ItemFields)
               }
             }
 
@@ -10082,7 +10186,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignTest'
         '400':
-          description: Invalid campaign_id, an invalid body or address, no address or more than 5, a campaign with issues (with `issues`), a sender domain that is paused or no longer verified, or an account that cannot send
+          description: |
+            Invalid campaign_id, an invalid body or address, no address or more than 5, a campaign with issues (with `issues`), a sender domain that is paused or no longer verified, an account that cannot send, or a test the template check refuses, in which case nothing is sent: content that cannot be rendered with a recipient's values, a call to `random`, `randrange`, `lipsum` or `now`, `namespace`, a work, output, memory or time limit, or an address the check cannot read (`<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering)
           content:
             application/json:
               schema:
@@ -10127,6 +10232,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
       x-code-samples:
         - lang: go

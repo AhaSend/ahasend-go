@@ -7,6 +7,29 @@ import (
 	"github.com/google/uuid"
 )
 
+// Kinds of a template variable. They say what shape of value a send gives
+// for the variable in a recipient's Substitutions.
+//
+//   - TemplateVariableKindValue: text or a number that appears in the email,
+//     such as a first name.
+//   - TemplateVariableKindCondition: used only to decide whether a part of
+//     the email is shown. It never appears in the email. A value that is not
+//     empty, such as true or "yes", makes it set. Leaving it out or sending
+//     "", false, 0, nil, an empty slice or an empty map makes it not set. The
+//     strings "false" and "0" are not empty, so they make it set. When the
+//     design compares it, for example "show this section if plan equals
+//     gold", send a value that meets the rule to show the section.
+//   - TemplateVariableKindList: a slice. A section of the email is repeated
+//     once for each element, for example one row per product in an order.
+//
+// Kind is a plain string, so a kind this version of the SDK does not know
+// still decodes.
+const (
+	TemplateVariableKindValue     = "value"
+	TemplateVariableKindCondition = "condition"
+	TemplateVariableKindList      = "list"
+)
+
 // TemplateVariable represents one variable a template's design uses.
 type TemplateVariable struct {
 	Name string `json:"name"`
@@ -14,6 +37,18 @@ type TemplateVariable struct {
 	// variable. A variable the design wraps in a fallback is not required,
 	// and neither are the names the send supplies itself.
 	Required bool `json:"required"`
+	// Kind is TemplateVariableKindValue, TemplateVariableKindCondition or
+	// TemplateVariableKindList.
+	Kind string `json:"kind"`
+	// ItemFields is set only for a TemplateVariableKindList variable. It
+	// names the fields the repeated section uses from each element: send
+	// each element as a map with these fields. A field an element does not
+	// have is taken from the recipient's substitution of the same name, if
+	// there is one. When ItemFields is ["value"], the section shows each
+	// element as it is, so plain values such as []string{"new", "sale"}
+	// work. It is empty when the section uses nothing from its elements:
+	// send one element, of any kind, for each time the section repeats.
+	ItemFields []string `json:"item_fields,omitempty"`
 }
 
 // TemplateContent is the content of a template, a draft or a version. A
@@ -119,7 +154,11 @@ type TemplateVersionDetail struct {
 	PublishedBy *TemplatePublisher `json:"published_by,omitempty"`
 	Subject     string             `json:"subject"`
 	Preheader   string             `json:"preheader"`
-	Variables   []TemplateVariable `json:"variables"`
+	// Variables are every variable the version uses, as saved when the
+	// version was published. A version published before kinds were recorded
+	// shows every variable as TemplateVariableKindValue, with no ItemFields;
+	// save and publish the template again to get a version that records them.
+	Variables []TemplateVariable `json:"variables"`
 	// From is the version's default sender, nil when it has none.
 	From *common.SenderAddress `json:"from,omitempty"`
 	// ReplyTo is the version's default reply-to address, nil when it has none.

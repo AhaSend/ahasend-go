@@ -70,6 +70,14 @@ Creates and sends a message to one or more recipients.
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days
 
+Every message is checked before it is sent. A message whose content cannot be
+rendered with a recipient's values, calls random, randrange, lipsum or now,
+uses namespace, passes a work, output, memory or time limit, or has a
+recipient address the check cannot read is refused with 400, and nothing of
+the request is sent. The message reads "<email>: the message could not be
+rendered: <reason>". When the check cannot run, the API answers 503 with a
+Retry-After, and the client retries it with the same idempotency key.
+
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
 	@param request CreateMessageRequest - The message details to create
@@ -123,6 +131,14 @@ Sends a stored transactional template to one or more recipients. Each recipient 
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days
 
+Every message is checked before it is sent. A message whose content cannot be
+rendered with a recipient's values, calls random, randrange, lipsum or now,
+uses namespace, passes a work, output, memory or time limit, or has a
+recipient address the check cannot read is refused with 400, and nothing of
+the request is sent. The message reads "<email>: the message could not be
+rendered: <reason>". When the check cannot run, the API answers 503 with a
+Retry-After, and the client retries it with the same idempotency key.
+
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
 	@param request CreateTemplateMessageRequest - The template and recipients to send to
@@ -168,9 +184,18 @@ Creates and sends a conversational message with support for To, CC, and BCC reci
 - If `cc` is provided, do not include `cc` in headers
 - Header names must be visible ASCII with no space or colon
 - `message-id` header will be ignored and automatically generated
+- A `to` header is ignored; the `to` parameter sets the To header
 - Schedule times must be in RFC3339 format
 - `schedule.first_attempt` must be in the future and within 7 days
 - `schedule.expires` must be in the future and within 8 days
+
+Every message is checked before it is sent. A message whose content cannot be
+rendered with a recipient's values, calls random, randrange, lipsum or now,
+uses namespace, passes a work, output, memory or time limit, or has a
+recipient address the check cannot read is refused with 400, and nothing of
+the request is sent. The message reads "<email>: the message could not be
+rendered: <reason>". When the check cannot run, the API answers 503 with a
+Retry-After, and the client retries it with the same idempotency key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

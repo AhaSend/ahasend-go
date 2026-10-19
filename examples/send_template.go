@@ -59,7 +59,7 @@ func main() {
 
 	fmt.Printf("Template: %s\n", template.Name)
 	for _, variable := range template.Variables {
-		fmt.Printf("  %s (required: %t)\n", variable.Name, variable.Required)
+		fmt.Printf("  %s (required: %t, kind: %s)\n", variable.Name, variable.Required, variable.Kind)
 	}
 
 	// The template supplies the subject, preview text and both bodies, so the

@@ -12,6 +12,8 @@ type Recipient struct {
 	Name  *string `json:"name,omitempty"`
 	// Substitutions are this recipient's template values. In the HTML and AMP
 	// bodies each value is HTML-escaped; {{ name|safe }} inserts it as HTML.
-	// The subject, the headers and the text body get values as they are.
+	// The subject, the headers and the text body get values as they are. On
+	// a template send, a list variable takes a slice; the template's
+	// Variables show the fields each element needs.
 	Substitutions map[string]interface{} `json:"substitutions,omitempty"`
 }

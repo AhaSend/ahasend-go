@@ -1262,6 +1262,112 @@ func TestMessagesAPICreateTemplateMessage(t *testing.T) {
 	assert.NotContains(t, body, "from")
 }
 
+// The send operations check every message before it is sent. When the check
+// cannot run, the API answers 503 with a Retry-After and asks for the same
+// key on the retry; the client retries it as it retries any 503.
+func TestSendsRetryABusyTemplateCheckWithTheirIdempotencyKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   int
+		response string
+		call     func(client *APIClient) (*http.Response, error)
+	}{
+		{
+			name:     "create message",
+			status:   http.StatusAccepted,
+			response: `{"object":"list","data":[]}`,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.MessagesAPI.CreateMessage(context.Background(), uuid.New(), requests.CreateMessageRequest{
+					From:        common.SenderAddress{Email: "sender@example.com"},
+					Recipients:  []common.Recipient{{Email: "recipient@example.com"}},
+					Subject:     "Hello",
+					TextContent: ahasend.String("Hello"),
+				})
+				return httpResponse, err
+			},
+		},
+		{
+			name:     "create template message",
+			status:   http.StatusAccepted,
+			response: `{"object":"list","data":[]}`,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.MessagesAPI.CreateTemplateMessage(context.Background(), uuid.New(), requests.CreateTemplateMessageRequest{
+					TemplateID: uuid.New(),
+					Recipients: []common.Recipient{{Email: "recipient@example.com"}},
+				})
+				return httpResponse, err
+			},
+		},
+		{
+			name:     "create conversation message",
+			status:   http.StatusAccepted,
+			response: `{"object":"list","data":[]}`,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.MessagesAPI.CreateConversationMessage(context.Background(), uuid.New(), requests.CreateConversationMessageRequest{
+					From:    common.SenderAddress{Email: "sender@example.com"},
+					To:      []common.SenderAddress{{Email: "recipient@example.com"}},
+					Subject: "Hello",
+				})
+				return httpResponse, err
+			},
+		},
+		{
+			name:     "test campaign",
+			status:   http.StatusOK,
+			response: `{"object":"campaign_test","sent_to":["ann@example.com"],"failed":[],"result_unknown":false}`,
+			call: func(client *APIClient) (*http.Response, error) {
+				_, httpResponse, err := client.CampaignsAPI.TestCampaign(context.Background(), uuid.New(), uuid.New(), requests.TestCampaignRequest{
+					To: []string{"ann@example.com"},
+				})
+				return httpResponse, err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int
+			var keys []string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				keys = append(keys, r.Header.Get("Idempotency-Key"))
+				w.Header().Set("Content-Type", "application/json")
+				if attempts == 1 {
+					w.Header().Set("Retry-After", "1")
+					w.WriteHeader(http.StatusServiceUnavailable)
+					_, _ = w.Write([]byte(`{"message":"the message could not be checked right now; try again in a moment"}`))
+					return
+				}
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.response))
+			}))
+			defer server.Close()
+			serverURL, err := url.Parse(server.URL)
+			require.NoError(t, err)
+
+			cfg := NewConfiguration()
+			cfg.Host = serverURL.Host
+			cfg.Scheme = serverURL.Scheme
+			cfg.APIKey = "test-key"
+			cfg.RetryConfig.Enabled = true
+			cfg.RetryConfig.MaxRetries = 2
+			cfg.RetryConfig.BaseDelay = time.Millisecond
+			// Above the server's Retry-After of 1s, so the 503 is retried
+			cfg.RetryConfig.MaxDelay = 2 * time.Second
+			client := NewAPIClientWithConfig(cfg)
+
+			httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, httpResponse)
+			assert.Equal(t, tt.status, httpResponse.StatusCode)
+			require.Len(t, keys, 2)
+			assert.NotEmpty(t, keys[0])
+			assert.Equal(t, keys[0], keys[1])
+		})
+	}
+}
+
 func TestOpenAPISendRequestSchemasMatchModels(t *testing.T) {
 	assert.Equal(t, openAPISchemaProperties(t, "CreateMessageRequest"), modelJSONFields(requests.CreateMessageRequest{}))
 	assert.Equal(t, openAPISchemaProperties(t, "CreateTemplateMessageRequest"), modelJSONFields(requests.CreateTemplateMessageRequest{}))
@@ -1325,8 +1431,40 @@ func TestOpenAPICreateTemplateMessageOperation(t *testing.T) {
 		actualStatuses = append(actualStatuses, status)
 	}
 	sort.Strings(actualStatuses)
-	assert.Equal(t, []string{"202", "400", "401", "403", "404", "409", "422", "500"}, actualStatuses)
+	assert.Equal(t, []string{"202", "400", "401", "403", "404", "409", "422", "500", "503"}, actualStatuses)
 	assert.Contains(t, operation.Responses["202"].Headers, "Idempotent-Replayed")
+}
+
+func TestOpenAPITemplateCheckBusyResponses(t *testing.T) {
+	spec := loadOpenAPIContract(t)
+
+	tests := []struct {
+		path        string
+		operationID string
+	}{
+		{path: "/v2/accounts/{account_id}/messages", operationID: "createMessage"},
+		{path: "/v2/accounts/{account_id}/messages/template", operationID: "createTemplateMessage"},
+		{path: "/v2/accounts/{account_id}/messages/conversation", operationID: "createConversationMessage"},
+		{path: "/v2/accounts/{account_id}/campaigns/{campaign_id}/test", operationID: "testCampaign"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			operation, ok := spec.Paths[tt.path]["post"]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+			assert.Equal(t, "#/components/responses/TemplateCheckBusy", operation.Responses["503"].Ref)
+		})
+	}
+
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+	var components struct {
+		Components struct {
+			Responses map[string]responseContract `yaml:"responses"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &components))
+	assert.Contains(t, components.Components.Responses["TemplateCheckBusy"].Headers, "Retry-After")
 }
 
 func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
@@ -1823,7 +1961,7 @@ func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
 		{path: campaign + "/duplicate", method: "post", operationID: "duplicateCampaign", scope: "campaigns:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/send", method: "post", operationID: "sendCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"202", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/unschedule", method: "post", operationID: "unscheduleCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
-		{path: campaign + "/test", method: "post", operationID: "testCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "502"}},
+		{path: campaign + "/test", method: "post", operationID: "testCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "502", "503"}},
 		{path: campaign + "/stats", method: "get", operationID: "getCampaignStats", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: campaign + "/recipients", method: "get", operationID: "listCampaignRecipients", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 	}
