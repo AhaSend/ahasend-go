@@ -64,6 +64,11 @@ func main() {
 }
 ```
 
+Every message is checked before it is sent, by `CreateMessage`, `CreateConversationMessage` and `CreateTemplateMessage` alike:
+
+- A message whose content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read is refused with 400, and nothing of the request is sent. The message reads `<email>: the message could not be rendered: <reason>`, or has no `<email>: ` when no recipient had started rendering.
+- When the check cannot run, the API answers 503 with a `Retry-After`. Nothing was sent. The SDK retries it with the same idempotency key, as [Settings](#settings) describes for retries.
+
 ## Send from a template
 
 A transactional template, made in the dashboard or through the API, holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
@@ -123,6 +128,7 @@ message := requests.CreateTemplateMessageRequest{
   - 400 `the template's default sender or reply-to is not valid, edit it on the template page and publish it` when a published value the send uses no longer passes the address checks.
   - 403 `this api key is not authorized to send messages` when the request has no sender and the API key cannot send from any domain.
   - 400 for the whole request when any recipient is missing a required variable.
+  - 400 `<email>: the message could not be rendered: <reason>` when the check before sending refuses a message, and 503 when the check cannot run, as for any send.
 - Sending from a template needs only the normal send scope.
 
 `client.TemplatesAPI.GetTemplates(ctx, accountID, requests.GetTemplatesParams{})` lists the account's templates, newest first. For the next page, pass the response's `Pagination.NextCursor` as `After`. For the previous page, pass `Pagination.PreviousCursor` as `Before`.
@@ -207,7 +213,7 @@ if notReady, ok := api.AsCampaignNotReady(err); ok {
 - `SendCampaign` sends now, or at `SendAt`. The campaign goes to `validating` and then through list validation and review, as a send from the dashboard does; read its `Status` and `StatusReason` with `GetCampaign`. The response's `Warnings` tell what the send accepted but you should know. To change the send time, call `UnscheduleCampaign` and send again.
 - `SendCampaign` refuses a campaign with any issue with 400, and `TestCampaign` refuses a campaign with any issue but `unsubscribe_link_missing`. `api.AsCampaignNotReady(err)` returns the issues; every other refusal has only a message. The issue `text_unchecked` means the API could not check the text right now and clears by itself; the SDK does not retry a 400, so call again in a moment.
 - A 409 means the campaign's status does not allow the request, or an earlier request with the same idempotency key is still running. The second case has the type `ErrorTypeIdempotencyConflict` and a `RetryAfter`; retry with the same key after it. A new call makes a new key, so to retry by hand, pass the key yourself with `api.WithIdempotencyKey` on both calls.
-- `TestCampaign` sends a test to up to 5 addresses, with placeholders for the contact's fields. An account can send 50 test emails per day (UTC). Past that, the API answers 429; its message currently reads `daily test send limit reached`. The limit clears only when the UTC day changes, and the SDK retries the 429 as it retries any 429. When `ResultUnknown` is true, the test may have gone out: check the inboxes before you send another.
+- `TestCampaign` sends a test to up to 5 addresses, with placeholders for the contact's fields. An account can send 50 test emails per day (UTC). Past that, the API answers 429; its message currently reads `daily test send limit reached`. The limit clears only when the UTC day changes, and the SDK retries the 429 as it retries any 429. A test is checked before it is sent as a message send is: a test the check refuses gets 400 with a message and nothing is sent, and a 503 when the check cannot run is retried with the same key. When `ResultUnknown` is true, the test may have gone out: check the inboxes before you send another.
 - `DuplicateCampaign` makes a new draft from a campaign in any status.
 - `GetCampaignStats` returns live counters and a stored report that is counted again from time to time. `Report` is nil until the first count, and each rate is nil while it has no base. `ListCampaignRecipients` lists the recipients in one `Status` or one `BounceClassification`, each a key of the report's `ByStatus` or `ByBounceClassification`.
 - The SDK sends an `Idempotency-Key` with `CreateCampaign`, `UpdateCampaign`, `DuplicateCampaign`, `SendCampaign`, `UnscheduleCampaign` and `TestCampaign`, so a retried request is not applied twice.

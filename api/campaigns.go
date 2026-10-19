@@ -348,6 +348,13 @@ together. Past that, the request returns 429; its message currently reads
 "daily test send limit reached". The limit clears only when the UTC day
 changes, and the client retries the 429 as it retries any 429.
 
+Each test is checked with the template engine before it is sent. A test the
+check refuses is answered 400 with a message, and nothing is sent: content
+that cannot be rendered with a recipient's values, a call to random,
+randrange, lipsum or now, namespace, a work, output, memory or time limit, or
+an address the check cannot read. When the check cannot run, the API answers
+503 with a Retry-After, and the client retries it with the same key.
+
 With an idempotency key, a 2xx answer is replayed, so a retry with the same
 key sends nothing again. A 4xx answer is not stored, so a retry with the same
 key is answered afresh. A 502 means nothing was sent: retry it with the same

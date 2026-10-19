@@ -345,6 +345,27 @@ components:
           example:
             message: "template is being changed by another request, try again"
 
+    TemplateCheckBusy:
+      description: |
+        Every message is checked with the template engine before it is sent,
+        and the check could not run right now: the service was busy, or the
+        engine failed. Nothing was sent and nothing is known to be wrong with
+        the message.
+        Send it again after `Retry-After` seconds; on an operation that takes
+        an `Idempotency-Key`, send it with the same key.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "the message could not be checked right now; try again in a moment"
+
   schemas:
     ErrorResponse:
       type: object
@@ -6366,11 +6387,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                render_refused:
+                  summary: A recipient's values make the content fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6399,6 +6426,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
   /v2/accounts/{account_id}/messages/template:
     post:
@@ -6491,7 +6520,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
@@ -6501,6 +6531,10 @@ paths:
                   summary: A recipient does not give a required variable
                   value:
                     message: "missing required template variables: user@example.com needs first_name, order_id"
+                render_refused:
+                  summary: A recipient's values make the template fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6536,6 +6570,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
       x-code-samples:
         - lang: go
@@ -6741,11 +6777,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreateMessageResponse'
         '400':
-          description: Bad request
+          description: |
+            Bad request. Every message is checked before it is sent. A message is refused, and nothing of the request is sent, when its content cannot be rendered with a recipient's values, calls `random`, `randrange`, `lipsum` or `now`, uses `namespace`, passes a work, output, memory or time limit, or has a recipient address the check cannot read. The message is `<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering. A refused request with an `Idempotency-Key` gets the same answer again for that key.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                render_refused:
+                  summary: A recipient's values make the content fail
+                  value:
+                    message: "john@example.com: the message could not be rendered: unknown function: nosuch"
         '401':
           description: Unauthorized
           content:
@@ -6774,6 +6816,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
   /v2/accounts/{account_id}/messages/{message_id}:
     get:
@@ -10087,7 +10131,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignTest'
         '400':
-          description: Invalid campaign_id, an invalid body or address, no address or more than 5, a campaign with issues (with `issues`), a sender domain that is paused or no longer verified, or an account that cannot send
+          description: |
+            Invalid campaign_id, an invalid body or address, no address or more than 5, a campaign with issues (with `issues`), a sender domain that is paused or no longer verified, an account that cannot send, or a test the template check refuses, in which case nothing is sent: content that cannot be rendered with a recipient's values, a call to `random`, `randrange`, `lipsum` or `now`, `namespace`, a work, output, memory or time limit, or an address the check cannot read (`<email>: the message could not be rendered: <reason>`, or without `<email>: ` when no recipient had started rendering)
           content:
             application/json:
               schema:
@@ -10132,6 +10177,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateCheckBusy'
 
       x-code-samples:
         - lang: go
