@@ -21,8 +21,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error getting template: %v", err)
 	}
-	// A send from this template must supply every required variable.
+	// A send from this template must supply every required variable. Kind
+	// says what shape of value to send; a list variable takes a slice of
+	// elements with the fields in ItemFields.
 	for _, variable := range response.Variables {
-		fmt.Printf("%s required=%t\n", variable.Name, variable.Required)
+		fmt.Printf("%s required=%t kind=%s item_fields=%v\n", variable.Name, variable.Required, variable.Kind, variable.ItemFields)
 	}
 }

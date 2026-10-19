@@ -80,7 +80,7 @@ if err != nil {
     log.Fatal(err)
 }
 for _, variable := range template.Variables {
-    log.Printf("%s (required: %t)", variable.Name, variable.Required)
+    log.Printf("%s (required: %t, kind: %s)", variable.Name, variable.Required, variable.Kind)
 }
 
 message := requests.CreateTemplateMessageRequest{
@@ -96,6 +96,25 @@ message := requests.CreateTemplateMessageRequest{
 
 response, _, err := client.MessagesAPI.CreateTemplateMessage(ctx, accountID, message)
 ```
+
+Each variable's `Kind` says what shape of value to send:
+
+- `responses.TemplateVariableKindValue`: text or a number that appears in the email, such as a first name.
+- `responses.TemplateVariableKindCondition`: used only to decide whether a part of the email is shown. Send a value that is not empty, such as `true`, to make it set. Leave it out, or send `""`, `false`, `0`, `nil`, an empty slice or an empty map, to make it not set. The strings `"false"` and `"0"` make it set.
+- `responses.TemplateVariableKindList`: a slice. A section of the email is repeated once for each element. `ItemFields` names the fields each element should have.
+
+For example, if `items` has `ItemFields` `["name", "price"]`, send:
+
+```go
+Substitutions: map[string]interface{}{
+    "items": []map[string]interface{}{
+        {"name": "Linen shirt", "price": "€49"},
+        {"name": "Canvas tote", "price": "€19"},
+    },
+},
+```
+
+A field an element does not have is taken from the recipient's substitution of the same name. If `ItemFields` is `["value"]`, the section shows each element as it is, so you can send plain values such as `[]string{"new", "sale"}`. A version published before kinds were recorded shows every variable as `value`.
 
 A template can also hold a default sender and reply-to address: `template.From` and `template.ReplyTo`, each nil when the template has none. A send from a template with a sender can leave `From` nil:
 

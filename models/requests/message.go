@@ -34,7 +34,8 @@ type CreateMessageRequest struct {
 // transactional template to one or more recipients. The template supplies
 // the body, so the request has no content fields and no request-level
 // substitutions: each recipient's Substitutions hold its values for the
-// template's variables.
+// template's variables. Each variable's Kind says what shape of value to
+// send; a list variable takes a slice.
 type CreateTemplateMessageRequest struct {
 	TemplateID uuid.UUID `json:"template_id"`
 	// From is the sender. Leave it nil to send from the template's default

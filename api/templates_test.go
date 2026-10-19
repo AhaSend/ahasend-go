@@ -10,6 +10,7 @@ import (
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/internal/prismmock"
 	"github.com/AhaSend/ahasend-go/models/requests"
+	"github.com/AhaSend/ahasend-go/models/responses"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ const templateAPIResponseJSON = `{
 	"name":"Password reset",
 	"subject":"Reset your password",
 	"preheader":"It expires in an hour",
-	"variables":[{"name":"first_name","required":true},{"name":"reset_url","required":false}],
+	"variables":[{"name":"first_name","required":true,"kind":"value"},{"name":"reset_url","required":false,"kind":"value"}],
 	"from":null,
 	"reply_to":null,
 	"editor":"html",
@@ -215,6 +216,7 @@ func TestTemplatesAPIGetTemplateUsesUUIDPathIDAndNoQuery(t *testing.T) {
 	require.Len(t, template.Variables, 2)
 	assert.True(t, template.Variables[0].Required)
 	assert.False(t, template.Variables[1].Required)
+	assert.Equal(t, responses.TemplateVariableKindValue, template.Variables[0].Kind)
 }
 
 func TestTemplatesAPIErrorTypes(t *testing.T) {

@@ -880,7 +880,7 @@ components:
         substitutions:
           type: object
           additionalProperties: true
-          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are.
+          description: Substitution data for the recipient. Used with jinja2 templating language for dynamic content. In the HTML and AMP bodies, values are HTML-escaped; write `{{ name|safe }}` to insert a value as HTML. The subject, the headers and the text body get values as they are. On a template send, to fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
       example:
         email: "user@example.com"
         name: "John Doe"
@@ -1075,7 +1075,7 @@ components:
           description: |
             Each recipient gets a separate message. This does not set the To header to more than one address.
 
-            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values.
+            A recipient's `substitutions` hold its values for the template's variables. They are the only place for these values. To fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
         reply_to:
           $ref: '#/components/schemas/Address'
           description: If provided, the reply-to header in headers must not be provided. When the request has neither, the template's reply-to is used.
@@ -1522,6 +1522,7 @@ components:
       required:
         - name
         - required
+        - kind
       properties:
         name:
           type: string
@@ -1539,6 +1540,53 @@ components:
             message then carries `List-Unsubscribe` and
             `List-Unsubscribe-Post` headers for it; a `List-Unsubscribe` or
             `List-Unsubscribe-Post` in the request's `headers` is dropped.
+        kind:
+          type: string
+          enum: [value, condition, list]
+          description: |
+            What kind of value to send for this variable.
+
+            - `value`: text or a number that appears in the email, such as a
+              first name.
+            - `condition`: used only to decide whether a part of the email is
+              shown, for example "show this section if `vip` is set". It never
+              appears in the email. To make it set, send a value that is not
+              empty, such as `true` or `"yes"`. To make it not set, leave it
+              out or send `""`, `false`, `0`, `null`, `[]` or `{}`. The strings
+              `"false"` and `"0"` are not empty, so they make it set. A rule
+              can also compare it, for example "show this section if `plan`
+              equals `gold`"; then send a value that meets the rule to show
+              the section.
+            - `list`: an array. A section of the email is repeated once for
+              each element, for example one row per product in an order.
+              `item_fields` names the fields each element should have.
+        item_fields:
+          type: array
+          items:
+            type: string
+          description: |
+            Only for a `list` variable. The fields the repeated section uses
+            from each element. Send each element as an object with these
+            fields. A field an element does not have is taken from the
+            variable of the same name in `substitutions`, if there is one.
+
+            For example, if `items` has `item_fields` `["name", "price"]`,
+            send:
+
+            ```json
+            {
+              "items": [
+                {"name": "Linen shirt", "price": "€49"},
+                {"name": "Canvas tote", "price": "€19"}
+              ]
+            }
+            ```
+
+            A section that shows each element as it is, such as a list of
+            tags, uses the field `value`. If `item_fields` is `["value"]`, you
+            can send plain values, such as `["new", "sale"]`. Empty when the
+            section uses nothing from its elements: send one element, of any
+            kind, for each time the section repeats.
 
     Template:
       type: object
@@ -1589,7 +1637,8 @@ components:
             Every variable the design uses. A send of this template takes the
             values only from each recipient's `substitutions`. Every recipient
             must give a value for each required variable; if one does not, the
-            request is rejected and no message is sent.
+            request is rejected and no message is sent. Each variable's `kind`
+            says what shape of value to send.
         from:
           oneOf:
             - $ref: '#/components/schemas/Address'
@@ -1770,7 +1819,11 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/TemplateVariable'
-              description: Every variable the version uses
+              description: |
+                Every variable the version uses, as saved when the version was
+                published. A version published before kinds were recorded shows
+                every variable as `value`, with no `item_fields`; save and
+                publish the template again to get a version that records them.
             from:
               oneOf:
                 - $ref: '#/components/schemas/Address'
@@ -6439,7 +6492,7 @@ paths:
         The message has the template's HTML body, with the template's preview text added, and the template's text body. It has no AMP part. The message records the template: the message's `template_id` (Get Message) is the ID of this template.
 
         **Variables:**
-        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted.
+        Values for the template's variables come only from each recipient's `substitutions`. Every recipient must give a value for each required variable of the template (see `variables` on Get Template). If a recipient does not, the request is rejected with a 400 that names each recipient and the variables it does not give, and no message is sent. A value for a name that the template does not use is accepted. To fill a `list` variable, send an array; the template's `variables` show the fields each element needs.
 
         Your `subject` and `headers` resolve from the same values. A `{{ name }}` that has no value becomes empty.
 
@@ -7350,9 +7403,11 @@ paths:
               if err != nil {
                 log.Fatalf("Error getting template: %v", err)
               }
-              // A send from this template must supply every required variable.
+              // A send from this template must supply every required variable. Kind
+              // says what shape of value to send; a list variable takes a slice of
+              // elements with the fields in ItemFields.
               for _, variable := range response.Variables {
-                fmt.Printf("%s required=%t\n", variable.Name, variable.Required)
+                fmt.Printf("%s required=%t kind=%s item_fields=%v\n", variable.Name, variable.Required, variable.Kind, variable.ItemFields)
               }
             }
 

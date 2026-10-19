@@ -19,7 +19,7 @@ const templateFixture = `{
 	"name":"Password reset",
 	"subject":"Reset your password",
 	"preheader":"It expires in an hour",
-	"variables":[{"name":"first_name","required":true},{"name":"unsubscribe_url","required":false}],
+	"variables":[{"name":"first_name","required":true,"kind":"value"},{"name":"items","required":true,"kind":"list","item_fields":["name","price"]}],
 	"from":{"email":"hello@example.com","name":"Example"},
 	"reply_to":{"email":"support@example.com","name":""},
 	"editor":"advanced",
@@ -41,8 +41,12 @@ func TestTemplateDecodesAPIFixture(t *testing.T) {
 	require.Len(t, template.Variables, 2)
 	assert.Equal(t, "first_name", template.Variables[0].Name)
 	assert.True(t, template.Variables[0].Required)
-	assert.Equal(t, "unsubscribe_url", template.Variables[1].Name)
-	assert.False(t, template.Variables[1].Required)
+	assert.Equal(t, TemplateVariableKindValue, template.Variables[0].Kind)
+	assert.Nil(t, template.Variables[0].ItemFields)
+	assert.Equal(t, "items", template.Variables[1].Name)
+	assert.True(t, template.Variables[1].Required)
+	assert.Equal(t, TemplateVariableKindList, template.Variables[1].Kind)
+	assert.Equal(t, []string{"name", "price"}, template.Variables[1].ItemFields)
 	require.NotNil(t, template.From)
 	assert.Equal(t, "hello@example.com", template.From.Email)
 	require.NotNil(t, template.From.Name)
@@ -158,8 +162,8 @@ func TestPaginatedTemplatesResponseDecodesPage(t *testing.T) {
 	require.Len(t, page.Data, 1)
 	assert.Equal(t, "Password reset", page.Data[0].Name)
 	require.Len(t, page.Data[0].Variables, 2)
-	assert.True(t, page.Data[0].Variables[0].Required)
-	assert.False(t, page.Data[0].Variables[1].Required)
+	assert.Equal(t, TemplateVariableKindValue, page.Data[0].Variables[0].Kind)
+	assert.Equal(t, TemplateVariableKindList, page.Data[0].Variables[1].Kind)
 	assert.True(t, page.Pagination.HasMore)
 	require.NotNil(t, page.Pagination.NextCursor)
 	assert.Equal(t, "next", *page.Pagination.NextCursor)
@@ -212,7 +216,7 @@ func TestTemplateDraftDecodesAPIFixture(t *testing.T) {
 		"updated_at":"2026-09-11T10:00:00Z",
 		"subject":"Reset your password",
 		"preheader":"",
-		"variables":[{"name":"first_name","required":true}],
+		"variables":[{"name":"first_name","required":true,"kind":"value"}],
 		"from":null,
 		"reply_to":null,
 		"content":{"html":"<p>Hi</p>","text":"Hi","text_is_custom":true}
@@ -226,6 +230,7 @@ func TestTemplateDraftDecodesAPIFixture(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC), draft.UpdatedAt.UTC())
 	assert.Equal(t, "Reset your password", draft.Subject)
 	require.Len(t, draft.Variables, 1)
+	assert.Equal(t, TemplateVariableKindValue, draft.Variables[0].Kind)
 	assert.Nil(t, draft.From)
 	assert.Nil(t, draft.ReplyTo)
 	require.NotNil(t, draft.Content)
@@ -281,4 +286,52 @@ func TestTemplateVersionDetailDecodesAPIFixture(t *testing.T) {
 	assert.Nil(t, version.ReplyTo)
 	require.NotNil(t, version.Content)
 	assert.Equal(t, "<mjml></mjml>", version.Content.MJML)
+}
+
+func TestTemplateVariableDecodesEachKind(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+		want    TemplateVariable
+	}{
+		{
+			name:    "value",
+			payload: `{"name":"first_name","required":true,"kind":"value"}`,
+			want:    TemplateVariable{Name: "first_name", Required: true, Kind: TemplateVariableKindValue},
+		},
+		{
+			name:    "condition",
+			payload: `{"name":"vip","required":false,"kind":"condition"}`,
+			want:    TemplateVariable{Name: "vip", Kind: TemplateVariableKindCondition},
+		},
+		{
+			name:    "list with item fields",
+			payload: `{"name":"items","required":true,"kind":"list","item_fields":["name","price"]}`,
+			want:    TemplateVariable{Name: "items", Required: true, Kind: TemplateVariableKindList, ItemFields: []string{"name", "price"}},
+		},
+		{
+			name:    "list with empty item fields",
+			payload: `{"name":"rows","required":true,"kind":"list","item_fields":[]}`,
+			want:    TemplateVariable{Name: "rows", Required: true, Kind: TemplateVariableKindList, ItemFields: []string{}},
+		},
+		{
+			name:    "list without item fields",
+			payload: `{"name":"rows","required":true,"kind":"list"}`,
+			want:    TemplateVariable{Name: "rows", Required: true, Kind: TemplateVariableKindList},
+		},
+		{
+			name:    "kind the SDK does not know",
+			payload: `{"name":"when","required":true,"kind":"date","item_fields":["day"]}`,
+			want:    TemplateVariable{Name: "when", Required: true, Kind: "date", ItemFields: []string{"day"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var variable TemplateVariable
+			require.NoError(t, json.Unmarshal([]byte(tt.payload), &variable))
+
+			assert.Equal(t, tt.want, variable)
+		})
+	}
 }
