@@ -24,6 +24,9 @@ type CampaignTemplate struct {
 	// neither HTML nor text, and in the items of ListCampaignTemplates. A
 	// campaign can be made from the campaign template only once it has HTML.
 	Content *TemplateContent `json:"content,omitempty"`
+	// MarkupWarnings are the warnings about the AhaML a write stored, as on
+	// Template.
+	MarkupWarnings []common.MarkupProblem `json:"markup_warnings,omitempty"`
 }
 
 // PaginatedCampaignTemplatesResponse represents a page of campaign

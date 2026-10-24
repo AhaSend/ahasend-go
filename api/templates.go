@@ -68,7 +68,12 @@ func (a *TemplatesAPIService) GetTemplates(
 /*
 GetTemplate Get Template
 
-# Returns one transactional template, including the variables a send must supply
+# Returns one transactional template as its working copy
+
+The working copy is the draft while the template has one, and the published
+copy otherwise; HasDraft says which. A write changes this copy, so a template
+read, changed and sent back to UpdateTemplate builds on what was read. Sends
+use the published copy, which GetPublishedTemplate returns.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -100,12 +105,48 @@ func (a *TemplatesAPIService) GetTemplate(
 }
 
 /*
+GetPublishedTemplate Get Published Template
+
+# Returns a transactional template's published copy, the one a send uses
+
+It holds the content and the variable list a send has to satisfy, so read it
+to build a send. HasDraft says whether changes are waiting to be published.
+
+	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	@param accountId Account ID
+	@param templateId Template ID
+	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
+	@return Template, *http.Response, error
+*/
+func (a *TemplatesAPIService) GetPublishedTemplate(
+	ctx context.Context,
+	accountId uuid.UUID,
+	templateId uuid.UUID,
+	opts ...RequestOption,
+) (*responses.Template, *http.Response, error) {
+	var result responses.Template
+
+	config := RequestConfig{
+		Method:       http.MethodGet,
+		PathTemplate: "/v2/accounts/{account_id}/templates/{template_id}/published",
+		PathParams:   templatePathParams(accountId, templateId),
+		Result:       &result,
+	}
+	applyRequestOptions(&config, opts)
+
+	resp, err := a.client.Execute(ctx, config)
+	return &result, resp, err
+}
+
+/*
 CreateTemplate Create Template
 
 # Creates a transactional template
 
 The request's fields go to the template's draft, so sends fail until the
-draft is published. Set Publish to publish it in the same request.
+draft is published. Set Publish to publish it in the same request. It returns
+503 when the AhaML in Content.Markup cannot be read now; retry after
+Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -142,7 +183,9 @@ UpdateTemplate Update Template
 Every field but the name goes to the template's draft, the same draft the
 dashboard edits; the name changes at once. Set Publish to publish the whole
 draft. A request that changes nothing changes nothing, so it can be repeated.
-It returns 503 when the template keeps changing while the request writes it.
+It returns 503 when the template keeps changing while the request writes it,
+or when the AhaML in Content.Markup cannot be read now; retry after
+Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -198,39 +241,6 @@ func (a *TemplatesAPIService) DeleteTemplate(
 	config := RequestConfig{
 		Method:       http.MethodDelete,
 		PathTemplate: "/v2/accounts/{account_id}/templates/{template_id}",
-		PathParams:   templatePathParams(accountId, templateId),
-		Result:       &result,
-	}
-	applyRequestOptions(&config, opts)
-
-	resp, err := a.client.Execute(ctx, config)
-	return &result, resp, err
-}
-
-/*
-GetTemplateDraft Get Template Draft
-
-# Returns a template's draft, the changes that are not published yet
-
-A template with no draft returns 404.
-
-	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@param accountId Account ID
-	@param templateId Template ID
-	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
-	@return TemplateDraft, *http.Response, error
-*/
-func (a *TemplatesAPIService) GetTemplateDraft(
-	ctx context.Context,
-	accountId uuid.UUID,
-	templateId uuid.UUID,
-	opts ...RequestOption,
-) (*responses.TemplateDraft, *http.Response, error) {
-	var result responses.TemplateDraft
-
-	config := RequestConfig{
-		Method:       http.MethodGet,
-		PathTemplate: "/v2/accounts/{account_id}/templates/{template_id}/draft",
 		PathParams:   templatePathParams(accountId, templateId),
 		Result:       &result,
 	}

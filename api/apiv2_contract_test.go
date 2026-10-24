@@ -1546,6 +1546,7 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 	const (
 		templates = "/v2/accounts/{account_id}/templates"
 		template  = templates + "/{template_id}"
+		published = template + "/published"
 		draft     = template + "/draft"
 		publish   = template + "/publish"
 		versions  = template + "/versions"
@@ -1562,11 +1563,11 @@ func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {
 		statuses    []string
 	}{
 		{path: templates, method: "get", operationID: "listTemplates", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
-		{path: templates, method: "post", operationID: "createTemplate", scope: "templates:write", idempotent: true, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: templates, method: "post", operationID: "createTemplate", scope: "templates:write", idempotent: true, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500", "503"}},
 		{path: template, method: "get", operationID: "getTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
-		{path: template, method: "put", operationID: "updateTemplate", scope: "templates:write", idempotent: true, raced: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
+		{path: template, method: "put", operationID: "updateTemplate", scope: "templates:write", idempotent: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
+		{path: published, method: "get", operationID: "getPublishedTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: template, method: "delete", operationID: "deleteTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
-		{path: draft, method: "get", operationID: "getTemplateDraft", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: draft, method: "delete", operationID: "discardTemplateDraft", scope: "templates:write", raced: true, statuses: []string{"200", "400", "401", "403", "404", "429", "500", "503"}},
 		{path: publish, method: "post", operationID: "publishTemplate", scope: "templates:write", idempotent: true, raced: true, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
 		{path: versions, method: "get", operationID: "listTemplateVersions", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
@@ -1633,7 +1634,6 @@ func TestOpenAPITemplateSchemasMatchModels(t *testing.T) {
 		model   any
 	}{
 		{schemas: []string{"TemplateContent"}, model: responses.TemplateContent{}},
-		{schemas: []string{"TemplateDraft"}, model: responses.TemplateDraft{}},
 		{schemas: []string{"TemplatePublisher"}, model: responses.TemplatePublisher{}},
 		{schemas: []string{"TemplateVersion"}, model: responses.TemplateVersion{}},
 		// TemplateVersionDetail is an allOf of a $ref to TemplateVersion and
@@ -1651,11 +1651,100 @@ func TestOpenAPITemplateSchemasMatchModels(t *testing.T) {
 		})
 	}
 
-	// The API accepts and ignores text_is_custom in a write, so a read content
-	// can be sent back; the SDK leaves it out.
+	// The API accepts and ignores text_is_custom and markup_error in a write,
+	// so a read content can be sent back; the SDK leaves them out.
 	input := openAPISchemaProperties(t, "TemplateContentInput")
-	assert.Equal(t, []string{"html", "mjml", "text", "text_is_custom"}, input)
-	assert.Equal(t, []string{"html", "mjml", "text"}, modelJSONFields(requests.TemplateContentInput{}))
+	assert.Equal(t, []string{"html", "markup", "markup_error", "mjml", "text", "text_is_custom"}, input)
+	assert.Equal(t, []string{"html", "markup", "mjml", "text"}, modelJSONFields(requests.TemplateContentInput{}))
+}
+
+// TestOpenAPIMarkupWritesAndErrors checks the six writes that take
+// content.markup: each answers a 400 with a MarkupErrorResponse, which the
+// client decodes, and a 503 with TemplateWriteBusy.
+func TestOpenAPIMarkupWritesAndErrors(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	type markupResponseContract struct {
+		responseContract `yaml:",inline"`
+		Content          map[string]struct {
+			Schema struct {
+				Ref string `yaml:"$ref"`
+			} `yaml:"schema"`
+		} `yaml:"content"`
+	}
+	var spec struct {
+		Paths map[string]map[string]struct {
+			OperationID string                            `yaml:"operationId"`
+			Responses   map[string]markupResponseContract `yaml:"responses"`
+		} `yaml:"paths"`
+		Components struct {
+			Responses map[string]responseContract `yaml:"responses"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	tests := []struct {
+		path        string
+		method      string
+		operationID string
+	}{
+		{path: "/v2/accounts/{account_id}/templates", method: "post", operationID: "createTemplate"},
+		{path: "/v2/accounts/{account_id}/templates/{template_id}", method: "put", operationID: "updateTemplate"},
+		{path: "/v2/accounts/{account_id}/campaign-templates", method: "post", operationID: "createCampaignTemplate"},
+		{path: "/v2/accounts/{account_id}/campaign-templates/{template_id}", method: "put", operationID: "updateCampaignTemplate"},
+		{path: "/v2/accounts/{account_id}/campaigns", method: "post", operationID: "createCampaign"},
+		{path: "/v2/accounts/{account_id}/campaigns/{campaign_id}", method: "put", operationID: "updateCampaign"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			operation, ok := spec.Paths[tt.path][tt.method]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+			assert.Equal(t, "#/components/schemas/MarkupErrorResponse", operation.Responses["400"].Content["application/json"].Schema.Ref)
+			assert.Equal(t, "#/components/responses/TemplateWriteBusy", operation.Responses["503"].Ref)
+		})
+	}
+
+	assert.Contains(t, spec.Components.Responses["TemplateWriteBusy"].Headers, "Retry-After")
+	assert.Equal(t, openAPISchemaProperties(t, "MarkupErrorResponse"), modelJSONFields(errorResponseBody{}))
+	assert.Equal(t, openAPISchemaProperties(t, "MarkupProblem"), modelJSONFields(common.MarkupProblem{}))
+}
+
+// TestOpenAPIMarkupErrorCodesMatchConstants fails when the bundled
+// specification gives markup_error a code that has no constant in the SDK, or
+// drops one that has.
+func TestOpenAPIMarkupErrorCodesMatchConstants(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	var spec struct {
+		Components struct {
+			Schemas struct {
+				TemplateContent struct {
+					Properties struct {
+						MarkupError struct {
+							Properties struct {
+								Code struct {
+									Enum []string `yaml:"enum"`
+								} `yaml:"code"`
+							} `yaml:"properties"`
+						} `yaml:"markup_error"`
+					} `yaml:"properties"`
+				} `yaml:"TemplateContent"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	assert.ElementsMatch(t, []string{
+		responses.MarkupErrorNoDesign,
+		responses.MarkupErrorHTMLBlock,
+		responses.MarkupErrorUnmappedBlock,
+		responses.MarkupErrorBadStoredValue,
+		responses.MarkupErrorRendererUnavailable,
+		responses.MarkupErrorRateLimited,
+	}, spec.Components.Schemas.TemplateContent.Properties.MarkupError.Properties.Code.Enum)
 }
 
 const templateWriteResponseFixture = `{
@@ -1754,20 +1843,15 @@ func TestTemplatesAPIEmitsDeclaredTransport(t *testing.T) {
 			},
 		},
 		{
-			name:     "get template draft",
+			name:     "get published template",
 			method:   http.MethodGet,
-			path:     templatePath + "/draft",
+			path:     templatePath + "/published",
 			status:   http.StatusOK,
-			response: `{"object":"template_draft","template_id":"` + templateID.String() + `","updated_at":"2026-09-11T10:00:00Z","subject":"New subject","preheader":"","variables":[],"from":null,"reply_to":null,"content":null}`,
+			response: templateWriteResponseFixture,
 			call: func(client *APIClient) (any, *http.Response, error) {
-				return client.TemplatesAPI.GetTemplateDraft(context.Background(), accountID, templateID)
+				return client.TemplatesAPI.GetPublishedTemplate(context.Background(), accountID, templateID)
 			},
-			assertResult: func(t *testing.T, result any) {
-				draft := result.(*responses.TemplateDraft)
-				assert.Equal(t, templateID, draft.TemplateID)
-				assert.Equal(t, "New subject", draft.Subject)
-				assert.Nil(t, draft.Content)
-			},
+			assertResult: assertTemplate,
 		},
 		{
 			name:     "discard template draft",
@@ -1991,6 +2075,7 @@ func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
 		campaignConflict       = "#/components/responses/CampaignConflict"
 		campaignCreateConflict = "#/components/responses/CampaignCreateConflict"
 		campaignNotReady       = "#/components/schemas/CampaignNotReady"
+		markupErrorResponse    = "#/components/schemas/MarkupErrorResponse"
 
 		campaignTemplates = "/v2/accounts/{account_id}/campaign-templates"
 		campaignTemplate  = campaignTemplates + "/{template_id}"
@@ -2011,14 +2096,14 @@ func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
 		statuses   []string
 	}{
 		{path: campaignTemplates, method: "get", operationID: "listCampaignTemplates", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
-		{path: campaignTemplates, method: "post", operationID: "createCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: campaignTemplates, method: "post", operationID: "createCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, badRequest: markupErrorResponse, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500", "503"}},
 		{path: campaignTemplate, method: "get", operationID: "getCampaignTemplate", scope: "templates:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
-		{path: campaignTemplate, method: "put", operationID: "updateCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaignTemplate, method: "put", operationID: "updateCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, badRequest: markupErrorResponse, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
 		{path: campaignTemplate, method: "delete", operationID: "deleteCampaignTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: campaigns, method: "get", operationID: "listCampaigns", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
-		{path: campaigns, method: "post", operationID: "createCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignCreateConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: campaigns, method: "post", operationID: "createCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignCreateConflict, badRequest: markupErrorResponse, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500", "503"}},
 		{path: campaign, method: "get", operationID: "getCampaign", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
-		{path: campaign, method: "put", operationID: "updateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign, method: "put", operationID: "updateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignConflict, badRequest: markupErrorResponse, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "503"}},
 		{path: campaign, method: "delete", operationID: "deleteCampaign", scope: "campaigns:delete", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
 		{path: campaign + "/duplicate", method: "post", operationID: "duplicateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignCreateConflict, statuses: []string{"201", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/send", method: "post", operationID: "sendCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"202", "400", "401", "403", "404", "409", "422", "429", "500"}},

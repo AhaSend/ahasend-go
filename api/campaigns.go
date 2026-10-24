@@ -120,7 +120,8 @@ Returns 400 for a list, segment or campaign template that does not exist, too
 many lists or segments, or an audience with no list or segment to send to.
 Returns 409 while a segment of the audience is being rebuilt. The API stores
 that refusal for the idempotency key and replays it for 24 hours, so retry it
-with a new key.
+with a new key. Returns 503 when the AhaML in Content.Markup cannot be read
+now; retry after Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -161,7 +162,8 @@ a new key. Returns 400 for a list or segment that does not exist, too many
 lists or segments, or an audience with no list or segment to send to. The
 change waits for any other change of the same campaign, from the dashboard or the
 API. Between this request and a dashboard editor open on the same campaign,
-the later design save wins.
+the later design save wins. It returns 503 when the AhaML in Content.Markup
+cannot be read now; retry after Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

@@ -111,6 +111,9 @@ type Campaign struct {
 	// Issues are the reasons the draft cannot be sent yet, in a fixed order,
 	// and empty when it is ready. It is nil unless the campaign is a draft.
 	Issues []CampaignIssue `json:"issues"`
+	// MarkupWarnings are the warnings about the AhaML a write stored, as on
+	// Template.
+	MarkupWarnings []common.MarkupProblem `json:"markup_warnings,omitempty"`
 }
 
 // CampaignSend represents a campaign whose send was accepted. The campaign is

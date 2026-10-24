@@ -209,34 +209,6 @@ func TestTemplateDecodesEachContentShape(t *testing.T) {
 	}
 }
 
-func TestTemplateDraftDecodesAPIFixture(t *testing.T) {
-	payload := []byte(`{
-		"object":"template_draft",
-		"template_id":"11111111-1111-4111-8111-111111111111",
-		"updated_at":"2026-09-11T10:00:00Z",
-		"subject":"Reset your password",
-		"preheader":"",
-		"variables":[{"name":"first_name","required":true,"kind":"value"}],
-		"from":null,
-		"reply_to":null,
-		"content":{"html":"<p>Hi</p>","text":"Hi","text_is_custom":true}
-	}`)
-
-	var draft TemplateDraft
-	require.NoError(t, json.Unmarshal(payload, &draft))
-
-	assert.Equal(t, "template_draft", draft.Object)
-	assert.Equal(t, uuid.MustParse("11111111-1111-4111-8111-111111111111"), draft.TemplateID)
-	assert.Equal(t, time.Date(2026, 9, 11, 10, 0, 0, 0, time.UTC), draft.UpdatedAt.UTC())
-	assert.Equal(t, "Reset your password", draft.Subject)
-	require.Len(t, draft.Variables, 1)
-	assert.Equal(t, TemplateVariableKindValue, draft.Variables[0].Kind)
-	assert.Nil(t, draft.From)
-	assert.Nil(t, draft.ReplyTo)
-	require.NotNil(t, draft.Content)
-	assert.Equal(t, TemplateContent{HTML: "<p>Hi</p>", Text: "Hi", TextIsCustom: true}, *draft.Content)
-}
-
 func TestTemplateVersionsDecodeEachPublisher(t *testing.T) {
 	userID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
 	keyID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
@@ -334,4 +306,91 @@ func TestTemplateVariableDecodesEachKind(t *testing.T) {
 			assert.Equal(t, tt.want, variable)
 		})
 	}
+}
+
+// simpleTemplateWriteFixture is the answer to a write that carried markup.
+const simpleTemplateWriteFixture = `{
+	"object":"template",
+	"id":"55555555-5555-4555-8555-555555555555",
+	"created_at":"2026-09-10T10:00:00Z",
+	"updated_at":"2026-09-10T11:00:00Z",
+	"name":"Welcome",
+	"subject":"Welcome",
+	"preheader":"",
+	"variables":[],
+	"editor":"simple",
+	"has_draft":false,
+	"content":{"html":"<p>Price: {{ price }}</p>","text":"Price: {{ price }}","text_is_custom":false,"markup":"<Email version=\"1\">\n  <Paragraph>Price: {{ price }}</Paragraph>\n</Email>\n"},
+	"markup_warnings":[{"code":"jinja_in_text","message":"Text holds {{, which stays text","line":2,"column":22,"path":"Email > Paragraph[1]"}]
+}`
+
+func TestTemplateDecodesMarkupAndWarnings(t *testing.T) {
+	var template Template
+	require.NoError(t, json.Unmarshal([]byte(simpleTemplateWriteFixture), &template))
+
+	require.NotNil(t, template.Content)
+	require.NotNil(t, template.Content.Markup)
+	assert.Equal(t, "<Email version=\"1\">\n  <Paragraph>Price: {{ price }}</Paragraph>\n</Email>\n", *template.Content.Markup)
+	assert.Nil(t, template.Content.MarkupError)
+	assert.Equal(t, []common.MarkupProblem{{
+		Code:    common.MarkupWarningJinjaInText,
+		Message: "Text holds {{, which stays text",
+		Line:    2,
+		Column:  22,
+		Path:    "Email > Paragraph[1]",
+	}}, template.MarkupWarnings)
+
+	encoded, err := json.Marshal(template)
+	require.NoError(t, err)
+	assert.JSONEq(t, simpleTemplateWriteFixture, string(encoded))
+}
+
+func TestTemplateContentDecodesNullMarkupWithItsError(t *testing.T) {
+	payload := []byte(`{"html":"<p>Hi</p>","text":"Hi","text_is_custom":false,"markup":null,"markup_error":{"code":"html_block","message":"The design holds an HTML block"}}`)
+
+	var content TemplateContent
+	require.NoError(t, json.Unmarshal(payload, &content))
+
+	assert.Nil(t, content.Markup)
+	require.NotNil(t, content.MarkupError)
+	assert.Equal(t, MarkupError{Code: MarkupErrorHTMLBlock, Message: "The design holds an HTML block"}, *content.MarkupError)
+
+	// A nil Markup is left out, so the null does not come back, but the
+	// content decodes again to the same value.
+	encoded, err := json.Marshal(content)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"html":"<p>Hi</p>","text":"Hi","text_is_custom":false,"markup_error":{"code":"html_block","message":"The design holds an HTML block"}}`, string(encoded))
+	var reDecoded TemplateContent
+	require.NoError(t, json.Unmarshal(encoded, &reDecoded))
+	assert.Equal(t, content, reDecoded)
+}
+
+func TestTemplateContentOfOtherEditorsHasNoMarkup(t *testing.T) {
+	var template Template
+	require.NoError(t, json.Unmarshal([]byte(templateFixture), &template))
+
+	require.NotNil(t, template.Content)
+	assert.Nil(t, template.Content.Markup)
+	assert.Nil(t, template.Content.MarkupError)
+	assert.Nil(t, template.MarkupWarnings)
+}
+
+func TestTemplateDecodesEmptyMarkupWarnings(t *testing.T) {
+	var template Template
+	require.NoError(t, json.Unmarshal([]byte(`{"object":"template","editor":"simple","markup_warnings":[]}`), &template))
+
+	// An empty list tells a write that carried markup apart from any other
+	// answer, which has no markup_warnings.
+	assert.NotNil(t, template.MarkupWarnings)
+	assert.Empty(t, template.MarkupWarnings)
+}
+
+func TestTemplateVersionDecodesMarkup(t *testing.T) {
+	content := `{"html":"<p>Hi</p>","text":"Hi","text_is_custom":false,"markup":"<Email version=\"1\"><Paragraph>Hi</Paragraph></Email>"}`
+
+	var version TemplateVersionDetail
+	require.NoError(t, json.Unmarshal([]byte(`{"object":"template_version","content":`+content+`}`), &version))
+	require.NotNil(t, version.Content)
+	require.NotNil(t, version.Content.Markup)
+	assert.Equal(t, `<Email version="1"><Paragraph>Hi</Paragraph></Email>`, *version.Content.Markup)
 }
