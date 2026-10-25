@@ -1926,9 +1926,10 @@ func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(contents, &spec))
 
 	const (
-		idempotencyConflict = "#/components/responses/IdempotencyConflict"
-		campaignConflict    = "#/components/responses/CampaignConflict"
-		campaignNotReady    = "#/components/schemas/CampaignNotReady"
+		idempotencyConflict    = "#/components/responses/IdempotencyConflict"
+		campaignConflict       = "#/components/responses/CampaignConflict"
+		campaignCreateConflict = "#/components/responses/CampaignCreateConflict"
+		campaignNotReady       = "#/components/schemas/CampaignNotReady"
 
 		campaignTemplates = "/v2/accounts/{account_id}/campaign-templates"
 		campaignTemplate  = campaignTemplates + "/{template_id}"
@@ -1954,11 +1955,11 @@ func TestOpenAPICampaignOperationsAndResponses(t *testing.T) {
 		{path: campaignTemplate, method: "put", operationID: "updateCampaignTemplate", scope: "templates:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaignTemplate, method: "delete", operationID: "deleteCampaignTemplate", scope: "templates:delete", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: campaigns, method: "get", operationID: "listCampaigns", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "429", "500"}},
-		{path: campaigns, method: "post", operationID: "createCampaign", scope: "campaigns:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: campaigns, method: "post", operationID: "createCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignCreateConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
 		{path: campaign, method: "get", operationID: "getCampaign", scope: "campaigns:read", statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
 		{path: campaign, method: "put", operationID: "updateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign, method: "delete", operationID: "deleteCampaign", scope: "campaigns:delete", statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
-		{path: campaign + "/duplicate", method: "post", operationID: "duplicateCampaign", scope: "campaigns:write", idempotent: true, conflict: idempotencyConflict, statuses: []string{"201", "400", "401", "403", "404", "409", "422", "429", "500"}},
+		{path: campaign + "/duplicate", method: "post", operationID: "duplicateCampaign", scope: "campaigns:write", idempotent: true, conflict: campaignCreateConflict, statuses: []string{"201", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/send", method: "post", operationID: "sendCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"202", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/unschedule", method: "post", operationID: "unscheduleCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500"}},
 		{path: campaign + "/test", method: "post", operationID: "testCampaign", scope: "campaigns:send", idempotent: true, conflict: campaignConflict, badRequest: campaignNotReady, statuses: []string{"200", "400", "401", "403", "404", "409", "422", "429", "500", "502", "503"}},
@@ -2172,6 +2173,9 @@ const campaignResponseFixture = `{
 	"send_resumes_at":null,
 	"finished_at":null,
 	"list_ids":["66666666-6666-4666-8666-666666666666"],
+	"segment_ids":["33333333-3333-4333-8333-333333333333"],
+	"exclude_list_ids":[],
+	"exclude_segment_ids":[],
 	"editor":"html",
 	"content":{"html":"<p>News</p>","text":"News","text_is_custom":false},
 	"ready":false,
@@ -2183,6 +2187,7 @@ func TestCampaignsAPIEmitsDeclaredTransport(t *testing.T) {
 	campaignID := uuid.MustParse("55555555-5555-4555-8555-555555555555")
 	listID := uuid.MustParse("66666666-6666-4666-8666-666666666666")
 	templateID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	segmentID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
 	campaignsPath := "/v2/accounts/" + accountID.String() + "/campaigns"
 	campaignPath := campaignsPath + "/" + campaignID.String()
 	sendAt := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
@@ -2192,6 +2197,9 @@ func TestCampaignsAPIEmitsDeclaredTransport(t *testing.T) {
 		assert.Equal(t, campaignID, campaign.ID)
 		assert.Equal(t, common.CampaignStatusDraft, campaign.Status)
 		assert.Equal(t, []uuid.UUID{listID}, campaign.ListIDs)
+		assert.Equal(t, []uuid.UUID{segmentID}, campaign.SegmentIDs)
+		require.NotNil(t, campaign.ExcludeListIDs)
+		assert.Empty(t, campaign.ExcludeListIDs)
 		require.NotNil(t, campaign.Ready)
 		assert.False(t, *campaign.Ready)
 		require.Len(t, campaign.Issues, 1)
@@ -2216,13 +2224,14 @@ func TestCampaignsAPIEmitsDeclaredTransport(t *testing.T) {
 			status:         http.StatusCreated,
 			response:       campaignResponseFixture,
 			idempotencyKey: "create-campaign",
-			wantBody:       `{"name":"October newsletter","subject":"Our news","from":{"email":"news@example.com"},"list_ids":["66666666-6666-4666-8666-666666666666"],"template_id":"44444444-4444-4444-8444-444444444444"}`,
+			wantBody:       `{"name":"October newsletter","subject":"Our news","from":{"email":"news@example.com"},"list_ids":["66666666-6666-4666-8666-666666666666"],"segment_ids":["33333333-3333-4333-8333-333333333333"],"template_id":"44444444-4444-4444-8444-444444444444"}`,
 			call: func(client *APIClient) (any, *http.Response, error) {
 				return client.CampaignsAPI.CreateCampaign(context.Background(), accountID, requests.CreateCampaignRequest{
 					Name:       "October newsletter",
 					Subject:    ahasend.String("Our news"),
 					From:       &common.SenderAddress{Email: "news@example.com"},
 					ListIDs:    []uuid.UUID{listID},
+					SegmentIDs: []uuid.UUID{segmentID},
 					TemplateID: &templateID,
 				}, WithIdempotencyKey("create-campaign"))
 			},
@@ -2246,14 +2255,15 @@ func TestCampaignsAPIEmitsDeclaredTransport(t *testing.T) {
 			status:         http.StatusOK,
 			response:       campaignResponseFixture,
 			idempotencyKey: "update-campaign",
-			wantBody:       `{"subject":null,"preheader":"See what is new","from":null,"reply_to":null,"list_ids":["66666666-6666-4666-8666-666666666666"]}`,
+			wantBody:       `{"subject":null,"preheader":"See what is new","from":null,"reply_to":null,"list_ids":["66666666-6666-4666-8666-666666666666"],"exclude_segment_ids":[]}`,
 			call: func(client *APIClient) (any, *http.Response, error) {
 				return client.CampaignsAPI.UpdateCampaign(context.Background(), accountID, campaignID, requests.UpdateCampaignRequest{
-					Subject:   ahasend.String(""),
-					Preheader: ahasend.String("See what is new"),
-					From:      &common.SenderAddress{},
-					ReplyTo:   ahasend.String(""),
-					ListIDs:   []uuid.UUID{listID},
+					Subject:           ahasend.String(""),
+					Preheader:         ahasend.String("See what is new"),
+					From:              &common.SenderAddress{},
+					ReplyTo:           ahasend.String(""),
+					ListIDs:           []uuid.UUID{listID},
+					ExcludeSegmentIDs: []uuid.UUID{},
 				}, WithIdempotencyKey("update-campaign"))
 			},
 			assertResult: assertDraft,
@@ -2561,6 +2571,562 @@ func TestCampaignsAPIClassifiesCampaignConflicts(t *testing.T) {
 			assert.Equal(t, "campaign is not a draft", apiErr.Message)
 			_, notReady := AsCampaignNotReady(err)
 			assert.False(t, notReady)
+		})
+	}
+}
+
+func TestOpenAPISegmentOperationsAndResponses(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+
+	type segmentOperationContract struct {
+		OperationID string                      `yaml:"operationId"`
+		CodeSamples []struct{ Lang string }     `yaml:"x-code-samples"`
+		Security    []map[string][]string       `yaml:"security"`
+		Responses   map[string]responseContract `yaml:"responses"`
+		Parameters  []struct {
+			Ref string `yaml:"$ref"`
+		} `yaml:"parameters"`
+	}
+	var spec struct {
+		Paths map[string]map[string]segmentOperationContract `yaml:"paths"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+
+	const (
+		segmentCreateConflict = "#/components/responses/SegmentCreateConflict"
+
+		segments        = "/v2/accounts/{account_id}/segments"
+		segment         = segments + "/{segment_id}"
+		contactSegments = "/v2/accounts/{account_id}/contacts/{id_or_email}/segments"
+	)
+	tests := []struct {
+		path        string
+		method      string
+		operationID string
+		scopes      []string
+		idempotent  bool
+		// conflict is the response a 409 of an idempotent operation refers
+		// to.
+		conflict string
+		statuses []string
+	}{
+		{path: segments, method: "get", operationID: "getSegments", scopes: []string{"segments:read"}, statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: segments, method: "post", operationID: "createSegment", scopes: []string{"segments:write"}, idempotent: true, conflict: segmentCreateConflict, statuses: []string{"201", "400", "401", "403", "409", "422", "429", "500"}},
+		{path: segments + "/preview", method: "post", operationID: "previewSegment", scopes: []string{"segments:read", "contacts:read"}, statuses: []string{"200", "400", "401", "403", "429", "500"}},
+		{path: segment, method: "get", operationID: "getSegment", scopes: []string{"segments:read"}, statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: segment, method: "put", operationID: "updateSegment", scopes: []string{"segments:write"}, statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
+		{path: segment, method: "delete", operationID: "deleteSegment", scopes: []string{"segments:delete"}, statuses: []string{"200", "400", "401", "403", "404", "409", "429", "500"}},
+		{path: segment + "/contacts", method: "get", operationID: "getSegmentContacts", scopes: []string{"segments:read", "contacts:read"}, statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+		{path: contactSegments, method: "get", operationID: "getContactSegments", scopes: []string{"segments:read", "contacts:read"}, statuses: []string{"200", "400", "401", "403", "404", "429", "500"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.operationID, func(t *testing.T) {
+			path, ok := spec.Paths[tt.path]
+			require.True(t, ok)
+			operation, ok := path[tt.method]
+			require.True(t, ok)
+			assert.Equal(t, tt.operationID, operation.OperationID)
+
+			var goSamples int
+			for _, sample := range operation.CodeSamples {
+				if sample.Lang == "go" {
+					goSamples++
+				}
+			}
+			assert.Equal(t, 1, goSamples)
+
+			assert.Equal(t, []map[string][]string{{"BearerAuth": tt.scopes}}, operation.Security)
+
+			actualStatuses := make([]string, 0, len(operation.Responses))
+			for status := range operation.Responses {
+				actualStatuses = append(actualStatuses, status)
+			}
+			sort.Strings(actualStatuses)
+			assert.Equal(t, tt.statuses, actualStatuses)
+
+			var takesIdempotencyKey bool
+			for _, parameter := range operation.Parameters {
+				if parameter.Ref == "#/components/parameters/IdempotencyKey" {
+					takesIdempotencyKey = true
+				}
+			}
+			assert.Equal(t, tt.idempotent, takesIdempotencyKey)
+			if tt.idempotent {
+				for status, response := range operation.Responses {
+					if strings.HasPrefix(status, "2") {
+						assert.Contains(t, response.Headers, "Idempotent-Replayed")
+					}
+				}
+				assert.Equal(t, tt.conflict, operation.Responses["409"].Ref)
+				assert.Equal(t, "#/components/responses/IdempotencyPayloadMismatch", operation.Responses["422"].Ref)
+			} else if conflict, ok := operation.Responses["409"]; ok {
+				assert.Empty(t, conflict.Ref)
+				assert.Empty(t, conflict.Headers)
+			}
+		})
+	}
+}
+
+func TestOpenAPISegmentSchemasMatchModels(t *testing.T) {
+	tests := []struct {
+		schemas []string
+		model   any
+	}{
+		{schemas: []string{"Segment"}, model: responses.Segment{}},
+		// SegmentDetail is an allOf of a $ref to Segment and the marketable
+		// count.
+		{schemas: []string{"SegmentDetail", "Segment"}, model: responses.SegmentDetail{}},
+		{schemas: []string{"SegmentDefinition"}, model: common.SegmentDefinition{}},
+		{schemas: []string{"SegmentGroup"}, model: common.SegmentGroup{}},
+		{schemas: []string{"SegmentCondition"}, model: common.SegmentCondition{}},
+		{schemas: []string{"SegmentCampaignCount"}, model: common.SegmentCampaignCount{}},
+		{schemas: []string{"CreateSegmentRequest"}, model: requests.CreateSegmentRequest{}},
+		{schemas: []string{"UpdateSegmentRequest"}, model: requests.UpdateSegmentRequest{}},
+		{schemas: []string{"PreviewSegmentRequest"}, model: requests.PreviewSegmentRequest{}},
+		{schemas: []string{"SegmentPreview"}, model: responses.SegmentPreview{}},
+		{schemas: []string{"SegmentPreviewContact"}, model: responses.SegmentPreviewContact{}},
+		{schemas: []string{"SegmentContact"}, model: responses.SegmentContact{}},
+		{schemas: []string{"PaginatedSegmentsResponse"}, model: responses.PaginatedSegmentsResponse{}},
+		{schemas: []string{"PaginatedSegmentContactsResponse"}, model: responses.PaginatedSegmentContactsResponse{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.schemas[0], func(t *testing.T) {
+			assert.Equal(t, openAPISchemaProperties(t, tt.schemas...), modelJSONFields(tt.model))
+		})
+	}
+}
+
+func TestOpenAPIDeliveryEventSchemaMatchesModel(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "DeliveryEvent"), modelJSONFields(responses.DeliveryEvent{}))
+}
+
+const segmentResponseFixture = `{
+	"object":"segment",
+	"id":"33333333-3333-4333-8333-333333333333",
+	"created_at":"2026-10-20T10:00:00Z",
+	"updated_at":"2026-10-20T11:00:00Z",
+	"name":"Engaged customers",
+	"description":"",
+	"definition":{"schema_version":1,"match":"all","conditions":[{"field":"list","op":"in","value":"22222222-2222-4222-8222-222222222222"},{"match":"any","conditions":[{"field":"campaign_count","op":"opened_at_least","value":{"count":3,"since":"90 days ago"}}]}]},
+	"timezone":"Europe/Berlin",
+	"state":"building",
+	"failure_reason":null,
+	"member_count":0,
+	"last_evaluated_at":null
+}`
+
+const segmentContactResponseFixture = `{
+	"object":"segment_contact",
+	"segment_id":"33333333-3333-4333-8333-333333333333",
+	"contact_id":"11111111-1111-4111-8111-111111111111",
+	"email":"user+tag@example.com",
+	"entered_at":"2026-10-20T11:00:00Z"
+}`
+
+// segmentTestDefinition is the definition segmentResponseFixture holds.
+func segmentTestDefinition() common.SegmentDefinition {
+	return common.SegmentDefinition{
+		SchemaVersion: common.SegmentSchemaVersion,
+		Match:         common.SegmentMatchAll,
+		Conditions: []common.SegmentRule{
+			{Condition: &common.SegmentCondition{
+				Field: common.SegmentFieldList,
+				Op:    common.SegmentOpIn,
+				Value: &common.SegmentValue{String: ahasend.String("22222222-2222-4222-8222-222222222222")},
+			}},
+			{Group: &common.SegmentGroup{
+				Match: common.SegmentMatchAny,
+				Conditions: []common.SegmentCondition{{
+					Field: common.SegmentFieldCampaignCount,
+					Op:    common.SegmentOpOpenedAtLeast,
+					Value: &common.SegmentValue{Count: &common.SegmentCampaignCount{Count: 3, Since: "90 days ago"}},
+				}},
+			}},
+		},
+	}
+}
+
+func TestSegmentsAPIEmitsDeclaredTransport(t *testing.T) {
+	accountID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	segmentID := uuid.MustParse("33333333-3333-4333-8333-333333333333")
+	contactID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	rawEmail := "a/b+Tag@Example.COM"
+	escapedEmail := "a%2Fb+Tag@Example.COM"
+	segmentsPath := "/v2/accounts/" + accountID.String() + "/segments"
+	segmentPath := segmentsPath + "/" + segmentID.String()
+	definitionJSON := `{"schema_version":1,"match":"all","conditions":[{"field":"list","op":"in","value":"22222222-2222-4222-8222-222222222222"},{"match":"any","conditions":[{"field":"campaign_count","op":"opened_at_least","value":{"count":3,"since":"90 days ago"}}]}]}`
+	segmentsPage := `{"object":"list","data":[` + segmentResponseFixture + `],"pagination":{"has_more":true,"next_cursor":"next","previous_cursor":null}}`
+
+	assertSegmentsPage := func(t *testing.T, result any) {
+		page := result.(*responses.PaginatedSegmentsResponse)
+		require.Len(t, page.Data, 1)
+		assert.Equal(t, segmentID, page.Data[0].ID)
+		assert.Equal(t, common.SegmentStateBuilding, page.Data[0].State)
+		assert.Equal(t, segmentTestDefinition(), page.Data[0].Definition)
+		assert.True(t, page.Pagination.HasMore)
+		require.NotNil(t, page.Pagination.NextCursor)
+		assert.Equal(t, "next", *page.Pagination.NextCursor)
+	}
+
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		status         int
+		response       string
+		idempotencyKey string
+		wantQuery      url.Values
+		wantBody       string
+		call           func(*APIClient) (any, *http.Response, error)
+		assertResult   func(*testing.T, any)
+	}{
+		{
+			name:      "get segments",
+			method:    http.MethodGet,
+			path:      segmentsPath,
+			status:    http.StatusOK,
+			response:  segmentsPage,
+			wantQuery: url.Values{"limit": {"100"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetSegments(context.Background(), accountID, requests.GetSegmentsParams{})
+			},
+			assertResult: assertSegmentsPage,
+		},
+		{
+			name:      "get segments with a cursor",
+			method:    http.MethodGet,
+			path:      segmentsPath,
+			status:    http.StatusOK,
+			response:  segmentsPage,
+			wantQuery: url.Values{"limit": {"25"}, "after": {"after-cursor"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetSegments(context.Background(), accountID, requests.GetSegmentsParams{
+					Limit: ahasend.Int32(25),
+					After: ahasend.String("after-cursor"),
+				})
+			},
+		},
+		{
+			name:           "create segment",
+			method:         http.MethodPost,
+			path:           segmentsPath,
+			status:         http.StatusCreated,
+			response:       segmentResponseFixture,
+			idempotencyKey: "create-segment",
+			wantBody:       `{"name":"Engaged customers","description":"Opened lately","definition":` + definitionJSON + `,"timezone":"Europe/Berlin"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.CreateSegment(context.Background(), accountID, requests.CreateSegmentRequest{
+					Name:        "Engaged customers",
+					Description: ahasend.String("Opened lately"),
+					Definition:  segmentTestDefinition(),
+					Timezone:    ahasend.String("Europe/Berlin"),
+				}, WithIdempotencyKey("create-segment"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				segment := result.(*responses.Segment)
+				assert.Equal(t, "segment", segment.Object)
+				assert.Equal(t, common.SegmentStateBuilding, segment.State)
+				assert.Nil(t, segment.LastEvaluatedAt)
+			},
+		},
+		{
+			name:           "preview segment",
+			method:         http.MethodPost,
+			path:           segmentsPath + "/preview",
+			status:         http.StatusOK,
+			response:       `{"object":"segment_preview","count":null,"contacts":[{"contact_id":"11111111-1111-4111-8111-111111111111","email":"user+tag@example.com"}]}`,
+			idempotencyKey: "preview-segment",
+			wantBody:       `{"definition":` + definitionJSON + `}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.PreviewSegment(context.Background(), accountID, requests.PreviewSegmentRequest{
+					Definition: segmentTestDefinition(),
+				}, WithIdempotencyKey("preview-segment"))
+			},
+			assertResult: func(t *testing.T, result any) {
+				preview := result.(*responses.SegmentPreview)
+				assert.Equal(t, "segment_preview", preview.Object)
+				assert.Nil(t, preview.Count)
+				require.Len(t, preview.Contacts, 1)
+				assert.Equal(t, contactID, preview.Contacts[0].ContactID)
+			},
+		},
+		{
+			name:     "get segment",
+			method:   http.MethodGet,
+			path:     segmentPath,
+			status:   http.StatusOK,
+			response: segmentResponseFixture[:len(segmentResponseFixture)-1] + `,"marketable_count":null}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetSegment(context.Background(), accountID, segmentID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				segment := result.(*responses.SegmentDetail)
+				assert.Equal(t, segmentID, segment.ID)
+				assert.Nil(t, segment.MarketableCount)
+			},
+		},
+		{
+			name:     "update segment",
+			method:   http.MethodPut,
+			path:     segmentPath,
+			status:   http.StatusOK,
+			response: segmentResponseFixture,
+			wantBody: `{"name":"Engaged customers","definition":` + definitionJSON + `}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				definition := segmentTestDefinition()
+				return client.SegmentsAPI.UpdateSegment(context.Background(), accountID, segmentID, requests.UpdateSegmentRequest{
+					Name:       ahasend.String("Engaged customers"),
+					Definition: &definition,
+				})
+			},
+		},
+		{
+			name:     "update segment naming nothing",
+			method:   http.MethodPut,
+			path:     segmentPath,
+			status:   http.StatusOK,
+			response: segmentResponseFixture,
+			wantBody: `{}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.UpdateSegment(context.Background(), accountID, segmentID, requests.UpdateSegmentRequest{})
+			},
+		},
+		{
+			name:     "delete segment",
+			method:   http.MethodDelete,
+			path:     segmentPath,
+			status:   http.StatusOK,
+			response: `{"message":"segment deleted"}`,
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.DeleteSegment(context.Background(), accountID, segmentID)
+			},
+			assertResult: func(t *testing.T, result any) {
+				assert.Equal(t, "segment deleted", result.(*common.SuccessResponse).Message)
+			},
+		},
+		{
+			name:      "get segment contacts",
+			method:    http.MethodGet,
+			path:      segmentPath + "/contacts",
+			status:    http.StatusOK,
+			response:  `{"object":"list","data":[` + segmentContactResponseFixture + `],"pagination":{"has_more":false,"next_cursor":null,"previous_cursor":"prev"}}`,
+			wantQuery: url.Values{"limit": {"100"}, "before": {"before-cursor"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetSegmentContacts(context.Background(), accountID, segmentID, requests.GetSegmentContactsParams{
+					Before: ahasend.String("before-cursor"),
+				})
+			},
+			assertResult: func(t *testing.T, result any) {
+				page := result.(*responses.PaginatedSegmentContactsResponse)
+				require.Len(t, page.Data, 1)
+				assert.Equal(t, segmentID, page.Data[0].SegmentID)
+				assert.Equal(t, contactID, page.Data[0].ContactID)
+				assert.Equal(t, time.Date(2026, 10, 20, 11, 0, 0, 0, time.UTC), page.Data[0].EnteredAt.UTC())
+				require.NotNil(t, page.Pagination.PreviousCursor)
+				assert.Nil(t, page.Pagination.NextCursor)
+			},
+		},
+		{
+			name:      "get contact segments",
+			method:    http.MethodGet,
+			path:      "/v2/accounts/" + accountID.String() + "/contacts/" + escapedEmail + "/segments",
+			status:    http.StatusOK,
+			response:  segmentsPage,
+			wantQuery: url.Values{"limit": {"10"}, "after": {"after-cursor"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetContactSegments(context.Background(), accountID, rawEmail, requests.GetContactSegmentsParams{
+					Limit: ahasend.Int32(10),
+					After: ahasend.String("after-cursor"),
+				})
+			},
+			assertResult: assertSegmentsPage,
+		},
+		{
+			name:      "get contact segments by ID",
+			method:    http.MethodGet,
+			path:      "/v2/accounts/" + accountID.String() + "/contacts/" + contactID.String() + "/segments",
+			status:    http.StatusOK,
+			response:  segmentsPage,
+			wantQuery: url.Values{"limit": {"100"}},
+			call: func(client *APIClient) (any, *http.Response, error) {
+				return client.SegmentsAPI.GetContactSegments(context.Background(), accountID, contactID.String(), requests.GetContactSegmentsParams{})
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var capturedRequest *http.Request
+			var capturedBody []byte
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				capturedRequest = r
+				capturedBody, _ = io.ReadAll(r.Body)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.response))
+			})
+			defer cleanup()
+
+			result, httpResponse, err := tt.call(client)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, httpResponse)
+			require.NotNil(t, capturedRequest)
+			assert.Equal(t, tt.status, httpResponse.StatusCode)
+			assert.Equal(t, tt.method, capturedRequest.Method)
+			assert.Equal(t, tt.path, capturedRequest.URL.EscapedPath())
+			assert.Equal(t, tt.idempotencyKey, capturedRequest.Header.Get("Idempotency-Key"))
+			if tt.wantQuery != nil {
+				assert.Equal(t, tt.wantQuery, capturedRequest.URL.Query())
+			} else {
+				assert.Empty(t, capturedRequest.URL.RawQuery)
+			}
+			if tt.wantBody != "" {
+				assert.JSONEq(t, tt.wantBody, string(capturedBody))
+			} else {
+				assert.Empty(t, capturedBody)
+			}
+			if tt.assertResult != nil {
+				tt.assertResult(t, result)
+			}
+		})
+	}
+
+	t.Run("create segment without a key", func(t *testing.T) {
+		var idempotencyKey string
+		client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			idempotencyKey = r.Header.Get("Idempotency-Key")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(segmentResponseFixture))
+		})
+		defer cleanup()
+
+		_, _, err := client.SegmentsAPI.CreateSegment(context.Background(), accountID, requests.CreateSegmentRequest{
+			Name:       "Engaged customers",
+			Definition: segmentTestDefinition(),
+		})
+
+		require.NoError(t, err)
+		assert.NotEmpty(t, idempotencyKey)
+	})
+}
+
+func TestCreateSegmentRetriesWithItsIdempotencyKey(t *testing.T) {
+	var keys []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("Idempotency-Key"))
+		w.Header().Set("Content-Type", "application/json")
+		if len(keys) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"message":"try again"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(segmentResponseFixture))
+	}))
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	cfg := NewConfiguration()
+	cfg.Host = serverURL.Host
+	cfg.Scheme = serverURL.Scheme
+	cfg.APIKey = "test-key"
+	cfg.RetryConfig.Enabled = true
+	cfg.RetryConfig.MaxRetries = 2
+	cfg.RetryConfig.BaseDelay = time.Millisecond
+	cfg.RetryConfig.MaxDelay = time.Millisecond
+	client := NewAPIClientWithConfig(cfg)
+
+	_, httpResponse, err := client.SegmentsAPI.CreateSegment(context.Background(), uuid.New(), requests.CreateSegmentRequest{
+		Name:       "Engaged customers",
+		Definition: segmentTestDefinition(),
+	}, WithIdempotencyKey("create-segment"))
+
+	require.NoError(t, err)
+	require.NotNil(t, httpResponse)
+	assert.Equal(t, http.StatusCreated, httpResponse.StatusCode)
+	assert.Equal(t, []string{"create-segment", "create-segment"}, keys)
+}
+
+func TestSegmentsAPIClassifiesSegmentConflicts(t *testing.T) {
+	createSegment := func(client *APIClient) error {
+		_, _, err := client.SegmentsAPI.CreateSegment(context.Background(), uuid.New(), requests.CreateSegmentRequest{
+			Name:       "Engaged customers",
+			Definition: segmentTestDefinition(),
+		}, WithIdempotencyKey("create-segment"))
+		return err
+	}
+
+	tests := []struct {
+		name           string
+		headers        map[string]string
+		message        string
+		call           func(*APIClient) error
+		wantType       ErrorType
+		wantRetryAfter int
+	}{
+		{
+			name:     "create refusal",
+			message:  "An account can have at most 100 segments. Delete a segment to add another.",
+			call:     createSegment,
+			wantType: ErrorTypeConflict,
+		},
+		{
+			name:           "create in progress",
+			headers:        map[string]string{"Idempotent-Replayed": "false", "Retry-After": "5"},
+			message:        "request with this idempotency key is in progress",
+			call:           createSegment,
+			wantType:       ErrorTypeIdempotencyConflict,
+			wantRetryAfter: 5,
+		},
+		{
+			name:    "update busy",
+			message: "The segment is being updated. Try again in a minute.",
+			call: func(client *APIClient) error {
+				_, _, err := client.SegmentsAPI.UpdateSegment(context.Background(), uuid.New(), uuid.New(), requests.UpdateSegmentRequest{
+					Name: ahasend.String("Engaged customers"),
+				})
+				return err
+			},
+			wantType: ErrorTypeConflict,
+		},
+		{
+			name:    "delete busy",
+			message: "The segment is being updated. Try again in a minute.",
+			call: func(client *APIClient) error {
+				_, _, err := client.SegmentsAPI.DeleteSegment(context.Background(), uuid.New(), uuid.New())
+				return err
+			},
+			wantType: ErrorTypeConflict,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+				for key, value := range tt.headers {
+					w.Header().Set(key, value)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"message":"` + tt.message + `"}`))
+			})
+			defer cleanup()
+
+			err := tt.call(client)
+
+			var apiErr *APIError
+			require.ErrorAs(t, err, &apiErr)
+			assert.Equal(t, http.StatusConflict, apiErr.StatusCode)
+			assert.Equal(t, tt.wantType, apiErr.Type)
+			assert.Equal(t, tt.wantRetryAfter, apiErr.RetryAfter)
+			assert.Equal(t, tt.message, apiErr.Message)
 		})
 	}
 }

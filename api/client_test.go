@@ -46,6 +46,7 @@ func TestClientCreation(t *testing.T) {
 	assert.NotNil(t, client.MessagesAPI)
 	assert.NotNil(t, client.RoutesAPI)
 	assert.NotNil(t, client.SMTPCredentialsAPI)
+	assert.NotNil(t, client.SegmentsAPI)
 	assert.NotNil(t, client.StatisticsAPI)
 	assert.NotNil(t, client.SubAccountsAPI)
 	assert.NotNil(t, client.SuppressionsAPI)
@@ -59,6 +60,7 @@ func TestClientCreation(t *testing.T) {
 	assert.NotNil(t, defaultClient.CampaignsAPI)
 	assert.NotNil(t, defaultClient.ContactsAPI)
 	assert.NotNil(t, defaultClient.ListsAPI)
+	assert.NotNil(t, defaultClient.SegmentsAPI)
 	assert.NotNil(t, defaultClient.SubAccountsAPI)
 	assert.NotNil(t, defaultClient.TemplatesAPI)
 }

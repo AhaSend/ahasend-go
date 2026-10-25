@@ -38,9 +38,26 @@ type CreateCampaignRequest struct {
 	// ReplyTo is the reply-to address, an address only, without a display
 	// name.
 	ReplyTo *string `json:"reply_to,omitempty"`
-	// ListIDs are the lists to send to, in order: 1 to 50 of the account's
-	// lists. A list named twice counts once.
+	// ListIDs are the lists to send to, in order: at most 50 of the
+	// account's lists. A list named twice counts once. ListIDs, SegmentIDs,
+	// ExcludeListIDs and ExcludeSegmentIDs are the campaign's audience. A
+	// campaign uses at most 50 lists and 10 segments in all, exclusions
+	// included. An audience that is set must keep at least one list or
+	// segment to send to, so ListIDs can be empty when SegmentIDs is set.
 	ListIDs []uuid.UUID `json:"list_ids,omitempty"`
+	// SegmentIDs are the segments to send to: at most 10 of the account's
+	// segments. A segment named twice counts once. A contact reached through
+	// a list and a segment gets one message, recorded under the list.
+	SegmentIDs []uuid.UUID `json:"segment_ids,omitempty"`
+	// ExcludeListIDs are at most 50 lists whose contacts get no message from
+	// the campaign. A contact with any membership of one, whatever its
+	// status, is left out, also when an included list or segment reaches it.
+	// A list cannot be both in ListIDs and here.
+	ExcludeListIDs []uuid.UUID `json:"exclude_list_ids,omitempty"`
+	// ExcludeSegmentIDs are at most 10 segments whose members get no message
+	// from the campaign, also when an included list or segment reaches them.
+	// A segment cannot be both in SegmentIDs and here.
+	ExcludeSegmentIDs []uuid.UUID `json:"exclude_segment_ids,omitempty"`
 	// Editor is the design's editor, common.TemplateEditorAdvanced,
 	// common.TemplateEditorSimple or common.TemplateEditorHTML. Without
 	// Content the campaign gets an empty design of this editor, which the
@@ -75,9 +92,20 @@ type UpdateCampaignRequest struct {
 	// ReplyTo is the reply-to address, as on create. A pointer to "" clears
 	// it.
 	ReplyTo *string `json:"reply_to,omitempty"`
-	// ListIDs replace the campaign's lists, as on create. A non-nil empty
-	// slice is sent, and the API refuses it.
+	// ListIDs replace the campaign's lists, as on create. Each of the four
+	// audience fields, ListIDs, SegmentIDs, ExcludeListIDs and
+	// ExcludeSegmentIDs, replaces its own set when it is not nil and leaves
+	// it unchanged when it is nil. A non-nil empty slice is sent and empties
+	// the set. The result needs at least one list or segment to send to.
 	ListIDs []uuid.UUID `json:"list_ids,omitempty"`
+	// SegmentIDs replace the campaign's segments, as on create.
+	SegmentIDs []uuid.UUID `json:"segment_ids,omitempty"`
+	// ExcludeListIDs replace the campaign's excluded lists, as on create. A
+	// non-nil empty slice excludes none.
+	ExcludeListIDs []uuid.UUID `json:"exclude_list_ids,omitempty"`
+	// ExcludeSegmentIDs replace the campaign's excluded segments, as on
+	// create. A non-nil empty slice excludes none.
+	ExcludeSegmentIDs []uuid.UUID `json:"exclude_segment_ids,omitempty"`
 	// Content changes the design's content, by the rules of
 	// TemplateContentInput, in the design's editor. For a simple design, send
 	// only Text. A campaign with no design yet needs MJML or HTML, which sets
@@ -87,22 +115,35 @@ type UpdateCampaignRequest struct {
 
 // MarshalJSON sends a Subject, Preheader or ReplyTo that points at "", and a
 // From that points at an empty common.SenderAddress, as null, which clears
-// it. It sends ListIDs whenever it is not nil, also when it is empty.
+// it. It sends ListIDs, SegmentIDs, ExcludeListIDs and ExcludeSegmentIDs
+// whenever they are not nil, also when they are empty.
 func (r UpdateCampaignRequest) MarshalJSON() ([]byte, error) {
 	wire := struct {
-		Name      *string               `json:"name,omitempty"`
-		Subject   json.RawMessage       `json:"subject,omitempty"`
-		Preheader json.RawMessage       `json:"preheader,omitempty"`
-		From      json.RawMessage       `json:"from,omitempty"`
-		ReplyTo   json.RawMessage       `json:"reply_to,omitempty"`
-		ListIDs   *[]uuid.UUID          `json:"list_ids,omitempty"`
-		Content   *TemplateContentInput `json:"content,omitempty"`
+		Name              *string               `json:"name,omitempty"`
+		Subject           json.RawMessage       `json:"subject,omitempty"`
+		Preheader         json.RawMessage       `json:"preheader,omitempty"`
+		From              json.RawMessage       `json:"from,omitempty"`
+		ReplyTo           json.RawMessage       `json:"reply_to,omitempty"`
+		ListIDs           *[]uuid.UUID          `json:"list_ids,omitempty"`
+		SegmentIDs        *[]uuid.UUID          `json:"segment_ids,omitempty"`
+		ExcludeListIDs    *[]uuid.UUID          `json:"exclude_list_ids,omitempty"`
+		ExcludeSegmentIDs *[]uuid.UUID          `json:"exclude_segment_ids,omitempty"`
+		Content           *TemplateContentInput `json:"content,omitempty"`
 	}{
 		Name:    r.Name,
 		Content: r.Content,
 	}
 	if r.ListIDs != nil {
 		wire.ListIDs = &r.ListIDs
+	}
+	if r.SegmentIDs != nil {
+		wire.SegmentIDs = &r.SegmentIDs
+	}
+	if r.ExcludeListIDs != nil {
+		wire.ExcludeListIDs = &r.ExcludeListIDs
+	}
+	if r.ExcludeSegmentIDs != nil {
+		wire.ExcludeSegmentIDs = &r.ExcludeSegmentIDs
 	}
 
 	var err error

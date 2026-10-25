@@ -178,7 +178,9 @@ DeleteList Delete List
 
 # Soft-deletes one account-scoped list and keeps its memberships
 
-Returns 409 while a campaign that still needs the list references it.
+Returns 409 while a campaign that still needs the list references it, as an
+included or an excluded list, or while a segment refers to it in a list
+condition. The second refusal names the segments.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

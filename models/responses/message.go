@@ -62,6 +62,11 @@ type DeliveryEvent struct {
 	Time   time.Time `json:"time"`
 	Log    string    `json:"log"`
 	Status string    `json:"status"`
+	// ReportMessageID is the ID of the bounce report message that the
+	// recipient's mail server sent after it accepted this message. Fetch the
+	// report with GetMessage. It is set only on the delivery event of an
+	// out-of-band bounce.
+	ReportMessageID *uuid.UUID `json:"report_message_id,omitempty"`
 }
 
 // MessageSchedule represents scheduling information for a message

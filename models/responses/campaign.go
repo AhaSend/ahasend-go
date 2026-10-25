@@ -11,7 +11,8 @@ import (
 //
 //   - CampaignIssueSenderMissing: the campaign has no complete sender, or its
 //     domain was deleted.
-//   - CampaignIssueListsMissing: the campaign has no list that still exists.
+//   - CampaignIssueListsMissing: the campaign has no list or segment that
+//     still exists.
 //   - CampaignIssueSubjectMissing: the campaign has no subject.
 //   - CampaignIssuePreheaderMissing: the campaign has no preview text.
 //   - CampaignIssueDesignMissing: the campaign has no design, or its design
@@ -46,7 +47,7 @@ type CampaignIssue struct {
 }
 
 // CampaignListItem represents a campaign as ListCampaigns returns it, without
-// its lists, content and issues. A field documented as nil is sent as null.
+// its audience, content and issues. A field documented as nil is sent as null.
 type CampaignListItem struct {
 	Object    string    `json:"object"`
 	ID        uuid.UUID `json:"id"`
@@ -80,13 +81,23 @@ type CampaignListItem struct {
 	FinishedAt *time.Time `json:"finished_at"`
 }
 
-// Campaign represents a campaign with its lists, its content and, for a
+// Campaign represents a campaign with its audience, its content and, for a
 // draft, the issues that keep it from being sent.
 type Campaign struct {
 	CampaignListItem
 	// ListIDs are the lists the campaign sends to, in the order they were
 	// saved. A list that was deleted is left out.
 	ListIDs []uuid.UUID `json:"list_ids"`
+	// SegmentIDs are the segments the campaign sends to. A segment that was
+	// deleted is left out.
+	SegmentIDs []uuid.UUID `json:"segment_ids"`
+	// ExcludeListIDs are the lists whose contacts the campaign does not send
+	// to. A contact with any membership of one of them, whatever its status,
+	// is left out. A list that was deleted is left out.
+	ExcludeListIDs []uuid.UUID `json:"exclude_list_ids"`
+	// ExcludeSegmentIDs are the segments whose members the campaign does not
+	// send to. A segment that was deleted is left out.
+	ExcludeSegmentIDs []uuid.UUID `json:"exclude_segment_ids"`
 	// Editor is the design's editor, common.TemplateEditorAdvanced,
 	// common.TemplateEditorSimple or common.TemplateEditorHTML. It is nil
 	// while the campaign has no design.
@@ -221,8 +232,15 @@ type CampaignRecipient struct {
 	ContactID uuid.UUID `json:"contact_id"`
 	// Email is the address the campaign sent to.
 	Email string `json:"email"`
-	// ListName is the name of the list the contact was sent to from.
-	ListName string `json:"list_name"`
+	// ListName is the name of the list the contact was sent to from, nil
+	// when the contact was sent to from a segment.
+	ListName *string `json:"list_name"`
+	// SegmentID is the segment the contact was sent to from, nil when the
+	// contact was sent to from a list.
+	SegmentID *uuid.UUID `json:"segment_id"`
+	// SegmentName is the name of the segment the contact was sent to from,
+	// as it was at the send, nil when the contact was sent to from a list.
+	SegmentName *string `json:"segment_name"`
 	// Status is the status under the name the dashboard's report shows, as a
 	// key of CampaignStatsReport.ByStatus.
 	Status string `json:"status"`

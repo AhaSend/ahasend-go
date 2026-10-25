@@ -33,6 +33,13 @@ func main() {
 		if recipient.BounceReason != nil {
 			reason = *recipient.BounceReason
 		}
-		fmt.Printf("%s (%s) %s\n", recipient.Email, recipient.ListName, reason)
+		// A recipient comes from a list or from a segment.
+		source := ""
+		if recipient.ListName != nil {
+			source = *recipient.ListName
+		} else if recipient.SegmentName != nil {
+			source = *recipient.SegmentName
+		}
+		fmt.Printf("%s (%s) %s\n", recipient.Email, source, reason)
 	}
 }
