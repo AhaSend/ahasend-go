@@ -118,6 +118,25 @@ info:
     `include_contacts=true` requires `contacts:read` in addition to
     `lists:read`.
 
+    ### Segment Scopes
+    - `segments:read` - Read segments, their members and a contact's segments, and preview a definition
+    - `segments:write` - Create and update segments
+    - `segments:delete` - Delete segments
+
+    ### Segments
+    A segment is a saved set of rules over the account's contacts: their
+    fields, their list memberships, and the campaigns they received, opened
+    or clicked. AhaSend keeps its members up to date as that data changes,
+    usually within a minute; rules about campaigns follow within an hour of a
+    send, and relative times such as `30 days ago` are read again on a
+    schedule. Membership is the rule match only, whatever the contact's
+    consent: a campaign to a segment reaches the members who are enabled, not
+    unsubscribed, not found invalid, and either confirmed on at least one list
+    or on no list at all. A contact who unsubscribed from or complained on
+    every list they were on, or has not confirmed a double opt-in, is not
+    reached. A contact who unsubscribes from a segment send, or reports it as
+    spam, gets no more marketing email from the account.
+
     ### SMTP Credentials Scopes
     - `smtp-credentials:read:all` - Read all SMTP credentials
     - `smtp-credentials:read:{domain}` - Read SMTP credentials for a specific domain
@@ -185,6 +204,9 @@ info:
       completion. They store and replay a successful 201, including the same
       one-time `secret_key`; a controller-produced 4xx is not stored and leaves
       the key in progress until its execution lease expires.
+    - Create Segment and Test Campaign store and replay a 2xx only. A 4xx is
+      not stored: it releases the key, so a retry with the same key runs
+      again.
     - Server errors (5xx), handler failures, and panics are not stored. The key
       is released so retrying the same request with the same key re-executes it.
       The v2 API does not use an HTTP 412 failed-key tombstone.
@@ -304,9 +326,13 @@ components:
         with this idempotency key is still in progress. The in-progress case
         is identified only by `Idempotent-Replayed: false` plus a positive
         integer `Retry-After`; retry it after that many seconds with the same
-        key. A new status conflict has neither header; a stored replay of
-        one has `Idempotent-Replayed: true` (a test send's status conflict is
-        not stored, so it is never replayed). The message is not a stable
+        key. An update that changes the audience can also find a segment it
+        names being rebuilt: `The campaign's audience is being updated. Try
+        again in a minute.` A new status conflict has neither header; a
+        stored replay of one has `Idempotent-Replayed: true` (a test send's
+        status conflict is not stored, so it is never replayed). The audience
+        refusal is stored for the `Idempotency-Key` like a status conflict,
+        so retry it with a new key. The message is not a stable
         discriminator.
       headers:
         Idempotent-Replayed:
@@ -325,6 +351,66 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "campaign is not a draft"
+
+    CampaignCreateConflict:
+      description: |
+        Either a segment of the new campaign's audience is being rebuilt
+        (`The campaign's audience is being updated. Try again in a
+        minute.`), or an execution with this idempotency key is still in
+        progress. The in-progress case is identified only by
+        `Idempotent-Replayed: false` plus a positive integer `Retry-After`;
+        retry it after that many seconds with the same key. The audience
+        refusal is stored for the `Idempotency-Key` like other client
+        errors: an identical request with the same key replays it with
+        `Idempotent-Replayed: true` for 24 hours, so retry it with a new
+        key. A fresh refusal has neither header. The message is not a
+        stable discriminator.
+      headers:
+        Idempotent-Replayed:
+          description: |
+            `false` with a positive `Retry-After` means an execution is in
+            progress. `true` means a stored 409 was replayed. Absent means a
+            fresh refusal.
+          schema:
+            type: string
+            enum: ['true', 'false']
+        Retry-After:
+          $ref: '#/components/headers/IdempotencyRetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "The campaign's audience is being updated. Try again in a minute."
+
+    SegmentCreateConflict:
+      description: |
+        Either the account already has 100 segments, a list or campaign
+        the definition names is being changed (`The segment is being
+        updated. Try again in a minute.`), or an execution with this
+        idempotency key is still in progress. The in-progress case is
+        identified only by `Idempotent-Replayed: false` plus a positive
+        integer `Retry-After`; retry it after that many seconds with the
+        same key. A refusal has neither header and is not stored for the
+        `Idempotency-Key`, so a retry with the same key runs again, for
+        example after a segment is deleted. The message is not a stable
+        discriminator.
+      headers:
+        Idempotent-Replayed:
+          description: |
+            `false` with a positive `Retry-After` means an execution is in
+            progress. Absent means a refusal.
+          schema:
+            type: string
+            enum: ['false']
+        Retry-After:
+          $ref: '#/components/headers/IdempotencyRetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: "An account can have at most 100 segments. Delete a segment to add another."
 
     TemplateBeingChanged:
       description: |
@@ -1292,6 +1378,10 @@ components:
         status:
           type: string
           description: Status of the delivery event
+        report_message_id:
+          type: string
+          format: uuid
+          description: The `id` of the bounce report message that the recipient's mail server sent after it accepted this message. Fetch the report with [Get Message](https://ahasend.com/docs/api-reference/messages/get-message). Present only on the delivery event of an out-of-band bounce.
       required:
         - time
         - log
@@ -2181,7 +2271,7 @@ components:
             - unsubscribe_link_missing
           description: |
             - `sender_missing`: the campaign has no complete sender, or its domain was deleted.
-            - `lists_missing`: the campaign has no list that still exists.
+            - `lists_missing`: the campaign has no list or segment that still exists.
             - `subject_missing`: the campaign has no subject.
             - `preheader_missing`: the campaign has no preview text.
             - `design_missing`: the campaign has no design, or its design has no HTML.
@@ -2209,7 +2299,7 @@ components:
         - send_at
         - send_resumes_at
         - finished_at
-      description: A campaign as List Campaigns returns it, without its lists, content and issues.
+      description: A campaign as List Campaigns returns it, without its audience, content and issues.
       properties:
         object:
           type: string
@@ -2283,6 +2373,9 @@ components:
         - type: object
           required:
             - list_ids
+            - segment_ids
+            - exclude_list_ids
+            - exclude_segment_ids
             - editor
             - content
             - ready
@@ -2294,6 +2387,24 @@ components:
                 type: string
                 format: uuid
               description: The lists the campaign sends to, in the order they were saved. A list that was deleted is left out.
+            segment_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: The segments the campaign sends to, by ID. A segment that was deleted is left out.
+            exclude_list_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: The lists whose contacts the campaign does not send to, by ID. A contact with any membership of one of them, whatever its status, is left out. A list that was deleted is left out.
+            exclude_segment_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: The segments whose members the campaign does not send to, by ID. A segment that was deleted is left out.
             editor:
               oneOf:
                 - $ref: '#/components/schemas/TemplateEditor'
@@ -2356,12 +2467,37 @@ components:
           description: The reply-to address, an address only, without a display name.
         list_ids:
           type: array
-          minItems: 1
           maxItems: 50
           items:
             type: string
             format: uuid
-          description: The lists to send to, in order. A list named twice counts once. Each must be a list of this account.
+          description: |
+            The lists to send to, in order. A list named twice counts once.
+            Each must be a list of this account. A campaign uses at most 50
+            lists and 10 segments, included and excluded together, and an
+            audience field that is set must leave it at least one list or
+            segment to send to, so `[]` is accepted with `segment_ids`.
+        segment_ids:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+          description: The segments to send to. A segment named twice counts once. Each must be a segment of this account. A contact reached through a list and a segment gets one message, recorded under the list. Responses return the segments by ID.
+        exclude_list_ids:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+          description: Lists whose contacts get no message from the campaign. A contact with any membership of one, whatever its status, is left out, also when an included list or segment reaches it. A list cannot be both in `list_ids` and here. Exclusions need at least one list or segment to send to. Responses return the lists by ID.
+        exclude_segment_ids:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+          description: Segments whose members get no message from the campaign, also when an included list or segment reaches them. A segment cannot be both in `segment_ids` and here. Exclusions need at least one list or segment to send to. Responses return the segments by ID.
         editor:
           $ref: '#/components/schemas/TemplateEditor'
           description: The editor of the design. Without `content` the campaign gets an empty design of this editor, which the dashboard's editor opens. With `content`, it is required when the content holds neither `mjml` nor `html`, and must agree with it otherwise. Not accepted with `template_id`, whose editor the design keeps.
@@ -2408,12 +2544,32 @@ components:
           description: The reply-to address, as on create. Null clears it.
         list_ids:
           type: array
-          minItems: 1
           maxItems: 50
           items:
             type: string
             format: uuid
-          description: The lists to send to, which replace the campaign's lists, as on create.
+          description: The lists to send to, which replace the campaign's lists, as on create. Each of the four audience fields replaces its own set when it is present and leaves it unchanged when it is left out; the result needs at least one list or segment to send to.
+        segment_ids:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+          description: The segments to send to, which replace the campaign's segments, as on create.
+        exclude_list_ids:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            format: uuid
+          description: The excluded lists, which replace the campaign's, as on create. `[]` excludes none.
+        exclude_segment_ids:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+          description: The excluded segments, which replace the campaign's, as on create. `[]` excludes none.
         content:
           $ref: '#/components/schemas/TemplateContentInput'
           description: The content of the design, by the rules of `TemplateContentInput`, in the design's editor. For a `simple` design, send only `text`. A campaign with no design yet needs `mjml` or `html`, which sets its editor.
@@ -2684,6 +2840,8 @@ components:
         - contact_id
         - email
         - list_name
+        - segment_id
+        - segment_name
         - status
         - bounce_classification
         - bounce_reason
@@ -2705,8 +2863,21 @@ components:
           type: string
           description: The address the campaign sent to
         list_name:
-          type: string
-          description: Name of the list the contact was sent to from
+          type:
+            - string
+            - 'null'
+          description: Name of the list the contact was sent to from. Null when the contact was sent to from a segment.
+        segment_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: The segment the contact was sent to from. Null when the contact was sent to from a list.
+        segment_name:
+          type:
+            - string
+            - 'null'
+          description: Name of the segment the contact was sent to from, as it was at the send. Null when the contact was sent to from a list.
         status:
           type: string
           description: The status, under the name the dashboard's report shows, as a key of `by_status`
@@ -3901,6 +4072,487 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ListContact'
+        pagination:
+          $ref: '#/components/schemas/ContactPagination'
+
+    # Segment Schemas
+    Segment:
+      type: object
+      description: |
+        A saved set of rules over the account's contacts, and the contacts
+        that match them.
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - name
+        - description
+        - definition
+        - timezone
+        - state
+        - failure_reason
+        - member_count
+        - last_evaluated_at
+      properties:
+        object:
+          type: string
+          enum: [segment]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the segment
+        created_at:
+          type: string
+          format: date-time
+          description: When the segment was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the segment was last saved
+        name:
+          type: string
+          description: Segment name; names are not unique within an account
+        description:
+          type: string
+          description: Free-text description; empty when none was given
+        definition:
+          $ref: '#/components/schemas/SegmentDefinition'
+        timezone:
+          type: string
+          description: The IANA time zone that relative times and days in the definition are read in
+        state:
+          type: string
+          enum: [building, ready, failed]
+          description: |
+            - `building`: the members are being found for the current
+              definition. A campaign that uses the segment cannot be sent
+              until it is `ready`.
+            - `ready`: the members follow the current definition.
+            - `failed`: the members could not be found; `failure_reason`
+              says why. Any update of the segment, `{}` included, builds it
+              again.
+        failure_reason:
+          type: [string, 'null']
+          description: Why the segment failed. Null unless `state` is `failed`.
+        member_count:
+          type: integer
+          minimum: 0
+          description: |
+            The contacts that match the rules, whatever their consent. A
+            campaign reaches only those of them who may get marketing email;
+            Get Segment counts them as `marketable_count`.
+        last_evaluated_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the members were last checked against the whole account. Null until the first build ends.
+
+    SegmentDetail:
+      description: A segment as Get Segment returns it, with `marketable_count`.
+      allOf:
+        - $ref: '#/components/schemas/Segment'
+        - type: object
+          required:
+            - marketable_count
+          properties:
+            marketable_count:
+              type: [integer, 'null']
+              minimum: 0
+              description: |
+                The members a campaign to this segment alone would reach:
+                enabled, not unsubscribed, not found invalid, and either
+                confirmed on at least one list or on no list at all. A
+                contact who unsubscribed from or complained on every list
+                they were on, or has not confirmed a double opt-in, is not
+                counted. Null while `state` is not `ready`, since no campaign
+                sends to the segment then, and null when they cannot be
+                counted within 10 seconds.
+
+    SegmentDefinition:
+      type: object
+      additionalProperties: false
+      description: |
+        The rules of a segment. The root group holds conditions and groups;
+        a group holds conditions only, so groups nest one level deep. A
+        definition has at most 50 conditions in all, and at most 5 of them
+        are `campaign`, `any_campaign` or `campaign_count` conditions. An
+        unknown key, or a `schema_version` other than 1, is refused. A
+        refused definition is answered with 400 and a message that names each
+        problem by its path, such as `conditions[3].value`.
+      required:
+        - schema_version
+        - match
+        - conditions
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+          description: The version of this format
+        match:
+          type: string
+          enum: [all, any]
+          description: Whether a contact must match all of the conditions or any of them
+        conditions:
+          type: array
+          minItems: 1
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/SegmentCondition'
+              - $ref: '#/components/schemas/SegmentGroup'
+      example:
+        schema_version: 1
+        match: all
+        conditions:
+          - field: attributes.country
+            op: equal
+            value: DE
+          - field: created_at
+            op: after
+            value: 30 days ago
+          - field: list
+            op: in
+            value: 6f1c2a52-8f2e-4d8e-9a3b-1c2d3e4f5a6b
+          - match: any
+            conditions:
+              - field: campaign
+                op: opened
+                value: 9a2e7c41-0b3d-4f5e-8a6b-7c8d9e0f1a2b
+              - field: any_campaign
+                op: clicked
+                value: 14 days ago
+              - field: campaign_count
+                op: opened_at_least
+                value:
+                  count: 3
+                  since: 90 days ago
+
+    SegmentGroup:
+      type: object
+      additionalProperties: false
+      description: A nested group of conditions. A group cannot hold another group.
+      required:
+        - match
+        - conditions
+      properties:
+        match:
+          type: string
+          enum: [all, any]
+          description: Whether a contact must match all of the group's conditions or any of them
+        conditions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SegmentCondition'
+
+    SegmentCondition:
+      type: object
+      additionalProperties: false
+      description: |
+        One rule. `field` names what it reads:
+
+        - `email`, `first_name`, `last_name`, `created_at` (when the contact
+          was created), or `attributes.<key>` for a contact field of the
+          account. The operators and values are those of the field's type:
+          text fields take `equal`, `not_equal`, `contains`, `not_contains`,
+          `begins_with`, `not_begins_with`, `ends_with`, `not_ends_with`,
+          `is_empty` and `is_not_empty`; number fields `equal`, `not_equal`,
+          `less`, `less_or_equal`, `greater` and `greater_or_equal`; date and
+          timestamp fields and `created_at` `equal`, `not_equal`, `before`,
+          `before_or_on`, `after` and `after_or_on`, with a date such as
+          `2024-06-15` or a relative time such as `today` or `30 days ago`,
+          and timestamp fields and `created_at` also a time such as
+          `2 hours from now`; boolean fields `is_true` and `is_false`. Custom
+          date, number, timestamp and boolean fields also take `is_null` and
+          `is_not_null`; `email`, `first_name`, `last_name`, `created_at` and
+          custom text fields do not. A negated operator also matches a
+          contact that has no value for the field.
+        - Custom date fields also take two rules that read only the month
+          and day, so the year does not matter: `month_is` with a month
+          from 1 (January) to 12 (December), and `anniversary_within` with
+          a number of days N from 0 to 365, which matches when the month
+          and day fall on today or one of the next N days in the segment's
+          time zone (`0` is today only). A 29 February date counts as
+          28 February in a year without one. Both take a whole number as
+          `value`. Both read a stored value that starts with a `YYYY-MM-DD`
+          date, as the API and imports store it; any other value never
+          matches. The members of an `anniversary_within` segment move to
+          the new day shortly after midnight in its time zone, usually
+          within about half an hour.
+        - `list` with `in` or `not_in` and a list ID. `in` means a
+          `confirmed` membership of that list.
+        - `campaign` with `received`, `not_received`, `opened`,
+          `not_opened`, `clicked` or `not_clicked` and a campaign ID.
+          `received` means the campaign was delivered to the contact.
+          `not_opened` and `not_clicked` match only contacts who received
+          the campaign.
+        - `any_campaign` with `received`, `opened`, `clicked`, `not_opened`
+          or `not_clicked` and a relative time such as `14 days ago`:
+          `received`, `opened` and `clicked` match at least one such event
+          since then; `not_opened` and `not_clicked` match a contact who
+          received a campaign since then and opened (clicked) none since
+          then.
+        - `campaign_count` with `received_at_least`, `received_fewer_than`,
+          `opened_at_least`, `opened_fewer_than`, `clicked_at_least` or
+          `clicked_fewer_than` and a `SegmentCampaignCount` object such as
+          `{"count": 3, "since": "90 days ago"}`: the number of campaigns
+          sent since then that the contact received, opened or clicked. A
+          campaign counts from the time it started sending, whenever the
+          contact received, opened or clicked it, and several opens or clicks
+          of one campaign count once. `received_fewer_than`,
+          `opened_fewer_than` and `clicked_fewer_than` match only a contact
+          who received at least one campaign sent since then.
+
+        Opens and clicks by bots do not count. A list, campaign or contact
+        field that a segment uses cannot be deleted until no segment uses it.
+      required:
+        - field
+        - op
+      properties:
+        field:
+          type: string
+          description: '`email`, `first_name`, `last_name`, `created_at`, `attributes.<key>`, `list`, `campaign`, `any_campaign` or `campaign_count`'
+        op:
+          type: string
+          enum:
+            - equal
+            - not_equal
+            - contains
+            - not_contains
+            - begins_with
+            - not_begins_with
+            - ends_with
+            - not_ends_with
+            - is_empty
+            - is_not_empty
+            - less
+            - less_or_equal
+            - greater
+            - greater_or_equal
+            - before
+            - before_or_on
+            - after
+            - after_or_on
+            - is_null
+            - is_not_null
+            - is_true
+            - is_false
+            - month_is
+            - anniversary_within
+            - in
+            - not_in
+            - received
+            - not_received
+            - opened
+            - not_opened
+            - clicked
+            - not_clicked
+            - received_at_least
+            - received_fewer_than
+            - opened_at_least
+            - opened_fewer_than
+            - clicked_at_least
+            - clicked_fewer_than
+          description: The operator, one that applies to `field`
+        value:
+          oneOf:
+            - type: [string, number, boolean, 'null']
+            - $ref: '#/components/schemas/SegmentCampaignCount'
+          description: The value the operator compares with. Left out, or null, for an operator that takes none, such as `is_empty`. A month for `month_is` and a number of days for `anniversary_within`, each a whole number. A `SegmentCampaignCount` object for `campaign_count`.
+
+    SegmentCampaignCount:
+      type: object
+      additionalProperties: false
+      description: The value of a `campaign_count` condition. A missing or unknown property is refused.
+      required:
+        - count
+        - since
+      properties:
+        count:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: The number of campaigns, a whole number from 1 to 1000, or from 2 for `received_fewer_than`.
+        since:
+          type: string
+          description: |
+            When the window starts: a relative time of the form `M days
+            ago`, `M weeks ago`, `M months ago` or `M years ago`, with M from
+            1 to 365 days, 52 weeks, 12 months or 1 year. It starts at the
+            beginning of its day in the segment's time zone.
+          example: 90 days ago
+
+    CreateSegmentRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        A new segment. A property that is not writable is rejected with 400
+        naming it.
+      required:
+        - name
+        - definition
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Trimmed before it is measured and stored; a name that is empty after trimming is rejected.
+        description:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Trimmed before it is stored. Null and omission both store an empty description.
+        definition:
+          $ref: '#/components/schemas/SegmentDefinition'
+        timezone:
+          type: [string, 'null']
+          description: The IANA time zone, such as `Europe/Berlin`, that relative times and days are read in. Null, omission and an empty string all store `UTC`.
+
+    UpdateSegmentRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        A partial segment update. An omitted or null property leaves the
+        stored value unchanged. A change of `definition` or `timezone` builds
+        the segment's members again, and it is `building` until that ends; a
+        change of only `name` or `description` leaves its members and its
+        state as they are. A property that is not writable is rejected with
+        400 naming it.
+      properties:
+        name:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 255
+          description: Trimmed and bounded exactly as on create.
+        description:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Trimmed and bounded exactly as on create.
+        definition:
+          oneOf:
+            - $ref: '#/components/schemas/SegmentDefinition'
+            - type: 'null'
+          description: The new rules, which replace the stored ones as a whole.
+        timezone:
+          type: [string, 'null']
+          description: The IANA time zone, as on create. Null and omission keep the stored zone; an empty string stores `UTC`.
+
+    PreviewSegmentRequest:
+      type: object
+      additionalProperties: false
+      description: A definition to try. Nothing is saved.
+      required:
+        - definition
+      properties:
+        definition:
+          $ref: '#/components/schemas/SegmentDefinition'
+        timezone:
+          type: [string, 'null']
+          description: The IANA time zone that relative times and days are read in. Null, omission and an empty string all read them in `UTC`.
+
+    SegmentPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - object
+        - count
+        - contacts
+      properties:
+        object:
+          type: string
+          enum: [segment_preview]
+          description: Object type identifier
+        count:
+          type: [integer, 'null']
+          minimum: 0
+          description: The contacts the definition matches now, whatever their consent. Null when they cannot be counted within 10 seconds.
+        contacts:
+          type: array
+          maxItems: 10
+          description: Up to 10 of the matching contacts, in no particular order. They are returned also when `count` is null, and are empty when they cannot be read within 10 seconds.
+          items:
+            $ref: '#/components/schemas/SegmentPreviewContact'
+
+    SegmentPreviewContact:
+      type: object
+      additionalProperties: false
+      required:
+        - contact_id
+        - email
+      properties:
+        contact_id:
+          type: string
+          format: uuid
+          description: The contact
+        email:
+          type: string
+          format: email
+          description: The contact's normalized email address
+
+    SegmentContact:
+      type: object
+      additionalProperties: false
+      description: One member of a segment.
+      required:
+        - object
+        - segment_id
+        - contact_id
+        - email
+        - entered_at
+      properties:
+        object:
+          type: string
+          enum: [segment_contact]
+          description: Object type identifier
+        segment_id:
+          type: string
+          format: uuid
+          description: The segment
+        contact_id:
+          type: string
+          format: uuid
+          description: The contact
+        email:
+          type: string
+          format: email
+          description: The contact's normalized email address
+        entered_at:
+          type: string
+          format: date-time
+          description: When the contact became a member
+
+    PaginatedSegmentsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+        pagination:
+          $ref: '#/components/schemas/ContactPagination'
+
+    PaginatedSegmentContactsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - object
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SegmentContact'
         pagination:
           $ref: '#/components/schemas/ContactPagination'
 
@@ -9082,8 +9734,8 @@ paths:
       summary: List Campaigns
       description: |
         Returns a cursor-paginated list of the account's marketing campaigns,
-        newest first. Each campaign is listed without its lists, content and
-        issues; Get Campaign returns them.
+        newest first. Each campaign is listed without its audience, content
+        and issues; Get Campaign returns them.
       operationId: listCampaigns
       tags:
         - Campaigns
@@ -9253,7 +9905,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Campaign'
         '400':
-          description: 'Invalid request: the body or a field, a list or campaign template that does not exist. The message names the field and the problem.'
+          description: 'Invalid request: the body or a field, a list, segment or campaign template that does not exist, too many lists or segments, or an audience with no list or segment to send to. The message names the field and the problem.'
           content:
             application/json:
               schema:
@@ -9271,7 +9923,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          $ref: '#/components/responses/CampaignCreateConflict'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
@@ -9514,7 +10166,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Campaign'
         '400':
-          description: Invalid campaign_id, an invalid body or field, a list that does not exist, or a request with no changes. The message names the field and the problem.
+          description: Invalid campaign_id, an invalid body or field, a list or segment that does not exist, too many lists or segments, an audience with no list or segment to send to, or a request with no changes. The message names the field and the problem.
           content:
             application/json:
               schema:
@@ -9608,9 +10260,9 @@ paths:
     delete:
       summary: Delete Campaign
       description: |
-        Deletes a draft campaign with its design and its list choices. A
-        campaign that is not a draft cannot be deleted, and a second delete
-        answers 404.
+        Deletes a draft campaign with its design and its audience choices. A
+        campaign that is not a draft cannot be deleted, nor one that a segment
+        refers to in a `campaign` condition, and a second delete answers 404.
       operationId: deleteCampaign
       tags:
         - Campaigns
@@ -9663,7 +10315,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: The campaign is not a draft
+          description: |
+            The campaign is not a draft, or live segments refer to it. The
+            second refusal names them: `Used by segments: A, B. Change those
+            segments first.`
           content:
             application/json:
               schema:
@@ -9728,8 +10383,10 @@ paths:
       description: |
         Makes a new draft from a campaign in any status: a copy of its
         design, its subject, preview text, sender and reply-to address, and
-        its lists that still exist, in the same order. The copy's design is
-        its own.
+        its lists and segments that still exist, included and excluded, the
+        included lists in the same order. When none of its included lists
+        and segments still exists, the copy has no lists or segments. The
+        copy's design is its own.
       operationId: duplicateCampaign
       tags:
         - Campaigns
@@ -9792,7 +10449,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          $ref: '#/components/responses/IdempotencyConflict'
+          $ref: '#/components/responses/CampaignCreateConflict'
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
@@ -10554,7 +11211,14 @@ paths:
                 if recipient.BounceReason != nil {
                   reason = *recipient.BounceReason
                 }
-                fmt.Printf("%s (%s) %s\n", recipient.Email, recipient.ListName, reason)
+                // A recipient comes from a list or from a segment.
+                source := ""
+                if recipient.ListName != nil {
+                  source = *recipient.ListName
+                } else if recipient.SegmentName != nil {
+                  source = *recipient.SegmentName
+                }
+                fmt.Printf("%s (%s) %s\n", recipient.Email, source, reason)
               }
             }
 
@@ -14180,10 +14844,13 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: |
-            A campaign that still needs this list references it. Campaigns
-            in `draft`, `validating`, `scheduled`, `sending`,
-            `paused`, or `waiting_for_review` block the delete, while `sent`,
-            `failed`, and `canceled` campaigns do not. This conflict carries no
+            A campaign that still needs this list references it, as an
+            included or an excluded list. Campaigns in `draft`, `validating`,
+            `scheduled`, `sending`, `paused`, or `waiting_for_review` block
+            the delete, while `sent`, `failed`, and `canceled` campaigns do
+            not. Live segments that refer to the list in a `list` condition
+            block it too, with a message that names them: `Used by segments:
+            A, B. Change those segments first.` This conflict carries no
             idempotency headers.
           content:
             application/json:
@@ -15038,6 +15705,995 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # Segments endpoints
+  /v2/accounts/{account_id}/segments:
+    get:
+      summary: List Segments
+      description: |
+        Returns the account's segments in newest-first `(created_at, id)`
+        order. `after` and `before` are mutually exclusive.
+      operationId: getSegments
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of segments to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["segments:read"]
+      responses:
+        '200':
+          description: Paginated segments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSegmentsResponse'
+        '400':
+          description: Invalid limit or cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              response, _, err := client.SegmentsAPI.GetSegments(ctx, accountID, requests.GetSegmentsParams{
+                Limit: ahasend.Int32(50),
+              })
+              if err != nil {
+                log.Fatalf("Error listing segments: %v", err)
+              }
+              for _, segment := range response.Data {
+                fmt.Printf("%s %s (%d members)\n", segment.Name, segment.State, segment.MemberCount)
+              }
+            }
+
+    post:
+      summary: Create Segment
+      description: |
+        Creates a segment and starts finding its members. A new segment is
+        `building` until they are found; a large account can take some
+        minutes. An account has at most 100 segments.
+
+        With an `Idempotency-Key`, a 2xx answer is stored for 24 hours and an
+        identical request replays the same status and semantically equivalent
+        JSON body with `Idempotent-Replayed: true`, so a retry creates no
+        second segment. Unlike most operations, a 4xx answer is not stored:
+        it releases the key, so a retry with the same key runs again.
+        Reusing a stored or in-progress key with a different method, resolved
+        path, or semantic JSON payload returns 422.
+      operationId: createSegment
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - BearerAuth: ["segments:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSegmentRequest'
+      responses:
+        '201':
+          description: Segment created
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        '400':
+          description: |
+            Invalid request body, a property that is not writable, an unknown
+            time zone, or a definition that is refused. The message names
+            every problem of the definition by its path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: 'conditions[0].field: the account has no contact field "city"; conditions[1].value: must be a list id'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/SegmentCreateConflict'
+        '422':
+          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              listID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+              campaignID := uuid.MustParse("22222222-2222-4222-8222-222222222222")
+
+              // Contacts in Germany, confirmed on the list, who opened the campaign or
+              // opened at least 3 campaigns in the last 90 days. A group holds
+              // conditions only.
+              definition := common.SegmentDefinition{
+                SchemaVersion: common.SegmentSchemaVersion,
+                Match:         common.SegmentMatchAll,
+                Conditions: []common.SegmentRule{
+                  {Condition: &common.SegmentCondition{
+                    Field: "attributes.country",
+                    Op:    common.SegmentOpEqual,
+                    Value: &common.SegmentValue{String: ahasend.String("DE")},
+                  }},
+                  {Condition: &common.SegmentCondition{
+                    Field: common.SegmentFieldList,
+                    Op:    common.SegmentOpIn,
+                    Value: &common.SegmentValue{String: ahasend.String(listID.String())},
+                  }},
+                  {Group: &common.SegmentGroup{
+                    Match: common.SegmentMatchAny,
+                    Conditions: []common.SegmentCondition{
+                      {
+                        Field: common.SegmentFieldCampaign,
+                        Op:    common.SegmentOpOpened,
+                        Value: &common.SegmentValue{String: ahasend.String(campaignID.String())},
+                      },
+                      {
+                        Field: common.SegmentFieldCampaignCount,
+                        Op:    common.SegmentOpOpenedAtLeast,
+                        Value: &common.SegmentValue{Count: &common.SegmentCampaignCount{Count: 3, Since: "90 days ago"}},
+                      },
+                    },
+                  }},
+                },
+              }
+
+              // The SDK sends a fresh Idempotency-Key with this POST and reuses it on
+              // its own retries, so a retried request creates no second segment.
+              response, _, err := client.SegmentsAPI.CreateSegment(ctx, accountID, requests.CreateSegmentRequest{
+                Name:       "Engaged German customers",
+                Definition: definition,
+                Timezone:   ahasend.String("Europe/Berlin"),
+              })
+              if err != nil {
+                log.Fatalf("Error creating segment: %v", err)
+              }
+              // A new segment is building until its members are found.
+              fmt.Printf("Created segment %s (%s)\n", response.ID, response.State)
+            }
+
+  /v2/accounts/{account_id}/segments/preview:
+    post:
+      summary: Preview Segment
+      description: |
+        Returns how many contacts a definition matches now, and up to 10 of
+        them, without saving anything. The count stops after 10 seconds and
+        is null then; the contacts are a separate read, returned either way.
+        `contacts` is empty when they cannot be read within 10 seconds. A
+        preview changes nothing, and it reads contacts by any rule, so it
+        needs `segments:read` and `contacts:read`.
+      operationId: previewSegment
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["segments:read", "contacts:read"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewSegmentRequest'
+      responses:
+        '200':
+          description: What the definition matches now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentPreview'
+        '400':
+          description: |
+            Invalid request body, an unknown time zone, or a definition that
+            is refused. The message names every problem of the definition by
+            its path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: 'conditions[0].field: the account has no contact field "city"; conditions[1].value: must be a list id'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:read` or `contacts:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/common"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // Nothing is saved. Count is nil when the contacts cannot be counted
+              // within 10 seconds.
+              response, _, err := client.SegmentsAPI.PreviewSegment(ctx, accountID, requests.PreviewSegmentRequest{
+                Definition: common.SegmentDefinition{
+                  SchemaVersion: common.SegmentSchemaVersion,
+                  Match:         common.SegmentMatchAll,
+                  Conditions: []common.SegmentRule{
+                    {Condition: &common.SegmentCondition{
+                      Field: common.SegmentFieldCreatedAt,
+                      Op:    common.SegmentOpAfter,
+                      Value: &common.SegmentValue{String: ahasend.String("30 days ago")},
+                    }},
+                  },
+                },
+              })
+              if err != nil {
+                log.Fatalf("Error previewing segment: %v", err)
+              }
+              if response.Count != nil {
+                fmt.Printf("%d contacts match\n", *response.Count)
+              }
+              for _, contact := range response.Contacts {
+                fmt.Println(contact.Email)
+              }
+            }
+
+  /v2/accounts/{account_id}/segments/{segment_id}:
+    get:
+      summary: Get Segment
+      description: |
+        Returns one segment, with `marketable_count`: the members a campaign
+        to it alone would reach. The count is null while the segment is not
+        `ready`, and it stops after 10 seconds and is null then.
+      operationId: getSegment
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: segment_id
+          in: path
+          required: true
+          description: Segment ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["segments:read"]
+      responses:
+        '200':
+          description: The segment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SegmentDetail'
+        '400':
+          description: Malformed `segment_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              segmentID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.SegmentsAPI.GetSegment(ctx, accountID, segmentID)
+              if err != nil {
+                log.Fatalf("Error getting segment: %v", err)
+              }
+              // MarketableCount is nil while the segment is not ready.
+              if response.MarketableCount != nil {
+                fmt.Printf("%s: %d members, %d a campaign would reach\n", response.Name, response.MemberCount, *response.MarketableCount)
+              } else {
+                fmt.Printf("%s: %d members (%s)\n", response.Name, response.MemberCount, response.State)
+              }
+            }
+
+    put:
+      summary: Update Segment
+      description: |
+        Changes the fields the body names and leaves the others as they are,
+        as Update List does. A changed `definition` or `timezone` builds the
+        segment's members again; the segment is `building` until that ends.
+        Any update of a failed segment, `{}` included, builds it again the
+        same way.
+      operationId: updateSegment
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: segment_id
+          in: path
+          required: true
+          description: Segment ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["segments:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSegmentRequest'
+      responses:
+        '200':
+          description: Segment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        '400':
+          description: |
+            Malformed `segment_id`, invalid request body, a property that is
+            not writable, an unknown time zone, or a definition that is
+            refused. The message names every problem of the definition by its
+            path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: 'conditions[0].field: the account has no contact field "city"; conditions[1].value: must be a list id'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:write` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            The segment is being changed, such as by a member update that
+            holds it: `The segment is being updated. Try again in a minute.`
+            Nothing was changed; retry the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              segmentID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              // Only the fields you set change. A new name or description keeps the
+              // members; a new definition or time zone builds them again.
+              response, _, err := client.SegmentsAPI.UpdateSegment(ctx, accountID, segmentID, requests.UpdateSegmentRequest{
+                Name:        ahasend.String("Engaged customers"),
+                Description: ahasend.String("Opened a campaign recently"),
+              })
+              if err != nil {
+                log.Fatalf("Error updating segment: %v", err)
+              }
+              fmt.Printf("Updated segment %s (%s)\n", response.Name, response.State)
+            }
+
+    delete:
+      summary: Delete Segment
+      description: |
+        Deletes one segment; its members are removed shortly after. A
+        segment that a campaign still needs, as an included or an excluded
+        segment, cannot be deleted: campaigns in `draft`, `validating`,
+        `scheduled`, `sending`, `paused`, or `waiting_for_review` block the
+        delete. Deleting a segment that is already gone returns 404.
+      operationId: deleteSegment
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: segment_id
+          in: path
+          required: true
+          description: Segment ID
+          schema:
+            type: string
+            format: uuid
+      security:
+        - BearerAuth: ["segments:delete"]
+      responses:
+        '200':
+          description: Segment deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Malformed `segment_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:delete` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            A campaign still needs the segment (`This segment cannot be
+            deleted while a campaign is still using it.`), or the segment is
+            being changed (`The segment is being updated. Try again in a
+            minute.`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              segmentID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.SegmentsAPI.DeleteSegment(ctx, accountID, segmentID)
+              if err != nil {
+                log.Fatalf("Error deleting segment: %v", err)
+              }
+              fmt.Println(response.Message)
+            }
+
+  /v2/accounts/{account_id}/segments/{segment_id}/contacts:
+    get:
+      summary: List Segment Contacts
+      description: |
+        Returns the segment's members by contact ID, from the lowest. A
+        member matches the rules whatever its consent. While the segment is
+        `building`, its members may still follow its previous rules. It
+        returns contacts, so it needs `contacts:read` as well as
+        `segments:read`. `after` and `before` are mutually exclusive.
+      operationId: getSegmentContacts
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: segment_id
+          in: path
+          required: true
+          description: Segment ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Maximum number of members to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["segments:read", "contacts:read"]
+      responses:
+        '200':
+          description: Paginated segment members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSegmentContactsResponse'
+        '400':
+          description: Malformed `segment_id`, or an invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:read` or `contacts:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Segment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              segmentID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+
+              response, _, err := client.SegmentsAPI.GetSegmentContacts(ctx, accountID, segmentID, requests.GetSegmentContactsParams{})
+              if err != nil {
+                log.Fatalf("Error listing segment contacts: %v", err)
+              }
+              for _, member := range response.Data {
+                fmt.Printf("%s since %s\n", member.Email, member.EnteredAt)
+              }
+            }
+
+  /v2/accounts/{account_id}/contacts/{id_or_email}/segments:
+    get:
+      summary: List a Contact's Segments
+      description: |
+        Returns the segments one contact is a member of, in the order of List
+        Segments. A segment that is `building` may still list the contact by
+        its previous rules. It reads a contact, so it needs `contacts:read` as
+        well as `segments:read`. `after` and `before` are mutually exclusive.
+
+        UUID-shaped path values resolve by ID; all other values resolve by
+        trimmed, lowercased email. Email identifiers must be percent-encoded
+        exactly once as URL path segments; pass a raw email to SDKs, including
+        addresses such as `user+tag@example.com`.
+      operationId: getContactSegments
+      tags:
+        - Segments
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: id_or_email
+          in: path
+          required: true
+          description: |
+            Contact UUID or email address. Percent-encode an email exactly once
+            as a path segment; SDK callers pass the raw email value.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of segments to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: after
+          in: query
+          description: Cursor for the next page; cannot be combined with `before`
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Cursor for the previous page; cannot be combined with `after`
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["segments:read", "contacts:read"]
+      responses:
+        '200':
+          description: Paginated segments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSegmentsResponse'
+        '400':
+          description: Invalid limit, cursor or contact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `segments:read` or `contacts:read` scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Contact not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              // Pass the raw email; the SDK encodes it once in the path.
+              response, _, err := client.SegmentsAPI.GetContactSegments(ctx, accountID, "User+Tag@Example.COM", requests.GetContactSegmentsParams{})
+              if err != nil {
+                log.Fatalf("Error getting the contact's segments: %v", err)
+              }
+              for _, segment := range response.Data {
+                fmt.Println(segment.Name)
+              }
+            }
 
   # Suppressions endpoints
   /v2/accounts/{account_id}/suppressions:
@@ -17672,6 +19328,8 @@ tags:
     description: Create, change, read, duplicate, delete, test and send the account's marketing campaigns, and read their stats and recipients
   - name: Lists
     description: Manage contact lists and the contacts on them
+  - name: Segments
+    description: Manage segments, the saved rules that keep a set of contacts up to date, and read their members
   - name: Suppressions
     description: Manage email suppressions
   - name: Routes

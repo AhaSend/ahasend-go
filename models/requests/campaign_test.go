@@ -20,6 +20,8 @@ func TestCampaignRequestsEncodeOnlyNamedFields(t *testing.T) {
 	editor := common.TemplateEditorAdvanced
 	listID := uuid.MustParse("66666666-6666-4666-8666-666666666666")
 	templateID := uuid.MustParse("44444444-4444-4444-8444-444444444444")
+	segmentID := uuid.MustParse("99999999-9999-4999-8999-999999999999")
+	otherSegmentID := uuid.MustParse("88888888-8888-4888-8888-888888888888")
 	sendAt := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -93,6 +95,41 @@ func TestCampaignRequestsEncodeOnlyNamedFields(t *testing.T) {
 			name:    "campaign update sending an empty list of lists",
 			request: UpdateCampaignRequest{ListIDs: []uuid.UUID{}},
 			want:    `{"list_ids":[]}`,
+		},
+		{
+			name:    "campaign create with segments and exclusions",
+			request: CreateCampaignRequest{Name: name, SegmentIDs: []uuid.UUID{segmentID}, ExcludeListIDs: []uuid.UUID{listID}, ExcludeSegmentIDs: []uuid.UUID{otherSegmentID}},
+			want:    `{"name":"October newsletter","segment_ids":["99999999-9999-4999-8999-999999999999"],"exclude_list_ids":["66666666-6666-4666-8666-666666666666"],"exclude_segment_ids":["88888888-8888-4888-8888-888888888888"]}`,
+		},
+		{
+			name:    "campaign create leaving out empty audience fields",
+			request: CreateCampaignRequest{Name: name, ListIDs: []uuid.UUID{}, SegmentIDs: []uuid.UUID{segmentID}, ExcludeListIDs: []uuid.UUID{}, ExcludeSegmentIDs: []uuid.UUID{}},
+			want:    `{"name":"October newsletter","segment_ids":["99999999-9999-4999-8999-999999999999"]}`,
+		},
+		{
+			name:    "campaign update setting segments and exclusions",
+			request: UpdateCampaignRequest{SegmentIDs: []uuid.UUID{segmentID}, ExcludeListIDs: []uuid.UUID{listID}, ExcludeSegmentIDs: []uuid.UUID{otherSegmentID}},
+			want:    `{"segment_ids":["99999999-9999-4999-8999-999999999999"],"exclude_list_ids":["66666666-6666-4666-8666-666666666666"],"exclude_segment_ids":["88888888-8888-4888-8888-888888888888"]}`,
+		},
+		{
+			name:    "campaign update sending an empty list of segments",
+			request: UpdateCampaignRequest{SegmentIDs: []uuid.UUID{}},
+			want:    `{"segment_ids":[]}`,
+		},
+		{
+			name:    "campaign update sending an empty list of excluded lists",
+			request: UpdateCampaignRequest{ExcludeListIDs: []uuid.UUID{}},
+			want:    `{"exclude_list_ids":[]}`,
+		},
+		{
+			name:    "campaign update sending an empty list of excluded segments",
+			request: UpdateCampaignRequest{ExcludeSegmentIDs: []uuid.UUID{}},
+			want:    `{"exclude_segment_ids":[]}`,
+		},
+		{
+			name:    "campaign update sending every audience field empty",
+			request: UpdateCampaignRequest{ListIDs: []uuid.UUID{}, SegmentIDs: []uuid.UUID{}, ExcludeListIDs: []uuid.UUID{}, ExcludeSegmentIDs: []uuid.UUID{}},
+			want:    `{"list_ids":[],"segment_ids":[],"exclude_list_ids":[],"exclude_segment_ids":[]}`,
 		},
 		{
 			name:    "duplicate with the default name",

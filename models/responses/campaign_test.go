@@ -62,6 +62,9 @@ const campaignFixture = `{
 	"send_resumes_at":null,
 	"finished_at":null,
 	"list_ids":["66666666-6666-4666-8666-666666666666"],
+	"segment_ids":["99999999-9999-4999-8999-999999999999"],
+	"exclude_list_ids":["77777777-7777-4777-8777-777777777777"],
+	"exclude_segment_ids":[],
 	"editor":"html",
 	"content":{"html":"<p>News</p>","text":"News","text_is_custom":true},
 	"ready":true,
@@ -89,6 +92,10 @@ func TestCampaignDecodesAPIFixture(t *testing.T) {
 	assert.Nil(t, campaign.StatusReason)
 	assert.Nil(t, campaign.SendAt)
 	assert.Equal(t, []uuid.UUID{uuid.MustParse("66666666-6666-4666-8666-666666666666")}, campaign.ListIDs)
+	assert.Equal(t, []uuid.UUID{uuid.MustParse("99999999-9999-4999-8999-999999999999")}, campaign.SegmentIDs)
+	assert.Equal(t, []uuid.UUID{uuid.MustParse("77777777-7777-4777-8777-777777777777")}, campaign.ExcludeListIDs)
+	require.NotNil(t, campaign.ExcludeSegmentIDs)
+	assert.Empty(t, campaign.ExcludeSegmentIDs)
 	require.NotNil(t, campaign.Editor)
 	assert.Equal(t, common.TemplateEditorHTML, *campaign.Editor)
 	require.NotNil(t, campaign.Content)
@@ -125,6 +132,9 @@ func TestCampaignDecodesASentCampaign(t *testing.T) {
 		"send_resumes_at":"2026-10-03T00:00:00Z",
 		"finished_at":"2026-10-02T09:30:00Z",
 		"list_ids":[],
+		"segment_ids":[],
+		"exclude_list_ids":[],
+		"exclude_segment_ids":[],
 		"editor":null,
 		"content":null,
 		"ready":null,
@@ -281,4 +291,21 @@ func TestPaginatedCampaignRecipientsResponseDecodesPage(t *testing.T) {
 	assert.True(t, page.Pagination.HasMore)
 	require.NotNil(t, page.Pagination.NextCursor)
 	assert.Nil(t, page.Pagination.PreviousCursor)
+}
+
+func TestCampaignRecipientDecodesASegmentSource(t *testing.T) {
+	payload := []byte(`{"object":"campaign_recipient","contact_id":"77777777-7777-4777-8777-777777777777","email":"ann@example.com","list_name":null,"segment_id":"99999999-9999-4999-8999-999999999999","segment_name":"Engaged customers","status":"Delivered","bounce_classification":null,"bounce_reason":null,"bounce_message":null,"attempts":1,"created_at":"2026-10-02T09:00:00Z","updated_at":"2026-10-02T09:01:00Z"}`)
+
+	var recipient CampaignRecipient
+	require.NoError(t, json.Unmarshal(payload, &recipient))
+
+	assert.Nil(t, recipient.ListName)
+	require.NotNil(t, recipient.SegmentID)
+	assert.Equal(t, uuid.MustParse("99999999-9999-4999-8999-999999999999"), *recipient.SegmentID)
+	require.NotNil(t, recipient.SegmentName)
+	assert.Equal(t, "Engaged customers", *recipient.SegmentName)
+
+	encoded, err := json.Marshal(recipient)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(payload), string(encoded))
 }

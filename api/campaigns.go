@@ -22,8 +22,8 @@ ListCampaigns List Campaigns
 
 # Returns the account's marketing campaigns in newest-first order
 
-Each campaign is listed without its lists, content and issues; GetCampaign
-returns them.
+Each campaign is listed without its audience, content and issues;
+GetCampaign returns them.
 
 Query Parameters:
 - `status`: Only campaigns in this status
@@ -77,7 +77,7 @@ func (a *CampaignsAPIService) ListCampaigns(
 /*
 GetCampaign Get Campaign
 
-# Returns one of the account's campaigns with its lists, its content and, for a draft, its issues
+# Returns one of the account's campaigns with its audience, its content and, for a draft, its issues
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -113,7 +113,14 @@ CreateCampaign Create Campaign
 Every field but Name can be set later with UpdateCampaign; the campaign
 returns its issues until it is ready to send. The design comes from Content,
 from an Editor alone, or from a campaign template named by TemplateID, which
-the campaign copies.
+the campaign copies. The audience is ListIDs, SegmentIDs and the exclusions;
+it needs at least one list or segment to send to once it is set.
+
+Returns 400 for a list, segment or campaign template that does not exist, too
+many lists or segments, or an audience with no list or segment to send to.
+Returns 409 while a segment of the audience is being rebuilt. The API stores
+that refusal for the idempotency key and replays it for 24 hours, so retry it
+with a new key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -147,8 +154,12 @@ UpdateCampaign Update Campaign
 
 # Changes a draft campaign
 
-A campaign that is not a draft cannot be changed, and returns 409. The change
-waits for any other change of the same campaign, from the dashboard or the
+A campaign that is not a draft cannot be changed, and returns 409. An update
+that changes the audience also returns 409 while a segment it names is being
+rebuilt; the API stores that refusal for the idempotency key, so retry it with
+a new key. Returns 400 for a list or segment that does not exist, too many
+lists or segments, or an audience with no list or segment to send to. The
+change waits for any other change of the same campaign, from the dashboard or the
 API. Between this request and a dashboard editor open on the same campaign,
 the later design save wins.
 
@@ -185,10 +196,11 @@ func (a *CampaignsAPIService) UpdateCampaign(
 /*
 DeleteCampaign Delete Campaign
 
-# Deletes a draft campaign with its design and its list choices
+# Deletes a draft campaign with its design and its audience choices
 
-A campaign that is not a draft cannot be deleted, and returns 409. A second
-delete returns 404.
+A campaign that is not a draft cannot be deleted, nor one that a segment
+refers to in a campaign condition; both return 409, and the second names the
+segments. A second delete returns 404.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -222,7 +234,13 @@ DuplicateCampaign Duplicate Campaign
 # Makes a new draft from a campaign in any status
 
 The copy gets the campaign's design, its subject, preview text and sender, and
-its lists that still exist, in the same order. The copy's design is its own.
+its lists and segments that still exist, included and excluded, the included
+lists in the same order. When none of its included lists and segments still
+exists, the copy has no lists or segments. The copy's design is its own.
+
+Returns 409 while a segment of the audience is being rebuilt. The API stores
+that refusal for the idempotency key and replays it for 24 hours, so retry it
+with a new key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
