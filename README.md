@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/AhaSend/ahasend-go.svg)](https://pkg.go.dev/github.com/AhaSend/ahasend-go)
 [![License: MIT](https://img.shields.io/github/license/ahasend/ahasend-go)](https://opensource.org/licenses/MIT)
 
-The Go SDK for the [AhaSend](https://ahasend.com) API. Use it to send email and to manage templates, contacts, lists, domains, webhooks, routes, suppressions and sub accounts.
+The Go SDK for the [AhaSend](https://ahasend.com) API. Use it to send email and to manage templates, contacts, lists, segments, campaigns, domains, webhooks, routes, suppressions and sub accounts.
 
 It also:
 
@@ -200,16 +200,19 @@ template, _, err := client.CampaignTemplatesAPI.CreateCampaignTemplate(ctx, acco
 
 ## Campaigns
 
-A campaign sends a design to one or more lists. `CreateCampaign` makes a draft. Every field but `Name` can be set later, and the draft's `Issues` tell what is missing before it can be sent:
+A campaign sends a design to an audience: the lists in `ListIDs` and the segments in `SegmentIDs`, less the contacts of the lists in `ExcludeListIDs` and the members of the segments in `ExcludeSegmentIDs`. `CreateCampaign` makes a draft. Every field but `Name` can be set later, and the draft's `Issues` tell what is missing before it can be sent:
 
 ```go
 campaign, _, err := client.CampaignsAPI.CreateCampaign(ctx, accountID, requests.CreateCampaignRequest{
-    Name:       "October newsletter",
-    Subject:    ahasend.String("Our news for October"),
-    Preheader:  ahasend.String("Three things we shipped this month"),
-    From:       &common.SenderAddress{Email: "news@yourdomain.com"},
-    ListIDs:    []uuid.UUID{listID},
-    TemplateID: &campaignTemplateID,
+    Name:              "October newsletter",
+    Subject:           ahasend.String("Our news for October"),
+    Preheader:         ahasend.String("Three things we shipped this month"),
+    From:              &common.SenderAddress{Email: "news@yourdomain.com"},
+    ListIDs:           []uuid.UUID{listID},
+    SegmentIDs:        []uuid.UUID{segmentID},
+    ExcludeListIDs:    []uuid.UUID{excludedListID},
+    ExcludeSegmentIDs: []uuid.UUID{excludedSegmentID},
+    TemplateID:        &campaignTemplateID,
 })
 if err != nil {
     log.Fatal(err)
@@ -227,16 +230,94 @@ if notReady, ok := api.AsCampaignNotReady(err); ok {
 ```
 
 - The design comes from `Content`, from `Editor` alone (an empty design), or from a campaign template named by `TemplateID`. The copy is the campaign's own.
+- An audience that is set needs at least one list or segment to send to, so `ListIDs` can be empty when `SegmentIDs` is set. A contact reached through a list and a segment gets one message. An exclusion wins: a contact with any membership of an excluded list, whatever its status, gets no message, and neither does a member of an excluded segment. A list or segment cannot be both included and excluded. See [Segments](#segments) for how segments behave.
 - Only a draft (`common.CampaignStatusDraft`) can be changed or deleted. `UpdateCampaign` changes only the fields you set. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject`, `Preheader` and `ReplyTo`, and `&common.SenderAddress{}` for `From`. The SDK sends each of them as `null`.
 - A field that the API sends as `null` is nil: a campaign's `Subject`, `Preheader`, `From` and `ReplyTo` until they are set, and `Ready` and `Issues` unless the campaign is a draft. A draft that is ready has an empty `Issues`.
 - `SendCampaign` sends now, or at `SendAt`. The campaign goes to `validating` and then through list validation and review, as a send from the dashboard does; read its `Status` and `StatusReason` with `GetCampaign`. The response's `Warnings` tell what the send accepted but you should know. To change the send time, call `UnscheduleCampaign` and send again.
 - `SendCampaign` refuses a campaign with any issue with 400, and `TestCampaign` refuses a campaign with any issue but `unsubscribe_link_missing`. `api.AsCampaignNotReady(err)` returns the issues; every other refusal has only a message. The issue `text_unchecked` means the API could not check the text right now and clears by itself; the SDK does not retry a 400, so call again in a moment.
-- A 409 means the campaign's status does not allow the request, or an earlier request with the same idempotency key is still running. The second case has the type `ErrorTypeIdempotencyConflict` and a `RetryAfter`; retry with the same key after it. A new call makes a new key, so to retry by hand, pass the key yourself with `api.WithIdempotencyKey` on both calls.
+- A 409 means the campaign's status does not allow the request, a segment of the audience is being rebuilt, a segment refers to the draft you delete, or an earlier request with the same idempotency key is still running. The last case has the type `ErrorTypeIdempotencyConflict` and a `RetryAfter`; retry with the same key after it. A new call makes a new key, so to retry by hand, pass the key yourself with `api.WithIdempotencyKey` on both calls. `CreateCampaign`, `DuplicateCampaign` and an `UpdateCampaign` that changes the audience get the audience refusal while a segment of the audience is being rebuilt. The API stores that refusal for the key and replays it for 24 hours, so a retry needs a new key: call again in a minute without `api.WithIdempotencyKey`, or with a new key.
 - `TestCampaign` sends a test to up to 5 addresses, with placeholders for the contact's fields. An account can send 50 test emails per day (UTC). Past that, the API answers 429; its message currently reads `daily test send limit reached`. The limit clears only when the UTC day changes, and the SDK retries the 429 as it retries any 429. A test is checked before it is sent as a message send is: a test the check refuses gets 400 with a message and nothing is sent, and a 503 when the check cannot run is retried with the same key. When `ResultUnknown` is true, the test may have gone out: check the inboxes before you send another.
 - `DuplicateCampaign` makes a new draft from a campaign in any status.
 - `GetCampaignStats` returns live counters and a stored report that is counted again from time to time. `Report` is nil until the first count, and each rate is nil while it has no base. `ListCampaignRecipients` lists the recipients in one `Status` or one `BounceClassification`, each a key of the report's `ByStatus` or `ByBounceClassification`.
 - The SDK sends an `Idempotency-Key` with `CreateCampaign`, `UpdateCampaign`, `DuplicateCampaign`, `SendCampaign`, `UnscheduleCampaign` and `TestCampaign`, so a retried request is not applied twice.
 - Scopes: `campaigns:read` to read campaigns, their stats and their recipients, `campaigns:write` to create, update and duplicate them, `campaigns:delete` to delete drafts, and `campaigns:send` to send, unschedule and test them.
+
+## Segments
+
+A segment is a saved set of rules over the account's contacts: their fields, their list memberships, and the campaigns they received, opened or clicked. AhaSend keeps its members up to date as that data changes. A definition holds conditions and groups of conditions. A condition on `attributes.<key>` needs a contact field with that key. `PreviewSegment` tries a definition without saving it, and `CreateSegment` saves it:
+
+```go
+definition := common.SegmentDefinition{
+    SchemaVersion: common.SegmentSchemaVersion,
+    Match:         common.SegmentMatchAll,
+    Conditions: []common.SegmentRule{
+        {Condition: &common.SegmentCondition{
+            Field: common.SegmentFieldList,
+            Op:    common.SegmentOpIn,
+            Value: &common.SegmentValue{String: ahasend.String(listID.String())},
+        }},
+        {Group: &common.SegmentGroup{
+            Match: common.SegmentMatchAny,
+            Conditions: []common.SegmentCondition{
+                {
+                    Field: "attributes.country",
+                    Op:    common.SegmentOpEqual,
+                    Value: &common.SegmentValue{String: ahasend.String("DE")},
+                },
+                {
+                    Field: common.SegmentFieldCampaignCount,
+                    Op:    common.SegmentOpOpenedAtLeast,
+                    Value: &common.SegmentValue{Count: &common.SegmentCampaignCount{Count: 3, Since: "90 days ago"}},
+                },
+            },
+        }},
+    },
+}
+
+preview, _, err := client.SegmentsAPI.PreviewSegment(ctx, accountID, requests.PreviewSegmentRequest{
+    Definition: definition,
+    Timezone:   ahasend.String("Europe/Berlin"),
+})
+if err != nil {
+    log.Fatal(err)
+}
+if preview.Count != nil {
+    log.Printf("%d contacts match", *preview.Count)
+}
+
+segment, _, err := client.SegmentsAPI.CreateSegment(ctx, accountID, requests.CreateSegmentRequest{
+    Name:       "Engaged customers",
+    Definition: definition,
+    Timezone:   ahasend.String("Europe/Berlin"),
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Later, when the segment is ready:
+detail, _, err := client.SegmentsAPI.GetSegment(ctx, accountID, segment.ID)
+if err != nil {
+    log.Fatal(err)
+}
+if detail.MarketableCount != nil {
+    log.Printf("A campaign to %s reaches %d contacts", detail.Name, *detail.MarketableCount)
+}
+
+members, _, err := client.SegmentsAPI.GetSegmentContacts(ctx, accountID, segment.ID, requests.GetSegmentContactsParams{})
+if err != nil {
+    log.Fatal(err)
+}
+for _, member := range members.Data {
+    log.Println(member.Email)
+}
+```
+
+- A segment's `State` is `common.SegmentStateBuilding` while its members are found: after `CreateSegment`, and after an `UpdateSegment` that changes `Definition` or `Timezone`. A large account can take some minutes. A campaign that uses a segment cannot be sent until the segment is ready. While a segment is building, `GetSegmentContacts` may still return the members of its previous rules. A segment in `common.SegmentStateFailed` has a `FailureReason`; any `UpdateSegment`, an empty one included, builds it again.
+- `MemberCount` and `GetSegmentContacts` include every contact that matches the rules, whatever its consent. `MarketableCount` counts the members a campaign to the segment alone would reach, It is nil unless the segment is ready, and also when they cannot be counted within 10 seconds.
+- On `UpdateCampaign`, each of `ListIDs`, `SegmentIDs`, `ExcludeListIDs` and `ExcludeSegmentIDs` is left as it is when it is nil, and replaced when it is not. A non-nil empty slice empties it: `ExcludeSegmentIDs: []uuid.UUID{}` removes every segment exclusion. The result needs at least one list or segment to send to.
+- `CampaignRecipient.ListName` is a `*string`. It is nil when the contact was sent to from a segment, and then `SegmentID` and `SegmentName` name the segment. A contact reached through a list and a segment is recorded under the list.
+- Scopes: `segments:read` to list and read segments, preview a definition, and list a segment's members or a contact's segments, `segments:write` to create and update segments, and `segments:delete` to delete them. `PreviewSegment`, `GetSegmentContacts` and `GetContactSegments` also need `contacts:read`.
+- `CreateSegment` returns 409 when the account already has 100 segments, or when a list or campaign that the definition names is being changed. Unlike most writes, that refusal is not stored for the idempotency key, so a retry with the same key runs again, for example after you delete a segment. A 409 of type `ErrorTypeIdempotencyConflict` means an earlier request with the same key is still running; retry with the same key after its `RetryAfter`. `UpdateSegment` returns 409 while the segment is being changed, and `DeleteSegment` while the segment is being changed or a campaign still needs it. These refusals change nothing; call again later, or after the campaign no longer needs the segment.
 
 ## API keys
 
@@ -345,6 +426,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 | `CampaignsAPI` | Create, test and send marketing campaigns, and read their results | `ListCampaigns`, `CreateCampaign`, `UpdateCampaign`, `TestCampaign`, `SendCampaign`, `UnscheduleCampaign`, `GetCampaignStats`, `ListCampaignRecipients` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |
 | `ListsAPI` | Manage lists and their members | `GetLists`, `CreateList`, `GetList`, `UpdateList`, `DeleteList`, `GetListContacts`, `BatchAddListContacts`, `UpsertListContact`, `DeleteListContact`, `GetContactLists` |
+| `SegmentsAPI` | Manage segments and read their members | `GetSegments`, `CreateSegment`, `PreviewSegment`, `GetSegment`, `UpdateSegment`, `DeleteSegment`, `GetSegmentContacts`, `GetContactSegments` |
 | `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain`, `GetDomainsWithParams` |
 | `WebhooksAPI` | Manage webhooks | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
 | `StatisticsAPI` | Read sending statistics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
