@@ -201,6 +201,20 @@ func (v *WebhookVerifier) Parse(payload []byte, headers http.Header) (WebhookEve
 		}
 		return &event, nil
 
+	case "message.unsubscribed":
+		var event MessageUnsubscribedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "message.complained":
+		var event MessageComplainedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
 	// Suppression events
 	case "suppression.created":
 		var event SuppressionCreatedEvent
@@ -209,9 +223,73 @@ func (v *WebhookVerifier) Parse(payload []byte, headers http.Header) (WebhookEve
 		}
 		return &event, nil
 
+	case "suppression.deleted":
+		var event SuppressionDeletedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
 	// Domain events
 	case "domain.dns_error":
 		var event DomainDNSErrorEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	// Contact events
+	case "contact.created":
+		var event ContactCreatedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.updated":
+		var event ContactUpdatedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.deleted":
+		var event ContactDeletedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.added_to_list":
+		var event ContactAddedToListEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.removed_from_list":
+		var event ContactRemovedFromListEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.subscribed":
+		var event ContactSubscribedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.unsubscribed":
+		var event ContactUnsubscribedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
+	case "contact.complained":
+		var event ContactComplainedEvent
 		if err := json.Unmarshal(payload, &event); err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
 		}

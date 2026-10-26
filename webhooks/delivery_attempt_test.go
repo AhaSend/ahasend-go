@@ -84,8 +84,9 @@ func findWebhookSpec() (string, error) {
 	}
 }
 
-// loadWebhookSpec reads and decodes openapi/webhooks.yaml.
-func loadWebhookSpec(t *testing.T) webhookSpec {
+// decodeWebhookSpec reads openapi/webhooks.yaml and decodes it into out, which
+// selects the fragment of the specification a test reads.
+func decodeWebhookSpec(t *testing.T, out interface{}) {
 	t.Helper()
 
 	path, err := findWebhookSpec()
@@ -94,8 +95,15 @@ func loadWebhookSpec(t *testing.T) webhookSpec {
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 
+	require.NoError(t, yaml.Unmarshal(raw, out))
+}
+
+// loadWebhookSpec reads and decodes openapi/webhooks.yaml.
+func loadWebhookSpec(t *testing.T) webhookSpec {
+	t.Helper()
+
 	var spec webhookSpec
-	require.NoError(t, yaml.Unmarshal(raw, &spec))
+	decodeWebhookSpec(t, &spec)
 	return spec
 }
 
@@ -378,10 +386,11 @@ func TestDeliveryAttemptParsing(t *testing.T) {
 // fails on.
 //
 // A mis-dispatch between two events that share a data shape is invisible here
-// for the same reason: the seven events carrying MessageEventData are
-// interchangeable to a key check, and GetType reads the payload's own type
-// string rather than anything derived from the Go type. TestWebhookParsing is
-// again what catches that.
+// for the same reason: the events carrying MessageEventData, like those carrying
+// ContactListEventData, are interchangeable to a key check, and GetType reads
+// the payload's own type string rather than anything derived from the Go type.
+// The parsing tests that assert the concrete event type are again what catch
+// that.
 //
 // It also fails when a spec refresh adds a property to an example, reported as
 // an unknown field. Usually that is a true positive — the SDK is dropping a
