@@ -62,8 +62,9 @@ type CreateCampaignRequest struct {
 	// common.TemplateEditorSimple or common.TemplateEditorHTML. Without
 	// Content the campaign gets an empty design of this editor, which the
 	// dashboard's editor opens. With Content, it is required when the content
-	// holds neither MJML nor HTML, and must agree with it otherwise. It cannot
-	// be set with TemplateID.
+	// holds none of Markup, MJML and HTML, and must agree with it otherwise:
+	// Markup means simple, also beside HTML; MJML means advanced and HTML
+	// alone means html. It cannot be set with TemplateID.
 	Editor *string `json:"editor,omitempty"`
 	// Content is the design's content, by the rules of TemplateContentInput.
 	// Where those rules name the draft, they mean the campaign's design. It
@@ -107,9 +108,9 @@ type UpdateCampaignRequest struct {
 	// create. A non-nil empty slice excludes none.
 	ExcludeSegmentIDs []uuid.UUID `json:"exclude_segment_ids,omitempty"`
 	// Content changes the design's content, by the rules of
-	// TemplateContentInput, in the design's editor. For a simple design, send
-	// only Text. A campaign with no design yet needs MJML or HTML, which sets
-	// its editor. Leave it nil to keep the content.
+	// TemplateContentInput, in the design's editor. A simple design is written
+	// with Markup. A campaign with no design yet needs Markup, MJML or HTML,
+	// which sets its editor. Leave it nil to keep the content.
 	Content *TemplateContentInput `json:"content,omitempty"`
 }
 

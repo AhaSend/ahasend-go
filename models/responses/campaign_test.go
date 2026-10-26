@@ -45,6 +45,52 @@ func TestCampaignTemplateDecodesNullContent(t *testing.T) {
 	assert.Nil(t, template.Content)
 }
 
+func TestCampaignTemplateDecodesMarkupAndWarnings(t *testing.T) {
+	payload := `{
+		"object":"campaign_template",
+		"id":"44444444-4444-4444-8444-444444444444",
+		"created_at":"2026-10-01T10:00:00Z",
+		"updated_at":"2026-10-01T11:00:00Z",
+		"name":"Monthly newsletter",
+		"editor":"simple",
+		"content":{"html":"<p>News</p>","text":"News","text_is_custom":false,"markup":"<Email version=\"1\"><Paragraph>News</Paragraph></Email>"},
+		"markup_warnings":[]
+	}`
+
+	var template CampaignTemplate
+	require.NoError(t, json.Unmarshal([]byte(payload), &template))
+
+	require.NotNil(t, template.Content)
+	require.NotNil(t, template.Content.Markup)
+	assert.Equal(t, `<Email version="1"><Paragraph>News</Paragraph></Email>`, *template.Content.Markup)
+	assert.NotNil(t, template.MarkupWarnings)
+	assert.Empty(t, template.MarkupWarnings)
+}
+
+func TestCampaignTemplateRoundTripsMarkup(t *testing.T) {
+	payload := `{
+		"object":"campaign_template",
+		"id":"44444444-4444-4444-8444-444444444444",
+		"created_at":"2026-10-01T10:00:00Z",
+		"updated_at":"2026-10-01T11:00:00Z",
+		"name":"Monthly newsletter",
+		"editor":"simple",
+		"content":{"html":"<p>{{ news }}</p>","text":"{{ news }}","text_is_custom":false,"markup":"<Email version=\"1\"><Paragraph>{{ news }}</Paragraph></Email>"},
+		"markup_warnings":[{"code":"jinja_in_text","message":"Text holds {{","line":1,"column":31,"path":"Email > Paragraph[1]"}]
+	}`
+
+	var decoded CampaignTemplate
+	require.NoError(t, json.Unmarshal([]byte(payload), &decoded))
+
+	encoded, err := json.Marshal(decoded)
+	require.NoError(t, err)
+	assert.JSONEq(t, payload, string(encoded))
+
+	var reDecoded CampaignTemplate
+	require.NoError(t, json.Unmarshal(encoded, &reDecoded))
+	assert.Equal(t, decoded, reDecoded)
+}
+
 // campaignFixture is a draft with every nullable field set.
 const campaignFixture = `{
 	"object":"campaign",
@@ -164,6 +210,77 @@ func TestCampaignDecodesASentCampaign(t *testing.T) {
 	encoded, err := json.Marshal(campaign)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(payload), string(encoded))
+}
+
+func TestCampaignDecodesMarkupWarnings(t *testing.T) {
+	payload := `{
+		"object":"campaign",
+		"editor":"simple",
+		"content":{"html":"<p>News</p>","text":"News","text_is_custom":false,"markup":null,"markup_error":{"code":"rate_limited","message":"Too many AhaML reads"}},
+		"markup_warnings":[{"code":"jinja_in_text","message":"Text holds {{","line":1,"column":30,"path":"Email > Paragraph[1]"}]
+	}`
+
+	var campaign Campaign
+	require.NoError(t, json.Unmarshal([]byte(payload), &campaign))
+
+	require.NotNil(t, campaign.Content)
+	assert.Nil(t, campaign.Content.Markup)
+	require.NotNil(t, campaign.Content.MarkupError)
+	assert.Equal(t, MarkupErrorRateLimited, campaign.Content.MarkupError.Code)
+	assert.Equal(t, []common.MarkupProblem{{
+		Code:    common.MarkupWarningJinjaInText,
+		Message: "Text holds {{",
+		Line:    1,
+		Column:  30,
+		Path:    "Email > Paragraph[1]",
+	}}, campaign.MarkupWarnings)
+
+	// The null markup is left out when encoded again, and the campaign
+	// decodes again to the same value.
+	encoded, err := json.Marshal(campaign)
+	require.NoError(t, err)
+	var reDecoded Campaign
+	require.NoError(t, json.Unmarshal(encoded, &reDecoded))
+	assert.Equal(t, campaign, reDecoded)
+}
+
+func TestCampaignRoundTripsMarkup(t *testing.T) {
+	payload := `{
+		"object":"campaign",
+		"id":"55555555-5555-4555-8555-555555555555",
+		"created_at":"2026-10-01T10:00:00Z",
+		"updated_at":"2026-10-01T11:00:00Z",
+		"name":"October newsletter",
+		"subject":"Our news",
+		"preheader":null,
+		"from":null,
+		"reply_to":null,
+		"status":"draft",
+		"status_reason":null,
+		"send_at":null,
+		"send_resumes_at":null,
+		"finished_at":null,
+		"list_ids":[],
+		"segment_ids":[],
+		"exclude_list_ids":[],
+		"exclude_segment_ids":[],
+		"editor":"simple",
+		"content":{"html":"<p>{{ news }}</p>","text":"{{ news }}","text_is_custom":false,"markup":"<Email version=\"1\"><Paragraph>{{ news }}</Paragraph></Email>"},
+		"ready":false,
+		"issues":[],
+		"markup_warnings":[{"code":"jinja_in_text","message":"Text holds {{","line":1,"column":31,"path":"Email > Paragraph[1]"}]
+	}`
+
+	var decoded Campaign
+	require.NoError(t, json.Unmarshal([]byte(payload), &decoded))
+
+	encoded, err := json.Marshal(decoded)
+	require.NoError(t, err)
+	assert.JSONEq(t, payload, string(encoded))
+
+	var reDecoded Campaign
+	require.NoError(t, json.Unmarshal(encoded, &reDecoded))
+	assert.Equal(t, decoded, reDecoded)
 }
 
 func TestCampaignSendDecodesWarnings(t *testing.T) {

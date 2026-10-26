@@ -15,9 +15,10 @@ type CreateCampaignTemplateRequest struct {
 	// Name is the campaign template name.
 	Name string `json:"name"`
 	// Editor is common.TemplateEditorAdvanced, common.TemplateEditorSimple or
-	// common.TemplateEditorHTML. It is required when Content holds neither
-	// MJML nor HTML: MJML means advanced and HTML means html. Without Content
-	// the campaign template gets an empty design of this editor.
+	// common.TemplateEditorHTML. It is required when Content holds none of
+	// Markup, MJML and HTML: Markup means simple, also beside HTML; MJML means
+	// advanced and HTML alone means html. Without Content the campaign
+	// template gets an empty design of this editor.
 	Editor *string `json:"editor,omitempty"`
 	// Content is the content, by the rules of TemplateContentInput. Where those
 	// rules name the draft, they mean the campaign template itself.
@@ -31,8 +32,8 @@ type CreateCampaignTemplateRequest struct {
 type UpdateCampaignTemplateRequest struct {
 	// Name is the campaign template name.
 	Name *string `json:"name,omitempty"`
-	// Content changes the content, by the rules of TemplateContentInput. For a
-	// simple campaign template, send only Text. Leave it nil to keep the
-	// content.
+	// Content changes the content, by the rules of TemplateContentInput. A
+	// simple campaign template's design is written with Markup. Leave it nil
+	// to keep the content.
 	Content *TemplateContentInput `json:"content,omitempty"`
 }

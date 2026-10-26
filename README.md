@@ -74,8 +74,8 @@ Every message is checked before it is sent, by `CreateMessage`, `CreateConversat
 A transactional template, made in the dashboard or through the API, holds the subject, the preview text and both bodies. `CreateTemplateMessage` names the template, and each recipient gives values for its variables:
 
 ```go
-// Read the template to see which variables a send must give.
-template, _, err := client.TemplatesAPI.GetTemplate(ctx, accountID, templateID)
+// Read the published copy, which sends use, to see which variables a send must give.
+template, _, err := client.TemplatesAPI.GetPublishedTemplate(ctx, accountID, templateID)
 if err != nil {
     log.Fatal(err)
 }
@@ -168,15 +168,16 @@ template, _, err := client.TemplatesAPI.CreateTemplate(ctx, accountID, requests.
 })
 ```
 
-- `Content.MJML` makes an `advanced` template and `Content.HTML` an `html` template. A template with neither must set `Editor`. The editor never changes after create, and the HTML of a `simple` template can only be changed in the dashboard.
+- `Content.Markup` makes a `simple` template, `Content.MJML` an `advanced` template and `Content.HTML` an `html` template. A template with none of them must set `Editor`. The editor never changes after create.
+- The design of a `simple` template is read and written as AhaSend Markup (AhaML), described in the [AhaML reference](https://ahasend.com/docs/send-api/ahaml). A read of one template or version, and the answer to a write, give it in `Content.Markup`; when AhaML cannot be made, `Content.Markup` is nil and `Content.MarkupError` says why. A write sets it with `Content.Markup`, and its HTML is made from the design. The answer to such a write lists warnings in `MarkupWarnings`, and refused AhaML gives an `*api.APIError` whose `Errors` list each problem with its line, column and path.
 - MJML is compiled in strict mode. Images and stylesheets must use `https://` URLs, such as `https://example.com/logo.png`: the API cannot upload files. A template variable such as `{{ logo_url }}` is fine.
-- Beside a new MJML or HTML, a nil `Content.Text` keeps a custom text, which must still render, and otherwise makes the text from the new HTML. Point `Content.Text` at `""` to make the text again from the new HTML.
+- Beside a new Markup, MJML or HTML, a nil `Content.Text` keeps a custom text, which must still render, and otherwise makes the text from the new HTML. Point `Content.Text` at `""` to make the text again from the new HTML.
 - `UpdateTemplate` changes only the fields you set; the name changes at once. To clear a field, point it at the empty value: `ahasend.String("")` for `Subject` and `Preheader`, `&common.SenderAddress{}` for `From` (which also clears the reply-to) and `ReplyTo`. `Content.Text` pointing at `""` makes the text again from the HTML.
 - A publish publishes the whole draft, including changes made in the dashboard.
-- `Template.HasDraft` tells whether a draft exists, and `Template.Content` holds the published content. `GetTemplateDraft` returns the draft, and `DiscardTemplateDraft` drops it.
+- `GetTemplate` and every write return the working copy: the draft while one exists, and the published copy otherwise. So a template read, changed and sent back with `UpdateTemplate` builds on what was read. `GetPublishedTemplate` returns the published copy, which sends use, and `GetTemplates` lists the published copies. `Template.HasDraft` tells whether a draft exists, and `DiscardTemplateDraft` drops it.
 - `GetTemplateVersions` lists the published versions, newest first, and `GetTemplateVersion` returns one with its content. `RestoreTemplateVersion` copies a version into the draft; set `Publish` to publish it too.
 - The SDK sends an `Idempotency-Key` with `CreateTemplate`, `UpdateTemplate`, `PublishTemplate` and `RestoreTemplateVersion`, so a retried request is not applied twice.
-- A write returns 503 when the template keeps changing while the request writes it. The SDK retries it a limited number of times, and a request with an idempotency key keeps the same key.
+- A write returns 503 when the template keeps changing while the request writes it, or when its AhaML cannot be read now. The SDK retries it a limited number of times, and a request with an idempotency key keeps the same key.
 - Reads need the `templates:read` scope, writes `templates:write`, and `DeleteTemplate` needs `templates:delete`.
 
 ## Campaign templates
@@ -192,10 +193,11 @@ template, _, err := client.CampaignTemplatesAPI.CreateCampaignTemplate(ctx, acco
 })
 ```
 
-- `Content` follows the rules of transactional templates: `Content.MJML` makes an `advanced` campaign template and `Content.HTML` an `html` one, a campaign template with neither must set `Editor`, and the editor never changes. Without `Content`, the campaign template gets an empty design that the dashboard's editor opens.
+- `Content` follows the rules of transactional templates: `Content.Markup` makes a `simple` campaign template, `Content.MJML` an `advanced` one and `Content.HTML` an `html` one, a campaign template with none of them must set `Editor`, and the editor never changes. Without `Content`, the campaign template gets an empty design that the dashboard's editor opens.
 - `UpdateCampaignTemplate` changes only the fields you set. Campaigns already made from the template keep their own copies.
 - `ListCampaignTemplates` lists campaign templates without their content; `GetCampaignTemplate` returns it. A campaign can be made from a campaign template only when it has HTML.
 - The SDK sends an `Idempotency-Key` with `CreateCampaignTemplate` and `UpdateCampaignTemplate`, so a retried request is not applied twice.
+- A write that carries `Content.Markup` returns 503 when its AhaML cannot be read now. The SDK retries it a limited number of times with the same key; after that, retry after `RetryAfter` seconds.
 - Campaign templates use the template scopes: `templates:read`, `templates:write` and `templates:delete`.
 
 ## Campaigns
@@ -240,6 +242,7 @@ if notReady, ok := api.AsCampaignNotReady(err); ok {
 - `DuplicateCampaign` makes a new draft from a campaign in any status.
 - `GetCampaignStats` returns live counters and a stored report that is counted again from time to time. `Report` is nil until the first count, and each rate is nil while it has no base. `ListCampaignRecipients` lists the recipients in one `Status` or one `BounceClassification`, each a key of the report's `ByStatus` or `ByBounceClassification`.
 - The SDK sends an `Idempotency-Key` with `CreateCampaign`, `UpdateCampaign`, `DuplicateCampaign`, `SendCampaign`, `UnscheduleCampaign` and `TestCampaign`, so a retried request is not applied twice.
+- `Content` follows the rules of transactional templates: a `simple` design is written as AhaML in `Content.Markup`. `CreateCampaign` and `UpdateCampaign` return 503 when that AhaML cannot be read now. The SDK retries it a limited number of times with the same key; after that, retry after `RetryAfter` seconds.
 - Scopes: `campaigns:read` to read campaigns, their stats and their recipients, `campaigns:write` to create, update and duplicate them, `campaigns:delete` to delete drafts, and `campaigns:send` to send, unschedule and test them.
 
 ## Segments
@@ -421,7 +424,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 | Service | Use it to | Main methods |
 |---|---|---|
 | `MessagesAPI` | Send and manage email | `CreateMessage`, `CreateTemplateMessage`, `GetMessage`, `CancelMessage` |
-| `TemplatesAPI` | Manage transactional templates, their drafts and versions | `GetTemplates`, `GetTemplate`, `CreateTemplate`, `UpdateTemplate`, `PublishTemplate`, `GetTemplateVersions`, `RestoreTemplateVersion` |
+| `TemplatesAPI` | Manage transactional templates, their drafts and versions | `GetTemplates`, `GetTemplate`, `GetPublishedTemplate`, `CreateTemplate`, `UpdateTemplate`, `PublishTemplate`, `GetTemplateVersions`, `RestoreTemplateVersion` |
 | `CampaignTemplatesAPI` | Manage the designs that campaigns copy | `ListCampaignTemplates`, `GetCampaignTemplate`, `CreateCampaignTemplate`, `UpdateCampaignTemplate`, `DeleteCampaignTemplate` |
 | `CampaignsAPI` | Create, test and send marketing campaigns, and read their results | `ListCampaigns`, `CreateCampaign`, `UpdateCampaign`, `TestCampaign`, `SendCampaign`, `UnscheduleCampaign`, `GetCampaignStats`, `ListCampaignRecipients` |
 | `ContactsAPI` | Manage contacts | `GetContacts`, `GetContact`, `CreateContact`, `UpdateContact`, `DeleteContact`, `BatchUpsertContacts` |

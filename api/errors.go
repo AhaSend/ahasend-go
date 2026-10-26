@@ -2,12 +2,15 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/AhaSend/ahasend-go/models/common"
 )
 
 // ErrorType represents the category of error
@@ -42,7 +45,11 @@ type APIError struct {
 	Code       string    `json:"code,omitempty"`
 	RequestID  string    `json:"request_id,omitempty"`
 	RetryAfter int       `json:"retry_after,omitempty"`
-	Raw        []byte    `json:"-"`
+	// Errors are the problems of AhaSend Markup (AhaML) that a write refused,
+	// in document order, up to the first 100; Message says how many there
+	// are in all. It is nil for every other error.
+	Errors []common.MarkupProblem `json:"errors,omitempty"`
+	Raw    []byte                 `json:"-"`
 }
 
 // Error implements the error interface
@@ -91,7 +98,39 @@ func ParseAPIError(resp *http.Response, body []byte) *APIError {
 		apiErr.Message = string(body)
 	}
 
+	var errorResp errorResponseBody
+	if err := json.Unmarshal(body, &errorResp); err == nil {
+		apiErr.Errors = markupProblems(errorResp.Errors)
+	}
+
 	return apiErr
+}
+
+// errorResponseBody is the body of an error response: a message, and for
+// refused AhaML its problems. Errors stays raw, so an errors field of another
+// shape does not keep the message from decoding.
+type errorResponseBody struct {
+	common.ErrorResponse
+	Errors json.RawMessage `json:"errors"`
+}
+
+// markupProblems decodes the errors of a refused AhaML write. It returns nil
+// when there are none, or when they are not a list of problems, each with a
+// code.
+func markupProblems(raw json.RawMessage) []common.MarkupProblem {
+	if len(raw) == 0 {
+		return nil
+	}
+	var problems []common.MarkupProblem
+	if err := json.Unmarshal(raw, &problems); err != nil {
+		return nil
+	}
+	for _, problem := range problems {
+		if problem.Code == "" {
+			return nil
+		}
+	}
+	return problems
 }
 
 // classifyErrorType maps an HTTP response to an error type. It is

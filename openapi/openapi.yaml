@@ -431,6 +431,39 @@ components:
           example:
             message: "template is being changed by another request, try again"
 
+    TemplateWriteBusy:
+      description: |
+        The write could not be finished now, for one of two reasons. Nothing
+        was written.
+
+        - The template changed in the dashboard or through another request
+          while this one was writing it, more often than the request retries
+          by itself. Only a write of a transactional template that already
+          exists can get this.
+        - AhaSend Markup (AhaML) in `content.markup` could not be read now:
+          the service that reads it is down, failed or busy.
+
+        Retry after `Retry-After` seconds, with the same `Idempotency-Key`.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            changed:
+              summary: The template changed during the write
+              value:
+                message: "template is being changed by another request, try again"
+            markup:
+              summary: The AhaML could not be read now
+              value:
+                message: "content.markup cannot be read now, try again"
+
     TemplateCheckBusy:
       description: |
         Every message is checked with the template engine before it is sent,
@@ -469,6 +502,67 @@ components:
           description: Error description
       example:
         message: "Error message"
+
+    MarkupErrorResponse:
+      type: object
+      description: |
+        The 400 answer of a write that takes `content.markup`. Every 400 of
+        such a write has `message`. When the write refuses AhaSend Markup
+        (AhaML), `errors` lists the problems found, in document order, up to
+        the first 100, and `message` says how many there are in all.
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error description. For refused AhaML, how many problems it has.
+        errors:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MarkupProblem'
+          description: The problems of refused AhaML. Left out for every other 400.
+      example:
+        message: "content.markup has 1 problem"
+        errors:
+          - code: unknown_attribute
+            message: "Paragraph has no attribute \"color\""
+            line: 4
+            column: 14
+            path: "Email > Section[2] > Paragraph[1]"
+            hint: "wrap the text in <Color value=\"...\"> instead"
+
+    MarkupProblem:
+      type: object
+      description: One problem of AhaSend Markup (AhaML) that a write refused, or one warning about AhaML a write stored.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: |
+            What is wrong, as a code that stays the same. The AhaML reference
+            lists every code. A warning's code is `jinja_in_text`: text holds
+            `{{`, which stays text; use a `<Var>` for a variable.
+        message:
+          type: string
+          description: What is wrong, in words for a person.
+        line:
+          type: integer
+          minimum: 1
+          description: The line where the problem starts, counted from 1. Left out when the problem has no place in the AhaML, as for a size limit.
+        column:
+          type: integer
+          minimum: 1
+          description: The column where the problem starts, counted from 1 in Unicode characters. Left out with `line`.
+        path:
+          type: string
+          description: The element of the problem, each tag with its position among its siblings of the same tag, such as `Email > Section[2] > Paragraph[1]`. Left out with `line`.
+        hint:
+          type: string
+          description: How to fix the problem, when a fix is known. Warnings have none.
 
     SuccessResponse:
       type: object
@@ -1680,6 +1774,12 @@ components:
 
     Template:
       type: object
+      description: |
+        A transactional template, as one of its copies. Get Template and the
+        answer of every template write give its working copy: its draft while
+        it has one, and its published copy otherwise. Get Published Template
+        and List Templates give its published copy, the one a send uses.
+        `has_draft` says whether a draft exists.
       required:
         - object
         - id
@@ -1709,46 +1809,54 @@ components:
         updated_at:
           type: string
           format: date-time
-          description: When the template's name or published content last changed
+          description: When the template's name or this copy last changed
         name:
           type: string
           description: Template name, as it appears in the dashboard
         subject:
           type: string
-          description: The published subject, set on the template page. Empty until one is published, and overridden by a send that names its own `subject`.
+          description: This copy's subject, set on the template page. Empty until one is set. A send uses the published subject, unless it names its own `subject`.
         preheader:
           type: string
-          description: The published preview text, injected into the delivered HTML when it is set
+          description: This copy's preview text, which a send of the published copy injects into the delivered HTML when it is set
         variables:
           type: array
           items:
             $ref: '#/components/schemas/TemplateVariable'
           description: |
-            Every variable the design uses. A send of this template takes the
-            values only from each recipient's `substitutions`. Every recipient
-            must give a value for each required variable; if one does not, the
-            request is rejected and no message is sent. Each variable's `kind`
-            says what shape of value to send.
+            Every variable this copy's design uses. A send of this template
+            uses the published copy's variables, which Get Published Template
+            returns, and takes the values only from each recipient's
+            `substitutions`. Every recipient must give a value for each
+            required variable; if one does not, the request is rejected and no
+            message is sent. Each variable's `kind` says what shape of value to
+            send.
         from:
           oneOf:
             - $ref: '#/components/schemas/Address'
             - type: 'null'
-          description: The default sender, used by a send that names no `from`. Null when the template has none, and then every send must name one.
+          description: This copy's default sender. A send that names no `from` uses the published copy's. Null when the copy has none; a send of a published copy with none must name one.
         reply_to:
           oneOf:
             - $ref: '#/components/schemas/Address'
             - type: 'null'
-          description: The default reply-to address, used by a send that sets no reply-to, also one that names its own `from`. Null when the template has none. It has the shape of a send request's `reply_to`; its `name` is always empty.
+          description: This copy's default reply-to address. A send that sets no reply-to, also one that names its own `from`, uses the published copy's. Null when the copy has none. It has the shape of a send request's `reply_to`; its `name` is always empty.
         editor:
           $ref: '#/components/schemas/TemplateEditor'
         has_draft:
           type: boolean
-          description: Whether the template has a draft, changes saved in the dashboard or through the API that are not published yet. Get Template Draft returns it.
+          description: Whether the template has a draft, changes saved in the dashboard or through the API that are not published yet. Get Template returns the draft while one exists.
         content:
           oneOf:
             - $ref: '#/components/schemas/TemplateContent'
             - type: 'null'
-          description: The published content. Null when the published copy has no body, as for a template that was never published. List Templates leaves this field out; every other operation that returns a Template sets it.
+          description: This copy's content. Null when it has no body, as for the published copy of a template that was never published. List Templates leaves this field out; every other operation that returns a Template sets it.
+        markup_warnings:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MarkupProblem'
+          description: Warnings about the AhaML in `content.markup`, up to the first 100; empty when there are none. Present only in the answer to a write that carried `content.markup`.
 
     TemplateEditor:
       type: string
@@ -1760,6 +1868,9 @@ components:
         - `advanced`: designed in MJML, with the dashboard's advanced editor.
         - `simple`: designed with the dashboard's simple editor. Its HTML is
           made from the design and can be read but not changed through the API.
+          A read or write answer of one item gives the design as AhaSend
+          Markup (AhaML) in `content.markup`; a list does not. A write changes
+          the design with `content.markup`.
         - `html`: an HTML template, uploaded or written by hand.
 
     TemplateContent:
@@ -1770,6 +1881,11 @@ components:
         A template's content. A key that does not apply to the template's
         editor is left out, and so are `mjml`, `html` and `text` when they are
         empty.
+
+        An answer that holds one `simple` design also gives that design as
+        AhaSend Markup (AhaML) in `markup`. When AhaML cannot be made, the
+        answer still succeeds: `markup` is null and `markup_error` says why.
+        List operations give no content, so they give no `markup`.
       properties:
         mjml:
           type: string
@@ -1783,62 +1899,41 @@ components:
         text_is_custom:
           type: boolean
           description: Whether the text was written rather than made from the HTML. A text made from the HTML is made again whenever the design changes.
-
-    TemplateDraft:
-      type: object
-      required:
-        - object
-        - template_id
-        - updated_at
-        - subject
-        - preheader
-        - variables
-        - from
-        - reply_to
-        - content
-      description: |
-        A template's draft: the changes saved in the dashboard or through the
-        API that are not published yet. Sends use the published copy until the
-        draft is published.
-      properties:
-        object:
-          type: string
-          enum: [template_draft]
-          description: Object type identifier
-        template_id:
-          type: string
-          format: uuid
-          description: The template the draft belongs to
-        updated_at:
-          type: string
-          format: date-time
-          description: When the draft last changed
-        subject:
-          type: string
-          description: The draft's subject
-        preheader:
-          type: string
-          description: The draft's preview text
-        variables:
-          type: array
-          items:
-            $ref: '#/components/schemas/TemplateVariable'
-          description: Every variable the draft uses, as a send would require them once the draft is published
-        from:
-          oneOf:
-            - $ref: '#/components/schemas/Address'
-            - type: 'null'
-          description: The draft's default sender. Null when it has none.
-        reply_to:
-          oneOf:
-            - $ref: '#/components/schemas/Address'
-            - type: 'null'
-          description: The draft's default reply-to address. Null when it has none. Its `name` is always empty.
-        content:
-          oneOf:
-            - $ref: '#/components/schemas/TemplateContent'
-            - type: 'null'
-          description: The draft's content. Null when the draft has no body.
+        markup:
+          type: [string, 'null']
+          description: The design as AhaSend Markup (AhaML). Only for `simple` designs, and then always present. Null when AhaML cannot be made; `markup_error` then says why.
+          example: "<Email version=\"1\">\n  <Heading level=\"3\">Welcome</Heading>\n  <Paragraph>Thanks for signing up.</Paragraph>\n</Email>\n"
+        markup_error:
+          type: object
+          required:
+            - code
+            - message
+          description: Why `markup` is null. Only present when it is. In the answer to a write, it says only that the answer holds no AhaML; the write itself succeeded. A write answer replayed for its `Idempotency-Key` gives the `markup_error` of the first answer; read the object again to get its AhaML.
+          properties:
+            code:
+              type: string
+              enum: [no_design, html_block, unmapped_block, bad_stored_value, renderer_unavailable, rate_limited]
+              description: |
+                - `no_design`: the design has no blocks yet.
+                - `html_block`: the design holds an HTML block, which AhaML
+                  cannot show. Remove the block in the dashboard to read and
+                  write the design as AhaML.
+                - `unmapped_block`: the design holds a block or a mark that
+                  AhaML has no tag for. The message names its type.
+                - `bad_stored_value`: the design holds a value that AhaML
+                  cannot write. The message names the block and the attribute.
+                - `renderer_unavailable`: AhaML cannot be made now. Read the
+                  design again later.
+                - `rate_limited`: the account reads and writes AhaML more
+                  often than its limit allows. Read the design again in a
+                  second. A caller that does not use AhaML is never slowed
+                  by this limit.
+            message:
+              type: string
+              description: What went wrong, in words for a person.
+          example:
+            code: html_block
+            message: The design holds an HTML block, which AhaML cannot show; remove the block in the dashboard to read and write the design as AhaML
 
     TemplatePublisher:
       type: object
@@ -1934,25 +2029,42 @@ components:
       additionalProperties: false
       description: |
         The content of a template write. It holds at most one of `mjml` and
-        `html`, and at least one of `mjml`, `html` and `text`. The `content`
-        of an `advanced` or `html` draft, or of the Template when it has no
-        draft, can be sent back as it is: an `mjml` or `html` equal to the
-        current one is held to the size limit but not compiled again or held
-        to the HTML checks, and keeps the stored HTML. While a draft exists,
-        the Template's `content` is the published copy's, and sending it back
-        replaces the draft's design. Leave `content` out of a write that does
-        not change it. For a `simple` template, send back only `text`: its
-        `html` can be changed only in the dashboard.
+        `html`, never both `markup` and `mjml`, and at least one of `markup`,
+        `mjml`, `html` and `text`. The `content` that Get Template answers,
+        the working copy, can be sent back as it is: an `mjml` or `html` equal
+        to the current one is held to the size limit but not compiled again
+        or held to the HTML checks, and keeps the stored HTML. While a draft
+        exists, a design equal to the published copy's, which Get Published
+        Template answers, takes the published copy's stored design in the
+        same way, and a draft that then equals the published copy is
+        dropped. Leave `content` out of a write that does not change it: for
+        a `simple` template, a write that sends `markup` back is held to the
+        AhaML rules and limits too. A write has no check of what the caller
+        read: a `content` read before a dashboard save and sent back after it
+        replaces the design that save stored.
+
+        A `simple` design is written as AhaSend Markup (AhaML) in `markup`.
+        Its `html` is made from the design: beside `markup` it is ignored,
+        and without `markup` it is ignored when it equals the working copy's
+        stored HTML, and refused otherwise; an empty `html` is refused, as for
+        every editor. The `content` read from a
+        `simple` design can so be sent back as it is, `markup_error`
+        included: AhaML that prints the same as the stored design keeps that
+        design and its HTML, and AhaML that prints the same as the published
+        copy takes the published copy's design and HTML. A design that
+        breaks a rule of AhaML, also one saved in the dashboard, is refused
+        when it is written back, such as an image that is not an `https://`
+        URL.
 
         The text follows these rules:
-        - Beside a new `mjml` or `html`, a missing `text` keeps the draft's
-          text when it is custom, and that text must still render, as a sent
-          text must; otherwise, and on a create, it makes the text from the
-          new HTML. A null `text` makes the text from the new
-          HTML, and so does a `text` equal to a text made from an earlier
-          HTML: the draft's made text, or the published copy's made text when
-          the draft does not hold that text as custom. A read `content` can
-          so be sent back with a changed design. Any other `text` is stored
+        - Beside a new `markup`, `mjml` or `html`, a missing `text` keeps the
+          draft's text when it is custom, and that text must still render, as
+          a sent text must; otherwise, and on a create, it makes the text from
+          the new HTML. A null `text` makes the text from the new HTML, and so
+          does a `text` equal to a text made from an earlier HTML: the draft's
+          made text, or the published copy's made text when the draft does
+          not hold that text as custom. A read `content` can so be sent back
+          with a changed design. Any other `text` is stored
           as made when it equals the text made from the new HTML, and as
           custom otherwise. To keep a made text beside a new design, send the
           design first and the text in a second request.
@@ -1962,7 +2074,8 @@ components:
           the draft's HTML, and is refused when there is no HTML.
 
         Line ends written as CRLF are stored as LF, and a blank text is
-        refused. `mjml`, `html` and a custom `text` each have a size limit.
+        refused. `markup`, `mjml`, `html` and a custom `text` each have a size
+        limit.
       properties:
         mjml:
           type: string
@@ -1977,9 +2090,9 @@ components:
           minLength: 1
           description: |
             The HTML. Only for `html` templates; the HTML of a `simple`
-            template can be changed only in the dashboard. Images and
-            stylesheets must use full `https://` URLs: the API cannot upload
-            files.
+            template is made from its design, which `markup` changes, and is
+            accepted only as described above. Images and stylesheets must use
+            full `https://` URLs: the API cannot upload files.
         text:
           type:
             - string
@@ -1988,6 +2101,21 @@ components:
         text_is_custom:
           type: boolean
           description: Accepted so a read `content` can be sent back, and ignored. The text rules decide it.
+        markup:
+          type:
+            - string
+            - 'null'
+          description: |
+            The design as AhaSend Markup (AhaML). Only for `simple` designs;
+            on a create, and on a campaign with no design yet, it means
+            `editor: simple`. The stored design is the JSON and HTML read from
+            it, and the answer lists warnings about it in `markup_warnings`.
+            Null is the same as no `markup`, and an empty string is refused.
+            The writes that carry it count against a per-account limit, beside
+            the API's own rate limit.
+          example: "<Email version=\"1\">\n  <Heading level=\"3\">Welcome</Heading>\n  <Paragraph>Thanks for signing up.</Paragraph>\n</Email>\n"
+        markup_error:
+          description: Accepted so a read `content` can be sent back, and ignored, whatever it holds.
 
     TemplateAddressInput:
       type: object
@@ -2021,7 +2149,7 @@ components:
           description: Template name. Spaces around it are dropped.
         editor:
           $ref: '#/components/schemas/TemplateEditor'
-          description: Required when `content` holds neither `mjml` nor `html`. `content.mjml` means `advanced` and `content.html` means `html`; an `editor` that disagrees with the content is refused.
+          description: Required when `content` holds none of `markup`, `mjml` and `html`. `content.markup` means `simple`, also beside `content.html`; `content.mjml` means `advanced` and `content.html` alone means `html`. An `editor` that disagrees with the content is refused.
         subject:
           type:
             - string
@@ -2180,6 +2308,12 @@ components:
             - $ref: '#/components/schemas/TemplateContent'
             - type: 'null'
           description: The content. Null when the campaign template has neither HTML nor text, as for one created without content. A campaign can be made from the campaign template only once it has HTML. List Campaign Templates leaves this field out; every other operation that returns a CampaignTemplate sets it.
+        markup_warnings:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/MarkupProblem'
+          description: Warnings about the AhaML in `content.markup`, up to the first 100; empty when there are none. Present only in the answer to a write that carried `content.markup`.
 
     CreateCampaignTemplateRequest:
       type: object
@@ -2195,7 +2329,7 @@ components:
           description: Campaign template name. Spaces around it are dropped.
         editor:
           $ref: '#/components/schemas/TemplateEditor'
-          description: Required when `content` holds neither `mjml` nor `html`. `content.mjml` means `advanced` and `content.html` means `html`; an `editor` that disagrees with the content is refused.
+          description: Required when `content` holds none of `markup`, `mjml` and `html`. `content.markup` means `simple`, also beside `content.html`; `content.mjml` means `advanced` and `content.html` alone means `html`. An `editor` that disagrees with the content is refused.
         content:
           $ref: '#/components/schemas/TemplateContentInput'
           description: The content, by the rules of `TemplateContentInput`. A campaign template has no draft, so where those rules name the draft, they mean the campaign template itself.
@@ -2212,7 +2346,7 @@ components:
           description: Campaign template name. Spaces around it are dropped.
         content:
           $ref: '#/components/schemas/TemplateContentInput'
-          description: The content, by the rules of `TemplateContentInput`. A campaign template has no draft, so where those rules name the draft, they mean the campaign template itself. For a `simple` campaign template, send only `text`.
+          description: The content, by the rules of `TemplateContentInput`. A campaign template has no draft, so where those rules name the draft, they mean the campaign template itself. A `simple` campaign template's design is written with `markup`.
 
     PaginatedCampaignTemplatesResponse:
       type: object
@@ -2427,6 +2561,12 @@ components:
                     $ref: '#/components/schemas/CampaignIssue'
                 - type: 'null'
               description: The reasons the draft cannot be sent yet, in a fixed order; empty when it is ready. Null unless the campaign is a draft.
+            markup_warnings:
+              type: array
+              maxItems: 100
+              items:
+                $ref: '#/components/schemas/MarkupProblem'
+              description: Warnings about the AhaML in `content.markup`, up to the first 100; empty when there are none. Present only in the answer to a write that carried `content.markup`.
 
     CreateCampaignRequest:
       type: object
@@ -2500,7 +2640,7 @@ components:
           description: Segments whose members get no message from the campaign, also when an included list or segment reaches them. A segment cannot be both in `segment_ids` and here. Exclusions need at least one list or segment to send to. Responses return the segments by ID.
         editor:
           $ref: '#/components/schemas/TemplateEditor'
-          description: The editor of the design. Without `content` the campaign gets an empty design of this editor, which the dashboard's editor opens. With `content`, it is required when the content holds neither `mjml` nor `html`, and must agree with it otherwise. Not accepted with `template_id`, whose editor the design keeps.
+          description: The editor of the design. Without `content` the campaign gets an empty design of this editor, which the dashboard's editor opens. With `content`, it is required when the content holds none of `markup`, `mjml` and `html`, and must agree with it otherwise; `markup` means `simple`, also beside `html`. Not accepted with `template_id`, whose editor the design keeps.
         content:
           $ref: '#/components/schemas/TemplateContentInput'
           description: The content of the design, by the rules of `TemplateContentInput`. A campaign has no draft, so where those rules name the draft, they mean the campaign's design. Not accepted with `template_id`.
@@ -2572,7 +2712,7 @@ components:
           description: The excluded segments, which replace the campaign's, as on create. `[]` excludes none.
         content:
           $ref: '#/components/schemas/TemplateContentInput'
-          description: The content of the design, by the rules of `TemplateContentInput`, in the design's editor. For a `simple` design, send only `text`. A campaign with no design yet needs `mjml` or `html`, which sets its editor.
+          description: The content of the design, by the rules of `TemplateContentInput`, in the design's editor. A `simple` design is written with `markup`. A campaign with no design yet needs `markup`, `mjml` or `html`, which sets its editor.
 
     DuplicateCampaignRequest:
       type: object
@@ -8031,9 +8171,9 @@ paths:
         `publish: true` to publish it in the same request, or call Publish
         Template.
 
-        `content.mjml` makes an `advanced` template and `content.html` an `html`
-        template. A template with neither must name its `editor`. The editor never
-        changes after create.
+        `content.markup` makes a `simple` template, `content.mjml` an `advanced`
+        template and `content.html` an `html` template. A template with none of
+        them must name its `editor`. The editor never changes after create.
 
         MJML is compiled in strict mode, and HTML must use full `https://` URLs
         for its images and stylesheets: the API cannot upload files.
@@ -8062,7 +8202,7 @@ paths:
               $ref: '#/components/schemas/CreateTemplateRequest'
       responses:
         '201':
-          description: Template created. The Template object is the published copy; `has_draft` says whether the request left a draft.
+          description: Template created. The Template object is the working copy, the draft while the request left one; `has_draft` says whether it did.
           headers:
             Idempotent-Replayed:
               $ref: '#/components/headers/IdempotentReplayed'
@@ -8071,11 +8211,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: 'Invalid request: the body, a field, or a publish with nothing to publish. The message names the field and the problem.'
+          description: 'Invalid request: the body, a field, or a publish with nothing to publish. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -8093,7 +8233,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -8104,6 +8244,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateWriteBusy'
 
       x-code-samples:
         - lang: go
@@ -8169,11 +8311,13 @@ paths:
     get:
       summary: Get Template
       description: |
-        Returns one of the account's transactional templates: its published
-        copy, which is what a send uses, with its content and the variable list
-        a send has to satisfy. `has_draft` says whether changes are waiting to
-        be published; Get Template Draft returns them. A campaign design's ID
-        is not addressable here and answers 404.
+        Returns one of the account's transactional templates as its working
+        copy: its draft while it has one, and its published copy otherwise.
+        `has_draft` says which. A write changes this copy, so a template read,
+        changed and sent back to Update Template builds on what was read.
+        Sends use the published copy, which Get Published Template returns; read
+        that one to build a send. A campaign design's ID is not addressable here
+        and answers 404.
       operationId: getTemplate
       tags:
         - Templates
@@ -8221,8 +8365,9 @@ paths:
               if err != nil {
                 log.Fatalf("Error getting template: %v", err)
               }
-              // A send from this template must supply every required variable. Kind
-              // says what shape of value to send; a list variable takes a slice of
+              // These are the working copy's variables: the draft's while one exists.
+              // A send uses the published copy's, which GetPublishedTemplate returns.
+              // Kind says what shape of value to send; a list variable takes a slice of
               // elements with the fields in ItemFields.
               for _, variable := range response.Variables {
                 fmt.Printf("%s required=%t kind=%s item_fields=%v\n", variable.Name, variable.Required, variable.Kind, variable.ItemFields)
@@ -8300,7 +8445,8 @@ paths:
 
         When the template changes in the dashboard or through another request
         while this one writes it, the request applies its fields again over the
-        new draft. It answers 503 when that keeps happening; retry it.
+        new draft. It answers 503 when that keeps happening, or when the AhaML
+        in `content.markup` cannot be read now; retry it.
       operationId: updateTemplate
       tags:
         - Templates
@@ -8330,7 +8476,7 @@ paths:
               $ref: '#/components/schemas/UpdateTemplateRequest'
       responses:
         '200':
-          description: Template updated. The Template object is the published copy; `has_draft` says whether a draft is left.
+          description: Template updated. The Template object is the working copy, the draft while one is left; `has_draft` says whether one is.
           headers:
             Idempotent-Replayed:
               $ref: '#/components/headers/IdempotentReplayed'
@@ -8339,11 +8485,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Template'
         '400':
-          description: Invalid template_id, an invalid body or field, a request with no changes, or a publish with nothing to publish or a draft that cannot be rendered. The message names the field and the problem.
+          description: Invalid template_id, an invalid body or field, a request with no changes, or a publish with nothing to publish or a draft that cannot be rendered. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -8367,7 +8513,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -8379,7 +8525,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          $ref: '#/components/responses/TemplateBeingChanged'
+          $ref: '#/components/responses/TemplateWriteBusy'
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -8388,13 +8534,13 @@ paths:
 
             import (
               "context"
+              "errors"
               "fmt"
               "log"
               "os"
 
               "github.com/AhaSend/ahasend-go"
               "github.com/AhaSend/ahasend-go/api"
-              "github.com/AhaSend/ahasend-go/models/common"
               "github.com/AhaSend/ahasend-go/models/requests"
               "github.com/google/uuid"
             )
@@ -8407,15 +8553,36 @@ paths:
               templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 
               // Only the fields you set change. They go to the template's draft, the
-              // same draft the dashboard edits; Publish publishes the whole draft. An
-              // empty ReplyTo clears the reply-to address.
+              // same draft the dashboard edits; Publish publishes the whole draft. The
+              // design of a simple template is written as AhaSend Markup (AhaML).
+              markup := `<Email version="1">
+              <Heading level="2">Reset your password</Heading>
+              <Paragraph>Hi <Var name="first_name" fallback="there"/>, use the button below to reset your password.</Paragraph>
+              <Button url="{{ reset_url }}">Reset password</Button>
+            </Email>
+            `
               response, _, err := client.TemplatesAPI.UpdateTemplate(ctx, accountID, templateID, requests.UpdateTemplateRequest{
                 Subject: ahasend.String("Your password reset link"),
-                ReplyTo: &common.SenderAddress{},
+                Content: &requests.TemplateContentInput{Markup: &markup},
                 Publish: true,
               })
               if err != nil {
+                var apiErr *api.APIError
+                if errors.As(err, &apiErr) {
+                  // A refused design lists each problem, with its place in the
+                  // AhaML when it has one.
+                  for _, problem := range apiErr.Errors {
+                    if problem.Line > 0 {
+                      fmt.Printf("line %d, column %d: %s\n", problem.Line, problem.Column, problem.Message)
+                    } else {
+                      fmt.Println(problem.Message)
+                    }
+                  }
+                }
                 log.Fatalf("Error updating template: %v", err)
+              }
+              for _, warning := range response.MarkupWarnings {
+                fmt.Printf("Warning: %s\n", warning.Message)
               }
               fmt.Printf("Updated template %s, has draft: %t\n", response.Name, response.HasDraft)
             }
@@ -8545,17 +8712,17 @@ paths:
             const result = await client.templates.delete(templateId);
             console.log("Template deleted.", { message: result.message });
 
-  /v2/accounts/{account_id}/templates/{template_id}/draft:
+  /v2/accounts/{account_id}/templates/{template_id}/published:
     get:
-      summary: Get Template Draft
+      summary: Get Published Template
       description: |
-        Returns a template's draft: the changes saved in the dashboard or
-        through the API that are not published yet. Sends use the published
-        copy, which Get Template returns, until the draft is published.
-
-        A template with no draft answers 404 `template has no draft`; its
-        `has_draft` is false.
-      operationId: getTemplateDraft
+        Returns a transactional template's published copy: the one a send
+        uses, with its content and the variable list a send has to satisfy.
+        Read it to build a send. Get Template returns the working copy
+        instead, which is the draft while one exists. `has_draft` says
+        whether changes are waiting to be published. A campaign design's ID
+        is not addressable here and answers 404.
+      operationId: getPublishedTemplate
       tags:
         - Templates
       parameters:
@@ -8577,11 +8744,11 @@ paths:
         - BearerAuth: ["templates:read"]
       responses:
         '200':
-          description: Template draft
+          description: The template's published copy
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TemplateDraft'
+                $ref: '#/components/schemas/Template'
         '400':
           description: Invalid template_id
           content:
@@ -8601,7 +8768,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Template not found (`template not found`), or the template has no draft (`template has no draft`)
+          description: Template not found
           content:
             application/json:
               schema:
@@ -8641,24 +8808,19 @@ paths:
 
               templateID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
 
-              // A template with no draft returns 404; its HasDraft is false.
-              response, _, err := client.TemplatesAPI.GetTemplateDraft(ctx, accountID, templateID)
+              // The published copy is the one a send uses, so build a send from its
+              // variables. GetTemplate returns the draft instead while one exists.
+              response, _, err := client.TemplatesAPI.GetPublishedTemplate(ctx, accountID, templateID)
               if err != nil {
-                log.Fatalf("Error getting template draft: %v", err)
+                log.Fatalf("Error getting published template: %v", err)
               }
-              fmt.Printf("Draft subject: %s, changed at %s\n", response.Subject, response.UpdatedAt)
+              fmt.Printf("Published subject: %s, draft waiting: %t\n", response.Subject, response.HasDraft)
+              for _, variable := range response.Variables {
+                fmt.Printf("%s required=%t kind=%s\n", variable.Name, variable.Required, variable.Kind)
+              }
             }
 
-        - lang: javascript
-          label: Node.js 22+ (AhaSend SDK)
-          source: |
-            import { AhaSendClient } from "@ahasend/sdk";
-
-            const client = AhaSendClient.fromEnv();
-            const templateId = "00000000-0000-4000-8000-000000000009";
-            const draft = await client.templates.getDraft(templateId);
-            console.log("Template draft found.", { templateId: draft.template_id, subject: draft.subject });
-
+  /v2/accounts/{account_id}/templates/{template_id}/draft:
     delete:
       summary: Discard Template Draft
       description: |
@@ -9182,7 +9344,7 @@ paths:
               $ref: '#/components/schemas/RestoreTemplateVersionRequest'
       responses:
         '200':
-          description: Version restored. The Template object is the published copy; `has_draft` says whether a draft is left.
+          description: Version restored. The Template object is the working copy, the draft while one is left; `has_draft` says whether one is.
           headers:
             Idempotent-Replayed:
               $ref: '#/components/headers/IdempotentReplayed'
@@ -9409,11 +9571,11 @@ paths:
         Creates a campaign template. A campaign template has no draft: what
         the request sets is what a campaign made from the template copies.
 
-        `content.mjml` makes an `advanced` campaign template and
-        `content.html` an `html` one. A campaign template with neither must
-        name its `editor`; without `content` it is created with an empty
-        design, which the dashboard's editor opens. The editor never changes
-        after create.
+        `content.markup` makes a `simple` campaign template, `content.mjml`
+        an `advanced` one and `content.html` an `html` one. A campaign
+        template with none of them must name its `editor`; without `content`
+        it is created with an empty design, which the dashboard's editor
+        opens. The editor never changes after create.
 
         MJML is compiled in strict mode, and HTML must use full `https://`
         URLs for its images and stylesheets: the API cannot upload files.
@@ -9448,11 +9610,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignTemplate'
         '400':
-          description: 'Invalid request: the body or a field. The message names the field and the problem.'
+          description: 'Invalid request: the body or a field. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -9470,7 +9632,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -9481,6 +9643,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateWriteBusy'
 
       x-code-samples:
         - lang: go
@@ -9654,10 +9818,11 @@ paths:
         copies. A name or content equal to the stored one changes nothing, so
         the same request can be repeated safely. The editor never changes.
 
-        The design of a `simple` campaign template can be changed only in the
-        dashboard: send only `content.text` for one. A design saved later in
-        the dashboard, also from an editor opened before this request,
-        replaces the design this request wrote.
+        The design of a `simple` campaign template is written as AhaSend
+        Markup (AhaML) in `content.markup`. A design saved later in the
+        dashboard, also from an editor opened before this request, replaces
+        the design this request wrote: the dashboard's editor saves the whole
+        design.
       operationId: updateCampaignTemplate
       tags:
         - Campaign Templates
@@ -9696,11 +9861,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignTemplate'
         '400':
-          description: Invalid template_id, an invalid body or field, or a request with no changes. The message names the field and the problem.
+          description: Invalid template_id, an invalid body or field, or a request with no changes. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -9724,7 +9889,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -9735,6 +9900,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateWriteBusy'
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -10030,8 +10197,9 @@ paths:
         optional and can be set later with Update Campaign; the campaign
         answers its `issues` until it is ready to send.
 
-        The design comes from `content` (`content.mjml` makes an `advanced`
-        design and `content.html` an `html` one), from an `editor` alone (an
+        The design comes from `content` (`content.markup` makes a `simple`
+        design, `content.mjml` an `advanced` one and `content.html` an `html`
+        one), from an `editor` alone (an
         empty design the dashboard's editor opens), or from a campaign
         template named by `template_id`, which the campaign copies. MJML is
         compiled in strict mode, and HTML must use full `https://` URLs for
@@ -10071,11 +10239,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Campaign'
         '400':
-          description: 'Invalid request: the body or a field, a list, segment or campaign template that does not exist, too many lists or segments, or an audience with no list or segment to send to. The message names the field and the problem.'
+          description: 'Invalid request: the body or a field, a list, segment or campaign template that does not exist, too many lists or segments, or an audience with no list or segment to send to. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -10093,7 +10261,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -10104,6 +10272,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateWriteBusy'
 
       x-code-samples:
         - lang: go
@@ -10290,10 +10460,11 @@ paths:
 
         The change waits for any other change of the same campaign, from the
         dashboard or the API, and a send that starts after it reads it. The
-        design of a `simple` campaign can be changed only in the dashboard:
-        send only `content.text` for one. Between this request and a
-        dashboard editor open on the same campaign, the later design save
-        wins.
+        design of a `simple` campaign is written as AhaSend Markup (AhaML) in
+        `content.markup`. Between this request and a dashboard editor open on
+        the same campaign, the later design save wins, also from an editor
+        opened before this request: the dashboard's editor saves the whole
+        design.
       operationId: updateCampaign
       tags:
         - Campaigns
@@ -10332,11 +10503,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Campaign'
         '400':
-          description: Invalid campaign_id, an invalid body or field, a list or segment that does not exist, too many lists or segments, an audience with no list or segment to send to, or a request with no changes. The message names the field and the problem.
+          description: Invalid campaign_id, an invalid body or field, a list or segment that does not exist, too many lists or segments, an audience with no list or segment to send to, or a request with no changes. The message names the field and the problem. Refused AhaML in `content.markup` also lists its problems in `errors`.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/MarkupErrorResponse'
         '401':
           description: Unauthorized
           content:
@@ -10360,7 +10531,7 @@ paths:
         '422':
           $ref: '#/components/responses/IdempotencyPayloadMismatch'
         '429':
-          description: Too many requests
+          description: 'Too many requests: the API''s rate limit, or the limit on writes that carry `content.markup`. A 429 is not stored for the `Idempotency-Key`, so a retry may use the same key.'
           content:
             application/json:
               schema:
@@ -10371,6 +10542,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/TemplateWriteBusy'
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK

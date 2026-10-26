@@ -107,7 +107,8 @@ CreateCampaignTemplate Create Campaign Template
 
 A campaign template has no draft: what the request sets is what a campaign
 made from the template copies. Without Content it is created with an empty
-design of its Editor, which the dashboard's editor opens.
+design of its Editor, which the dashboard's editor opens. It returns 503 when
+the AhaML in Content.Markup cannot be read now; retry after Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -144,7 +145,8 @@ UpdateCampaignTemplate Update Campaign Template
 The change applies at once; campaigns already made from the template keep
 their own copies. A request that changes nothing changes nothing, so it can be
 repeated. A design saved later in the dashboard, also from an editor opened
-before this request, replaces the design this request wrote.
+before this request, replaces the design this request wrote. It returns 503
+when the AhaML in Content.Markup cannot be read now; retry after Retry-After.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
