@@ -159,7 +159,7 @@ func TestKnownValuesMatchSpec(t *testing.T) {
 		},
 		{
 			name: "origin",
-			spec: schemas["WebhookOrigin"].Enum,
+			spec: schemas["WebhookOrigin"].KnownValues,
 			declared: []string{
 				string(OriginRecipient),
 				string(OriginAPI),
@@ -187,6 +187,7 @@ func TestKnownValuesMatchSpec(t *testing.T) {
 
 	t.Run("open sets have no enum", func(t *testing.T) {
 		assert.Empty(t, schemas["WebhookComplaint"].Properties["reporter"].Enum)
+		assert.Empty(t, schemas["WebhookOrigin"].Enum)
 		assert.Empty(t, changedFields.Enum)
 		require.NotNil(t, changedFields.Items)
 		assert.Empty(t, changedFields.Items.Enum)
@@ -557,6 +558,12 @@ func TestContactEventParsing(t *testing.T) {
 		assert.Equal(t, "5f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b", *event.Data.SegmentID)
 		assert.Nil(t, event.Data.List)
 		assert.Nil(t, event.Data.ListContact)
+	})
+
+	t.Run("an unknown origin decodes", func(t *testing.T) {
+		event, ok := parseSigned(t, verifier, contactEventPayload("contact.created", "some_future_origin", "")).(*ContactCreatedEvent)
+		require.True(t, ok)
+		assert.Equal(t, WebhookOrigin("some_future_origin"), event.Data.Origin)
 	})
 
 	t.Run("contact.complained about a campaign sent to a segment", func(t *testing.T) {

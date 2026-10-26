@@ -117,6 +117,12 @@ type WebhookComplaint struct {
 // WebhookOrigin says who made the change that a contact or suppression event
 // reports. Message events, route events and domain.dns_error carry no
 // origin.
+//
+// The set is open: AhaSend can add an origin, and a webhook whose origin
+// filter is nil gets its events. The constants below describe the origins
+// that exist today. The underlying type is string so that an unfamiliar
+// value decodes without error: keep a default branch for it, and never
+// reject a delivery because of it.
 type WebhookOrigin string
 
 const (

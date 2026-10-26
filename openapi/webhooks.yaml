@@ -1981,7 +1981,6 @@ components:
 
     WebhookOrigin:
       type: string
-      enum: [recipient, api, dashboard, system]
       description: |
         Who made the change: `recipient` for the contact or recipient, through
         an unsubscribe link, a one-click unsubscribe, or a spam complaint;
@@ -1989,6 +1988,15 @@ components:
         the AhaSend dashboard; `system` for AhaSend, for example after a
         bounce, an expired message or an email validation, or when AhaSend
         support makes the change.
+
+        This is **not** a closed set: AhaSend can add an origin, and a webhook
+        whose origin filter is `null` gets its events. Keep a fallback branch
+        for an unfamiliar value, and never reject a delivery because of it.
+      x-known-values:
+        - recipient
+        - api
+        - dashboard
+        - system
 
     ContactWebhookPayload:
       type: object

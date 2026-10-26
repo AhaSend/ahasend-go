@@ -533,7 +533,7 @@ For the same reason, answer 2xx when `ParseRequest` returns `webhooks.ErrUnknown
 
 For a campaign message, `from` in message events includes the sender's name, as `Name <address>`, and `CampaignID` is set. `ListID` is nil when the campaign did not reach the recipient through a list, and `SegmentID` is nil when it did not reach the recipient through a segment. In route events, `to` and `reply_to` can carry display names and several addresses, and `spam_score` (a `*float64`) can be below 0 or above 10.
 
-Contact and suppression events carry `Origin`, which says who made the change: `webhooks.OriginRecipient`, `OriginAPI`, `OriginDashboard` or `OriginSystem`. New values can also appear in `WebhookComplaint.Reporter` and in `ContactUpdatedEventData.ChangedFields`: handle them like classifications. On a contact event about the unsubscribe from all lists, and on `contact.complained` for a campaign sent to a segment, `List` and `ListContact` are `nil`.
+Contact and suppression events carry `Origin`, which says who made the change: `webhooks.OriginRecipient`, `OriginAPI`, `OriginDashboard` or `OriginSystem`. New values can appear in `Origin`, in `WebhookComplaint.Reporter` and in `ContactUpdatedEventData.ChangedFields`: handle them like classifications. On a contact event about the unsubscribe from all lists, and on `contact.complained` for a campaign sent to a segment, `List` and `ListContact` are `nil`.
 
 Events:
 - `message.reception`, `message.delivered`, `message.transient_error`, `message.failed`, `message.bounced`, `message.suppressed`, `message.opened`, `message.clicked`, `message.unsubscribed`, `message.complained`
