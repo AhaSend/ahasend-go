@@ -54,8 +54,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-
-	"github.com/AhaSend/ahasend-go/models/common"
 )
 
 var (
@@ -810,9 +808,10 @@ func (c *APIClient) handleErrorResponse(resp *http.Response, body []byte, method
 	apiErr.RetryAfter = retryAfterSeconds(resp, apiErr.Type)
 
 	// Try to parse error response body
-	var errorResp common.ErrorResponse
+	var errorResp errorResponseBody
 	if err := json.Unmarshal(body, &errorResp); err == nil {
 		apiErr.Message = errorResp.Message
+		apiErr.Errors = markupProblems(errorResp.Errors)
 	} else {
 		// Fallback to HTTP status text if parsing fails
 		apiErr.Message = http.StatusText(resp.StatusCode)

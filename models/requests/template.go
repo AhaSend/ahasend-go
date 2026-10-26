@@ -15,14 +15,20 @@ type GetTemplatesParams struct {
 }
 
 // TemplateContentInput is the content of a template write. It holds at most
-// one of MJML and HTML, and at least one of MJML, HTML and Text.
+// one of MJML and HTML, not Markup and MJML together, and at least one of
+// Markup, MJML, HTML and Text.
 //
 // The content of a draft, or of a template with no draft, can be sent back
 // with its non-empty fields set: an MJML or HTML equal to the stored one keeps
-// the stored HTML. While a draft exists, a template's content is the published
-// one, and sending it back replaces the draft's design, so leave Content nil
-// when it does not change. For a simple template, send only Text: its HTML can
-// be changed only in the dashboard.
+// the stored HTML, and a Markup that prints the same as the stored design
+// keeps that design. While a draft exists, a template's content is the
+// published one, and sending it back replaces the draft's design, so leave
+// Content nil when it does not change.
+//
+// A simple template's design is written as AhaSend Markup (AhaML) in Markup,
+// and its HTML is made from the design. Beside Markup, HTML is ignored;
+// without Markup, an HTML equal to the stored HTML of the draft or of the
+// published copy is ignored, and any other HTML is refused.
 type TemplateContentInput struct {
 	// MJML is the MJML source, only for advanced templates. It is compiled in
 	// strict mode. Images and stylesheets must use https:// URLs; a template
@@ -31,24 +37,34 @@ type TemplateContentInput struct {
 	// HTML is the HTML, only for html templates. Images and stylesheets must
 	// use https:// URLs; a template variable such as {{ logo_url }} is fine.
 	HTML *string `json:"html,omitempty"`
-	// Text is the plain text version. Beside a new MJML or HTML, a nil Text
-	// keeps a custom text, which must still render as a sent text must;
+	// Text is the plain text version. Beside a new Markup, MJML or HTML, a nil
+	// Text keeps a custom text, which must still render as a sent text must;
 	// otherwise, and on a create, it makes the text from the new HTML.
-	// Without a new MJML or HTML, a nil Text keeps the text. Point it at ""
-	// (sent as null) to make the text again from the HTML. Any other value
-	// sets the text, except that beside a new MJML or HTML a text equal to the
-	// text made from the old HTML is made again from the new one.
+	// Without a new Markup, MJML or HTML, a nil Text keeps the text. Point it
+	// at "" (sent as null) to make the text again from the HTML. Any other
+	// value sets the text, except that beside a new Markup, MJML or HTML a
+	// text equal to the text made from the old HTML is made again from the
+	// new one.
 	Text *string `json:"text,omitempty"`
+	// Markup is the design as AhaSend Markup (AhaML), only for simple
+	// templates. On a create, and on a campaign with no design yet, it means
+	// common.TemplateEditorSimple. The answer lists warnings about it in
+	// MarkupWarnings, and a refused Markup gives an api.APIError whose Errors
+	// list its problems. A nil Markup is not sent; a pointer to "" is sent and
+	// refused, as it is not AhaML. Writes that carry Markup count against a
+	// per-account limit, beside the API's own rate limit.
+	Markup *string `json:"markup,omitempty"`
 }
 
 // MarshalJSON sends a Text that points at "" as null, which makes the text
 // again from the HTML.
 func (c TemplateContentInput) MarshalJSON() ([]byte, error) {
 	wire := struct {
-		MJML *string         `json:"mjml,omitempty"`
-		HTML *string         `json:"html,omitempty"`
-		Text json.RawMessage `json:"text,omitempty"`
-	}{MJML: c.MJML, HTML: c.HTML}
+		MJML   *string         `json:"mjml,omitempty"`
+		HTML   *string         `json:"html,omitempty"`
+		Text   json.RawMessage `json:"text,omitempty"`
+		Markup *string         `json:"markup,omitempty"`
+	}{MJML: c.MJML, HTML: c.HTML, Markup: c.Markup}
 
 	var err error
 	if wire.Text, err = encodeString(c.Text); err != nil {
@@ -65,8 +81,9 @@ type CreateTemplateRequest struct {
 	// Name is the template name.
 	Name string `json:"name"`
 	// Editor is common.TemplateEditorAdvanced, common.TemplateEditorSimple or
-	// common.TemplateEditorHTML. It is required when Content holds neither
-	// MJML nor HTML: MJML means advanced and HTML means html.
+	// common.TemplateEditorHTML. It is required when Content holds none of
+	// Markup, MJML and HTML: Markup means simple, also beside HTML; MJML means
+	// advanced and HTML alone means html.
 	Editor *string `json:"editor,omitempty"`
 	// Subject is the subject.
 	Subject *string `json:"subject,omitempty"`

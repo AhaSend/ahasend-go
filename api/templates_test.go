@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"testing"
 
 	"github.com/AhaSend/ahasend-go"
 	"github.com/AhaSend/ahasend-go/internal/prismmock"
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/AhaSend/ahasend-go/models/responses"
 	"github.com/google/uuid"
@@ -92,8 +94,8 @@ func Test_ahasend_TemplatesAPIService(t *testing.T) {
 		validatePrismResponse(t, response, httpResponse, err)
 	})
 
-	t.Run("GetTemplateDraft", func(t *testing.T) {
-		response, httpResponse, err := apiClient.TemplatesAPI.GetTemplateDraft(auth, accountID, templateID)
+	t.Run("GetPublishedTemplate", func(t *testing.T) {
+		response, httpResponse, err := apiClient.TemplatesAPI.GetPublishedTemplate(auth, accountID, templateID)
 		validatePrismResponse(t, response, httpResponse, err)
 	})
 
@@ -257,4 +259,96 @@ func TestTemplatesAPIErrorTypes(t *testing.T) {
 			assert.Equal(t, "template request failed", apiErr.Message)
 		})
 	}
+}
+
+func TestTemplatesAPIRefusedMarkupListsEveryProblem(t *testing.T) {
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{
+			"message":"content.markup has 2 problems",
+			"errors":[
+				{"code":"unknown_attribute","message":"Paragraph has no attribute \"color\"","line":4,"column":14,"path":"Email > Section[2] > Paragraph[1]","hint":"wrap the text in <Color value=\"...\"> instead"},
+				{"code":"too_large","message":"content.markup is larger than 1 MiB"}
+			]
+		}`))
+	})
+	defer cleanup()
+
+	markup := `<Email version="1"><Paragraph color="red">Hi</Paragraph></Email>`
+	_, httpResponse, err := client.TemplatesAPI.UpdateTemplate(context.Background(), uuid.New(), uuid.New(), requests.UpdateTemplateRequest{
+		Content: &requests.TemplateContentInput{Markup: &markup},
+	})
+
+	require.Error(t, err)
+	require.NotNil(t, httpResponse)
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, ErrorTypeValidation, apiErr.Type)
+	assert.Equal(t, "content.markup has 2 problems", apiErr.Message)
+	assert.Equal(t, []common.MarkupProblem{
+		{
+			Code:    "unknown_attribute",
+			Message: `Paragraph has no attribute "color"`,
+			Line:    4,
+			Column:  14,
+			Path:    "Email > Section[2] > Paragraph[1]",
+			Hint:    `wrap the text in <Color value="..."> instead`,
+		},
+		{Code: "too_large", Message: "content.markup is larger than 1 MiB"},
+	}, apiErr.Errors)
+}
+
+func TestTemplatesAPIOtherErrorsHaveNoProblems(t *testing.T) {
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"content.mjml is not allowed on a simple template"}`))
+	})
+	defer cleanup()
+
+	_, _, err := client.TemplatesAPI.UpdateTemplate(context.Background(), uuid.New(), uuid.New(), requests.UpdateTemplateRequest{
+		Content: &requests.TemplateContentInput{MJML: ahasend.String("<mjml></mjml>")},
+	})
+
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, "content.mjml is not allowed on a simple template", apiErr.Message)
+	assert.Nil(t, apiErr.Errors)
+}
+
+func TestTemplatesAPIErrorsOfAnotherShapeKeepTheMessage(t *testing.T) {
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"x","errors":["y"]}`))
+	})
+	defer cleanup()
+
+	_, _, err := client.TemplatesAPI.GetTemplate(context.Background(), uuid.New(), uuid.New())
+
+	var apiErr *APIError
+	require.True(t, errors.As(err, &apiErr))
+	assert.Equal(t, "x", apiErr.Message)
+	assert.Nil(t, apiErr.Errors)
+}
+
+func TestTemplatesAPIUpdateSendsMarkupAndDecodesWarnings(t *testing.T) {
+	var body string
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"object":"template","editor":"simple","has_draft":true,"content":null,"markup_warnings":[{"code":"jinja_in_text","message":"Text holds {{","line":1,"column":30,"path":"Email > Paragraph[1]"}]}`))
+	})
+	defer cleanup()
+
+	markup := `<Email version="1"><Paragraph>{{ name }}</Paragraph></Email>`
+	template, _, err := client.TemplatesAPI.UpdateTemplate(context.Background(), uuid.New(), uuid.New(), requests.UpdateTemplateRequest{
+		Content: &requests.TemplateContentInput{Markup: &markup},
+	})
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"content":{"markup":"<Email version=\"1\"><Paragraph>{{ name }}</Paragraph></Email>"}}`, body)
+	assert.Equal(t, []common.MarkupProblem{{Code: common.MarkupWarningJinjaInText, Message: "Text holds {{", Line: 1, Column: 30, Path: "Email > Paragraph[1]"}}, template.MarkupWarnings)
 }

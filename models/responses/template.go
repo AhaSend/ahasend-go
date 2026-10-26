@@ -51,6 +51,41 @@ type TemplateVariable struct {
 	ItemFields []string `json:"item_fields,omitempty"`
 }
 
+// Codes of a MarkupError. They say why the design of a simple template could
+// not be given as AhaSend Markup (AhaML).
+//
+//   - MarkupErrorNoDesign: the design has no blocks yet.
+//   - MarkupErrorHTMLBlock: the design holds an HTML block, which AhaML cannot
+//     show. Remove the block in the dashboard to read and write the design as
+//     AhaML.
+//   - MarkupErrorUnmappedBlock: the design holds a block or a mark that AhaML
+//     has no tag for. The message names its type.
+//   - MarkupErrorBadStoredValue: the design holds a value that AhaML cannot
+//     write. The message names the block and the attribute.
+//   - MarkupErrorRendererUnavailable: AhaML cannot be made now. Read the
+//     design again later.
+//   - MarkupErrorRateLimited: the account reads and writes AhaML more often
+//     than its limit allows. Read the design again in a second.
+//
+// Code is a plain string, so a code this version of the SDK does not know
+// still decodes.
+const (
+	MarkupErrorNoDesign            = "no_design"
+	MarkupErrorHTMLBlock           = "html_block"
+	MarkupErrorUnmappedBlock       = "unmapped_block"
+	MarkupErrorBadStoredValue      = "bad_stored_value"
+	MarkupErrorRendererUnavailable = "renderer_unavailable"
+	MarkupErrorRateLimited         = "rate_limited"
+)
+
+// MarkupError tells why TemplateContent.Markup is nil for a simple design.
+type MarkupError struct {
+	// Code is one of the MarkupError constants.
+	Code string `json:"code"`
+	// Message says what went wrong, in words for a person.
+	Message string `json:"message"`
+}
+
 // TemplateContent is the content of a template, a draft or a version. A
 // field that does not apply to the template's editor is empty, and so are
 // MJML, HTML and Text when there is nothing to show.
@@ -66,10 +101,20 @@ type TemplateContent struct {
 	// the HTML. A text made from the HTML is made again when the design
 	// changes.
 	TextIsCustom bool `json:"text_is_custom"`
+	// Markup is the design of a simple template as AhaSend Markup (AhaML),
+	// which TemplateContentInput.Markup writes back. It is nil for other
+	// editors, and for a simple design when AhaML cannot be made; MarkupError
+	// then says why.
+	Markup *string `json:"markup,omitempty"`
+	// MarkupError tells why Markup is nil for a simple design. It is nil when
+	// Markup is set, and for other editors.
+	MarkupError *MarkupError `json:"markup_error,omitempty"`
 }
 
-// Template represents an account's transactional template. Its fields are
-// those of the published copy, which sends use.
+// Template represents an account's transactional template. GetTemplate and
+// the writes answer its working copy, the draft while one exists;
+// GetPublishedTemplate and GetTemplates answer its published copy, which sends
+// use.
 type Template struct {
 	Object    string             `json:"object"`
 	ID        uuid.UUID          `json:"id"`
@@ -90,28 +135,18 @@ type Template struct {
 	// common.TemplateEditorHTML.
 	Editor string `json:"editor"`
 	// HasDraft reports whether the template has changes that are not
-	// published yet. GetTemplateDraft returns them.
+	// published yet. GetTemplate returns them; PublishTemplate publishes them
+	// and DiscardTemplateDraft drops them.
 	HasDraft bool `json:"has_draft"`
-	// Content is the published content. It is nil when the published copy has
-	// no body, and in the items of GetTemplates.
+	// Content is this copy's content. It is nil when the copy has no body, as
+	// for the published copy of a template that was never published, and in
+	// the items of GetTemplates.
 	Content *TemplateContent `json:"content,omitempty"`
-}
-
-// TemplateDraft represents a template's draft: the changes saved in the
-// dashboard or through the API that are not published yet.
-type TemplateDraft struct {
-	Object     string             `json:"object"`
-	TemplateID uuid.UUID          `json:"template_id"`
-	UpdatedAt  time.Time          `json:"updated_at"`
-	Subject    string             `json:"subject"`
-	Preheader  string             `json:"preheader"`
-	Variables  []TemplateVariable `json:"variables"`
-	// From is the draft's default sender, nil when it has none.
-	From *common.SenderAddress `json:"from,omitempty"`
-	// ReplyTo is the draft's default reply-to address, nil when it has none.
-	ReplyTo *common.SenderAddress `json:"reply_to,omitempty"`
-	// Content is the draft's content, nil when the draft has no body.
-	Content *TemplateContent `json:"content,omitempty"`
+	// MarkupWarnings are the warnings about the AhaML a write stored, up to
+	// the first 100. Only the answer to a write that carried
+	// TemplateContentInput.Markup sets it, as an empty slice when there are
+	// no warnings; it is nil in every other answer.
+	MarkupWarnings []common.MarkupProblem `json:"markup_warnings,omitempty"`
 }
 
 // Publisher types of a template version.

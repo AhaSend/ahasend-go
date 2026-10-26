@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -85,6 +86,33 @@ func TestParseAPIError(t *testing.T) {
 		assert.Equal(t, 400, apiErr.StatusCode)
 		assert.Equal(t, `{"message": "Invalid email format"}`, apiErr.Message)
 		assert.Equal(t, body, apiErr.Raw)
+	})
+
+	t.Run("Refused AhaML", func(t *testing.T) {
+		resp := httptest.NewRecorder()
+		resp.WriteHeader(http.StatusBadRequest)
+		body := []byte(`{"message":"content.markup has 1 problem","errors":[{"code":"bad_url","message":"Image src must be an https:// URL","line":3,"column":10,"path":"Email > Image[1]"}]}`)
+
+		apiErr := ParseAPIError(resp.Result(), body)
+
+		assert.Equal(t, string(body), apiErr.Message)
+		assert.Equal(t, []common.MarkupProblem{{
+			Code:    "bad_url",
+			Message: "Image src must be an https:// URL",
+			Line:    3,
+			Column:  10,
+			Path:    "Email > Image[1]",
+		}}, apiErr.Errors)
+	})
+
+	t.Run("Errors that are not problems", func(t *testing.T) {
+		resp := httptest.NewRecorder()
+		resp.WriteHeader(http.StatusBadRequest)
+
+		for _, body := range []string{`{"message":"x","errors":["y"]}`, `{"message":"x","errors":[{"field":"name"}]}`, `not json`} {
+			apiErr := ParseAPIError(resp.Result(), []byte(body))
+			assert.Nil(t, apiErr.Errors, body)
+		}
 	})
 
 	t.Run("Rate limit with retry-after", func(t *testing.T) {

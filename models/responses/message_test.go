@@ -257,3 +257,26 @@ func TestMessageDecodesTemplateID(t *testing.T) {
 		assert.Nil(t, msg.TemplateID)
 	})
 }
+
+func TestDeliveryEventDecodesReportMessageID(t *testing.T) {
+	t.Run("out-of-band bounce", func(t *testing.T) {
+		payload := `{"time":"2026-10-20T10:00:00Z","log":"bounced after delivery","status":"bounced","report_message_id":"22222222-2222-4222-8222-222222222222"}`
+
+		var event DeliveryEvent
+		require.NoError(t, json.Unmarshal([]byte(payload), &event))
+
+		require.NotNil(t, event.ReportMessageID)
+		assert.Equal(t, uuid.MustParse("22222222-2222-4222-8222-222222222222"), *event.ReportMessageID)
+
+		encoded, err := json.Marshal(event)
+		require.NoError(t, err)
+		assert.JSONEq(t, payload, string(encoded))
+	})
+
+	t.Run("any other attempt", func(t *testing.T) {
+		var event DeliveryEvent
+		require.NoError(t, json.Unmarshal([]byte(`{"time":"2026-10-20T10:00:00Z","log":"250 OK","status":"delivered"}`), &event))
+
+		assert.Nil(t, event.ReportMessageID)
+	})
+}

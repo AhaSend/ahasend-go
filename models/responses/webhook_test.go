@@ -144,3 +144,22 @@ func TestWebhook_JSONMarshaling(t *testing.T) {
 		assert.Contains(t, result, "enabled")
 	})
 }
+
+func TestWebhookDecodesEventSettingsAndOrigins(t *testing.T) {
+	t.Run("every origin", func(t *testing.T) {
+		var webhook Webhook
+		require.NoError(t, json.Unmarshal([]byte(`{"on_contact_created":true,"on_suppression_deleted":true,"origins":null}`), &webhook))
+
+		assert.True(t, webhook.OnContactCreated)
+		assert.True(t, webhook.OnSuppressionDeleted)
+		assert.False(t, webhook.OnContactComplained)
+		assert.Nil(t, webhook.Origins)
+	})
+
+	t.Run("some origins", func(t *testing.T) {
+		var webhook Webhook
+		require.NoError(t, json.Unmarshal([]byte(`{"origins":["recipient","system"]}`), &webhook))
+
+		assert.Equal(t, []string{"recipient", "system"}, webhook.Origins)
+	})
+}
