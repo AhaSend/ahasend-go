@@ -8,9 +8,10 @@ info:
 
     Webhooks are HTTP callbacks that AhaSend sends to your configured URLs when specific events occur. They provide real-time notifications about:
 
-    - **Message Events**: Email delivery status (sent, delivered, bounced, opened, etc.)
-    - **Suppression Events**: When email addresses are automatically suppressed
+    - **Message Events**: Email delivery status (sent, delivered, bounced, opened, unsubscribed, reported as spam, etc.)
+    - **Suppression Events**: When a suppression is created or deleted, by a recipient, by AhaSend, or by you
     - **Domain Events**: DNS configuration issues
+    - **Contact Events**: Changes to your contacts and their list memberships, such as a new contact, an unsubscribe, or a spam complaint
     - **Route Events**: Inbound email processing
 
     ## Standard Webhooks Compatibility
@@ -56,8 +57,106 @@ info:
     }
     ```
 
-    Message, suppression, and domain webhooks use `webhook_id`. Route
+    Message, suppression, domain, and contact webhooks use `webhook_id`. Route
     webhooks use `route_id` instead.
+
+    ### Event Order
+
+    Events are not delivered in the order in which they happened. Many workers
+    send them, and each delivery is retried on its own, so a later event can
+    arrive first. Order the events by their `timestamp`. For a contact or a
+    suppression event it is the time of the change; for `message.unsubscribed`
+    and `message.complained`, the time of the unsubscribe request or of the
+    spam complaint report.
+
+    ### Message Events
+
+    Transactional and campaign messages send the same message events with the
+    same payload. The events of a campaign message also carry `campaign_id`,
+    `list_id`, and `segment_id`.
+
+    AhaSend reads the message when it sends a message event. When the message
+    is deleted before then, or for a campaign message its campaign recipient or
+    its contact, the event is not sent. An event of a campaign message is also
+    not sent when it happens before AhaSend has logged that it received the
+    message.
+
+    ### Contact Events
+
+    Contact events are available to accounts with the marketing features. They
+    report changes to your contacts and to their list memberships (list
+    contacts). Every contact event carries the `contact` and its `origin`. The
+    events that can be about a list membership (`contact.added_to_list`,
+    `contact.removed_from_list`, `contact.subscribed`,
+    `contact.unsubscribed`, and `contact.complained`) also carry the `list`
+    and the `list_contact`.
+
+    A webhook scoped to some of your domains gets a contact event only when
+    an email from one of those domains caused it: an unsubscribe, a
+    complaint, or a bounce that disables the contact. A change made through
+    the API or the dashboard, or by email validation, has no domain and goes
+    only to global webhooks.
+
+    A contact event is sent only for a real change. A write that leaves the
+    contact and its memberships as they were sends nothing. One write sends one
+    event for each kind of change that it makes: one for each membership that
+    it adds, removes, or changes the status of, one `contact.updated` for the
+    contact's fields, and one for the contact's unsubscribe from all lists.
+    There is one exception: a spam complaint about a campaign sent to a
+    segment sends `contact.complained` when AhaSend records the complaint for
+    the campaign's recipient, whatever the contact's state.
+
+    **Unsubscribe from all lists**: The contact's `unsubscribed` field
+    unsubscribes the contact from all lists. When it changes from `false` to
+    `true`, AhaSend sends `contact.unsubscribed`, or `contact.complained` when
+    a spam complaint about a campaign sent to a segment changes it. When it
+    changes from `true` to `false`, AhaSend sends `contact.subscribed`. These
+    events are not about one list, so their `list` and `list_contact` are
+    `null`. A contact that is created with `unsubscribed: true` sends only
+    `contact.created`.
+
+    **Campaigns sent to a segment**: A segment is not a list, so a recipient
+    of a campaign sent to a segment who unsubscribes or reports the email as
+    spam unsubscribes from all lists. The `contact.unsubscribed` or
+    `contact.complained` event has `list` and `list_contact` set to `null`,
+    and carries the `campaign_id` and the `segment_id`.
+
+    **What sends no contact event**:
+    - A change of a membership's status to `unconfirmed`
+    - Importing contacts from a CSV file
+    - Saving a contact search as a list
+    - Removing a contact field from all contacts
+    - Email validation results (`validation_status` and `last_validated_at`). A validation that blocks a contact changes its `status`, and that sends `contact.updated`.
+    - The memberships that are deleted with their contact: `contact.deleted` says that the contact and all its memberships are gone
+    - Deleting a list: the list's memberships are kept
+
+    ### Origin
+
+    Contact and suppression events carry `origin`, which says who made the change:
+
+    - `recipient`: the contact or recipient, through an unsubscribe link, a one-click unsubscribe, or a spam complaint
+    - `api`: you, through the AhaSend API
+    - `dashboard`: you, through the AhaSend dashboard
+    - `system`: AhaSend, for example after a bounce, an expired message or an email validation, or when AhaSend support makes the change
+
+    Message events and `domain.dns_error` have no `origin`: a recipient, a mail
+    server, or a DNS check always causes them.
+
+    **Origin filter**: Each webhook has an `origins` setting, the list of
+    origins whose contact and suppression events it gets. The default is
+    `null`, which means every origin. A list that holds all four origins is
+    saved as `null`, so that an origin added later reaches the webhook too. An
+    empty list is refused: to stop contact or suppression events, turn them
+    off. Events without an `origin` (message events and `domain.dns_error`)
+    always pass the filter. In the dashboard, the setting is "Send changes
+    made by".
+
+    **Prevent loops**: A handler that writes to the AhaSend API every time it
+    receives `contact.updated` receives its own write as a new
+    `contact.updated` event, with `origin: api`. Make sure that the handler
+    does not write again when the contact already has the values it wants, or
+    set the webhook's `origins` to leave out `api`, so that it does not get the
+    changes made through the API.
 
     ## Getting Started
 
@@ -448,6 +547,105 @@ webhooks:
         '204':
           description: Webhook received successfully
 
+  message.unsubscribed:
+    post:
+      summary: Message Unsubscribed Event
+      description: |
+        &nbsp;
+
+        Triggered when the recipient unsubscribes through the unsubscribe link of your campaign email, or through the one-click unsubscribe of their email client (RFC 8058). This event is sent for campaign email.
+
+        `data.unsubscribe.method` is `one_click` for a one-click unsubscribe (RFC 8058), and `link` for any other unsubscribe request, for example through the link.
+
+        **Repeats**: This event is sent for every unsubscribe request that AhaSend accepts for the message, also when the recipient is already unsubscribed or suppressed, and again when the recipient uses the same link a second time. AhaSend sends at most one event per message in each 10-minute period, and the contact events of the same requests are not limited this way, so a contact event can arrive without a `message.unsubscribed` of its own. Drop the repeats by `type` and `data.id`. The contact events and the `suppression.created` event of the same request are sent only when the request changes something.
+
+        **When it's sent**: When AhaSend accepts an unsubscribe request for the message.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageUnsubscribedWebhookPayload'
+            example:
+              type: "message.unsubscribed"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2024-05-06T10:25:16.687031577Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                event: "on_unsubscribed"
+                from: "Example News <news@example.com>"
+                recipient: "recipient@example.com"
+                subject: "Our October news"
+                message_id_header: "<message-id-12345@localhost>"
+                id: "407926766d2711f09b30960002cafe7c"
+                is_bot: false
+                unsubscribe:
+                  method: "one_click"
+                campaign_id: "8b0f4c2e-5d1a-4f6b-9c3e-2a7d1e9f0b44"
+                list_id: "c3e1a9d2-7f4b-4e8a-b5c6-1d2e3f4a5b6c"
+                segment_id: null
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  message.complained:
+    post:
+      summary: Message Complained Event
+      description: |
+        &nbsp;
+
+        Triggered when the recipient's mailbox provider reports your campaign email as spam through its feedback loop. This event is sent for campaign email.
+
+        `data.complaint.feedback_type` is the feedback type of the report, `abuse` or `fraud`. `data.complaint.reporter` is the feedback loop that sent the report.
+
+        **Repeats**: This event is sent for every complaint report that AhaSend matches to the message, also when the recipient is already unsubscribed or suppressed. Drop the repeats by `type` and `data.id`. The contact events and the `suppression.created` event of the same report are sent only when the report changes something, with one exception: a complaint about a campaign sent to a segment sends `contact.complained` when AhaSend records the complaint for the campaign's recipient, also when the contact is already unsubscribed.
+
+        **When it's sent**: When AhaSend receives a spam complaint report and matches it to the message.
+      tags:
+        - Message Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageComplainedWebhookPayload'
+            example:
+              type: "message.complained"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2024-05-06T10:30:16.687031577Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                event: "on_complained"
+                from: "Example News <news@example.com>"
+                recipient: "recipient@example.com"
+                subject: "Our October news"
+                message_id_header: "<message-id-12345@localhost>"
+                id: "407926766d2711f09b30960002cafe7c"
+                is_bot: false
+                complaint:
+                  feedback_type: "abuse"
+                  reporter: "yahoo"
+                campaign_id: "8b0f4c2e-5d1a-4f6b-9c3e-2a7d1e9f0b44"
+                list_id: "c3e1a9d2-7f4b-4e8a-b5c6-1d2e3f4a5b6c"
+                segment_id: null
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
   # Suppression Event Webhooks
   suppression.created:
     post:
@@ -455,18 +653,24 @@ webhooks:
       description: |
         &nbsp;
 
-        Triggered when a suppression is created for an email address.
+        Triggered when a suppression is created for an email address, or when an existing suppression gets a new reason.
 
         **Why suppressions are created**:
-        - Multiple hard bounces from the same email address
-        - Repeated soft bounces over time
-        - Manual suppression through the API or dashboard
+        - Multiple hard bounces from the same email address (`origin: system`)
+        - Repeated soft bounces over time (`origin: system`)
+        - The recipient reports a transactional email as spam (reason `FBL Complaint Report`, `origin: recipient`)
+        - The recipient unsubscribes through the unsubscribe link of a transactional email (reason `Unsubscribed`, `origin: recipient`)
+        - You create a suppression through the API (`origin: api`). A request without a domain creates a suppression on each domain of your account, and sends one event for each.
 
-        **Auto-expiration**: Suppressions automatically expire after 30 days to allow for temporary issues to be resolved.
+        **Expiration**: A suppression after delivery errors expires after at most 30 days, depending on the error, to allow for temporary issues to be resolved. A suppression after an unsubscribe or a spam complaint lasts 10 years.
 
         **Impact**: Future emails to this address will be automatically suppressed until the suppression expires or is manually removed.
 
-        **When it's sent**: When a new suppression is added to your account.
+        `data` is the suppression as it was right after the change, and `timestamp` is the time of the change. For a suppression that got a new reason, `data.created_at` stays the time the suppression was first created, so store suppressions by `data.recipient` and `data.sending_domain`.
+
+        **No event**: The removal of expired suppressions. `data.expires_at` already says when the suppression ends.
+
+        **When it's sent**: When a new suppression is added to your account, or when an existing suppression gets a new reason, for example when a recipient unsubscribes after a bounce. A repeat of an existing suppression, such as a second bounce or a second click on the same unsubscribe link, sends no event, even when it moves the expiry later.
       tags:
         - Suppression Events
       requestBody:
@@ -481,11 +685,62 @@ webhooks:
               timestamp: "2024-05-06T12:57:06.451529527Z"
               data:
                 account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "system"
                 recipient: "bounced@example.com"
                 created_at: "2024-05-06T12:57:06.451529617Z"
                 expires_at: "2024-06-05T12:57:06.451529617Z"
                 reason: "Too many hard bounces"
                 sending_domain: "your-domain.com"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  suppression.deleted:
+    post:
+      summary: Suppression Deleted Event
+      description: |
+        &nbsp;
+
+        Triggered when a suppression is deleted. Future emails to the address are attempted again.
+
+        **Why suppressions are deleted**:
+        - You delete a suppression through the API (`origin: api`). A request without a domain deletes the suppressions of the address on every domain of your account, and sends one event for each.
+        - You delete a suppression in the dashboard (`origin: dashboard`)
+        - AhaSend support deletes a suppression (`origin: system`)
+
+        `data` is the suppression as it was right before the delete, and `timestamp` is the time of the delete.
+
+        **No event**:
+        - Wiping the suppressions of your account or of a domain (`DELETE /suppressions/all`). After a wipe, read the list again with `GET /suppressions`.
+        - The removal of expired suppressions. `data.expires_at` of `suppression.created` already says when the suppression ends.
+
+        **When it's sent**: When a suppression is deleted.
+      tags:
+        - Suppression Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuppressionWebhookPayload'
+            example:
+              type: "suppression.deleted"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                recipient: "user@example.org"
+                created_at: "2026-10-01T08:00:00Z"
+                expires_at: "2026-10-31T08:00:00Z"
+                reason: "Too many hard bounces"
+                sending_domain: "example.com"
       responses:
         '200':
           description: Webhook received successfully
@@ -537,6 +792,523 @@ webhooks:
                 dkim_valid: false
                 dmarc_valid: false
                 dns_last_checked_at: "2024-05-06T12:59:46.404433312Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  # Contact Event Webhooks
+  contact.created:
+    post:
+      summary: Contact Created Event
+      description: |
+        &nbsp;
+
+        Triggered when a contact is created, through the API or the dashboard.
+
+        `data.contact` is the contact as it was created. A contact that is created with `unsubscribed: true` sends only this event.
+
+        **No event**: Contacts that a CSV import creates.
+
+        **When it's sent**: When a contact is created.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactCreatedWebhookPayload'
+            example:
+              type: "contact.created"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.updated:
+    post:
+      summary: Contact Updated Event
+      description: |
+        &nbsp;
+
+        Triggered when a field of a contact changes: `email`, `first_name`, `last_name`, `status`, `status_reason`, or `attributes`.
+
+        `data.contact` is the contact as it was right after the change. `data.changed_fields` lists the fields whose values changed; a change to any key of `attributes` lists `attributes`. In rare cases, when two batch requests write the same new contact at the same time, `changed_fields` lists every field that the later request set.
+
+        **No event**:
+        - A write that changes no field, or that changes only `updated_at`
+        - The unsubscribe from all lists (`unsubscribed` and `unsubscribed_at`), which sends `contact.unsubscribed` or `contact.subscribed`
+        - Email validation results (`validation_status` and `last_validated_at`). A validation that blocks a contact changes its `status`, and that sends this event.
+        - A CSV import, and removing a contact field from all contacts
+
+        **When it's sent**: When a field of a contact changes.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactUpdatedWebhookPayload'
+            example:
+              type: "contact.updated"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                changed_fields:
+                  - "first_name"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.deleted:
+    post:
+      summary: Contact Deleted Event
+      description: |
+        &nbsp;
+
+        Triggered when a contact is deleted.
+
+        `data.contact` is the contact as it was right before the delete. The contact's list memberships are deleted with it, and they send no `contact.removed_from_list`.
+
+        **When it's sent**: When a contact is deleted.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactDeletedWebhookPayload'
+            example:
+              type: "contact.deleted"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.added_to_list:
+    post:
+      summary: Contact Added to List Event
+      description: |
+        &nbsp;
+
+        Triggered when a contact is added to a list, with any subscription status.
+
+        `data.list_contact` is the new membership, and its `subscription_status` is the status that the contact got on the list. A new membership sends only this event, whatever its status.
+
+        **No event**: A CSV import to a list, and saving a contact search as a list.
+
+        **When it's sent**: When a contact is added to a list.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactAddedToListWebhookPayload'
+            example:
+              type: "contact.added_to_list"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                list:
+                  id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  name: "Newsletter"
+                list_contact:
+                  object: "list_contact"
+                  list_id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  contact_id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  email: "someone@example.com"
+                  subscription_status: "confirmed"
+                  subscribed_at: "2026-09-21T10:15:00Z"
+                  unsubscribed_at: null
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.removed_from_list:
+    post:
+      summary: Contact Removed from List Event
+      description: |
+        &nbsp;
+
+        Triggered when a contact is removed from a list.
+
+        `data.list_contact` is the membership as it was right before the removal.
+
+        **No event**: Deleting the contact (`contact.deleted` says that its memberships are gone too), and deleting the list (the list's memberships are kept).
+
+        **When it's sent**: When a contact is removed from a list.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactRemovedFromListWebhookPayload'
+            example:
+              type: "contact.removed_from_list"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                list:
+                  id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  name: "Newsletter"
+                list_contact:
+                  object: "list_contact"
+                  list_id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  contact_id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  email: "someone@example.com"
+                  subscription_status: "confirmed"
+                  subscribed_at: "2026-09-21T10:15:00Z"
+                  unsubscribed_at: null
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.subscribed:
+    post:
+      summary: Contact Subscribed Event
+      description: |
+        &nbsp;
+
+        Triggered when a membership's subscription status becomes `confirmed`, or when the contact's unsubscribe from all lists is cleared (`unsubscribed` changes to `false`).
+
+        For a membership, `data.previous_subscription_status` is the status before the change. For the unsubscribe from all lists, `data.list` and `data.list_contact` are `null`.
+
+        **No event**: A new membership, which sends `contact.added_to_list`.
+
+        **When it's sent**: When a contact's membership of a list becomes `confirmed`, or when its unsubscribe from all lists is cleared.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactSubscribedWebhookPayload'
+            example:
+              type: "contact.subscribed"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "api"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                list:
+                  id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  name: "Newsletter"
+                list_contact:
+                  object: "list_contact"
+                  list_id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  contact_id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  email: "someone@example.com"
+                  subscription_status: "confirmed"
+                  subscribed_at: "2026-09-21T10:15:00Z"
+                  unsubscribed_at: null
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                previous_subscription_status: "unsubscribed"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.unsubscribed:
+    post:
+      summary: Contact Unsubscribed Event
+      description: |
+        &nbsp;
+
+        Triggered when a membership's subscription status becomes `unsubscribed`, or when the contact's unsubscribe from all lists is set (`unsubscribed` changes to `true`).
+
+        A recipient who unsubscribes from a campaign email sends this event with `origin: recipient` and the `campaign_id` of the campaign. For a membership, `data.previous_subscription_status` is the status before the change. For the unsubscribe from all lists, `data.list` and `data.list_contact` are `null`.
+
+        A recipient of a campaign sent to a segment unsubscribes from all lists, so the event has `data.list` and `data.list_contact` set to `null`, and `data.segment_id` is the segment.
+
+        **No event**:
+        - An unsubscribe of a membership or a contact that is already unsubscribed
+        - A change of a membership's status to `unconfirmed`
+        - A new membership, which sends `contact.added_to_list`, and a new contact, which sends `contact.created`
+
+        **When it's sent**: When a contact unsubscribes from a list, or from all lists.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactUnsubscribedWebhookPayload'
+            example:
+              type: "contact.unsubscribed"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "recipient"
+                campaign_id: "3af77d52-096f-42a2-8cc7-b6eccdccff8e"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                list:
+                  id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  name: "Newsletter"
+                list_contact:
+                  object: "list_contact"
+                  list_id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  contact_id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  email: "someone@example.com"
+                  subscription_status: "unsubscribed"
+                  subscribed_at: "2026-09-21T10:15:00Z"
+                  unsubscribed_at: "2026-10-21T10:15:00Z"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                previous_subscription_status: "confirmed"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  contact.complained:
+    post:
+      summary: Contact Complained Event
+      description: |
+        &nbsp;
+
+        Triggered when a membership's subscription status becomes `complained`, or when a complaint about a campaign sent to a segment is recorded for the campaign's recipient: the contact reported a campaign email as spam.
+
+        `data.complaint` is the spam complaint report, as on `message.complained`, and `data.campaign_id` is the campaign of the reported email. For a membership, `data.previous_subscription_status` is the status before the change.
+
+        A recipient of a campaign sent to a segment who reports it as spam unsubscribes from all lists, so the event has `data.list` and `data.list_contact` set to `null`, and `data.segment_id` is the segment. This event is sent also when the contact is already unsubscribed, once for each campaign that the contact reports, and again when a later report about the same campaign sets the contact's unsubscribe from all lists, for example after that unsubscribe was cleared. `data.contact.unsubscribed` says whether the contact is unsubscribed from all lists after the complaint.
+
+        **No event**: A complaint about a membership that is already `complained`.
+
+        **When it's sent**: When a spam complaint about a campaign email changes the contact's membership of the campaign's list, or is recorded for a recipient of a campaign sent to a segment.
+      tags:
+        - Contact Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactComplainedWebhookPayload'
+            example:
+              type: "contact.complained"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-10-21T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                origin: "recipient"
+                campaign_id: "3af77d52-096f-42a2-8cc7-b6eccdccff8e"
+                contact:
+                  object: "contact"
+                  id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                  email: "someone@example.com"
+                  first_name: "Ada"
+                  last_name: "Lovelace"
+                  status: "enabled"
+                  status_reason: ""
+                  unsubscribed: false
+                  unsubscribed_at: null
+                  attributes:
+                    plan: "pro"
+                  validation_status: "valid"
+                  last_validated_at: "2026-10-20T10:15:00Z"
+                list:
+                  id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  name: "Newsletter"
+                list_contact:
+                  object: "list_contact"
+                  list_id: "8b5a3112-8fa1-4bde-9c20-8af76484daf4"
+                  contact_id: "e43e4167-f186-4a7f-9b6e-ac9fdc6426e1"
+                  email: "someone@example.com"
+                  subscription_status: "complained"
+                  subscribed_at: "2026-09-21T10:15:00Z"
+                  unsubscribed_at: "2026-10-21T10:15:00Z"
+                  created_at: "2026-09-21T10:15:00Z"
+                  updated_at: "2026-10-21T10:15:00Z"
+                previous_subscription_status: "unsubscribed"
+                complaint:
+                  feedback_type: "abuse"
+                  reporter: "yahoo"
       responses:
         '200':
           description: Webhook received successfully
@@ -649,6 +1421,8 @@ components:
             - message.suppressed
             - message.opened
             - message.clicked
+            - message.unsubscribed
+            - message.complained
           description: The event type
         webhook_id:
           type: string
@@ -717,6 +1491,22 @@ components:
             type:
               enum:
                 - message.opened
+    MessageUnsubscribedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.unsubscribed
+    MessageComplainedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/MessageWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - message.complained
     MessageClickedWebhookPayload:
       type: object
       required:
@@ -767,6 +1557,8 @@ components:
             - on_suppressed
             - on_opened
             - on_clicked
+            - on_unsubscribed
+            - on_complained
           description: The specific event that occurred
         from:
           type: string
@@ -830,8 +1622,8 @@ components:
             and never treat its absence as an error. Equally, do not treat its
             presence on another event sharing this data shape as impossible.
             Events with their own data shape — `message.clicked`,
-            `message.routing`, `suppression.created`, `domain.dns_error` —
-            never carry one.
+            `message.routing`, `suppression.created`, `suppression.deleted`,
+            `domain.dns_error`, and the `contact.*` events — never carry one.
 
             On test webhooks and sandbox deliveries the values are
             representative rather than observed. A sandbox simulation can
@@ -840,6 +1632,30 @@ components:
             code and response. Do not calibrate a `classification` switch
             against sandbox traffic.
           $ref: '#/components/schemas/DeliveryAttempt'
+        unsubscribe:
+          description: How the recipient unsubscribed. Present only on `message.unsubscribed`.
+          $ref: '#/components/schemas/WebhookUnsubscribe'
+        complaint:
+          description: The spam complaint report. Present only on `message.complained`.
+          $ref: '#/components/schemas/WebhookComplaint'
+        campaign_id:
+          type: string
+          format: uuid
+          description: The campaign that sent the message. Present only on the events of a campaign message.
+        list_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            The list through which the campaign reached the recipient, or
+            `null` when the campaign did not reach the recipient through a
+            list. Present only on the events of a campaign message.
+        segment_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            The segment through which the campaign reached the recipient, or
+            `null` when the campaign did not reach the recipient through a
+            segment. Present only on the events of a campaign message.
 
     MessageClickedWebhookData:
       type: object
@@ -898,6 +1714,24 @@ components:
             definite true or false. It stays optional in this schema for tolerance:
             if it were ever absent, do not infer `false` and do not reject the
             delivery.
+        campaign_id:
+          type: string
+          format: uuid
+          description: The campaign that sent the message. Present only on the events of a campaign message.
+        list_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            The list through which the campaign reached the recipient, or
+            `null` when the campaign did not reach the recipient through a
+            list. Present only on the events of a campaign message.
+        segment_id:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            The segment through which the campaign reached the recipient, or
+            `null` when the campaign did not reach the recipient through a
+            segment. Present only on the events of a campaign message.
 
     DeliveryAttempt:
       # `null` is admitted alongside the object deliberately: it carries exactly
@@ -1003,7 +1837,7 @@ components:
       properties:
         type:
           type: string
-          enum: [suppression.created]
+          enum: [suppression.created, suppression.deleted]
           description: The event type
         webhook_id:
           type: string
@@ -1012,14 +1846,16 @@ components:
         timestamp:
           type: string
           format: date-time
-          description: When the event occurred (ISO 8601 format)
+          description: When the suppression was created, changed or deleted (ISO 8601 format)
         data:
           $ref: '#/components/schemas/SuppressionWebhookData'
 
     SuppressionWebhookData:
       type: object
+      description: The suppression as it was right after the change, or right before the delete for `suppression.deleted`.
       required:
         - account_id
+        - origin
         - recipient
         - created_at
         - expires_at
@@ -1030,6 +1866,8 @@ components:
           type: string
           format: uuid
           description: Account ID
+        origin:
+          $ref: '#/components/schemas/WebhookOrigin'
         recipient:
           type: string
           format: email
@@ -1041,13 +1879,13 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: When the suppression expires (typically 30 days from creation)
+          description: When the suppression expires. Delivery errors suppress the address for up to 30 days, and an unsubscribe or a spam complaint for 10 years. A suppression made through the API expires when its request says.
         reason:
           type: string
           description: Reason for suppression (e.g., "Too many hard bounces")
         sending_domain:
           type: string
-          description: Domain from which the failed emails were sent
+          description: The sending domain that the suppression applies to
 
     DomainWebhookPayload:
       type: object
@@ -1102,6 +1940,456 @@ components:
           type: string
           format: date-time
           description: When DNS was last checked
+
+    WebhookUnsubscribe:
+      type: object
+      required:
+        - method
+      properties:
+        method:
+          type: string
+          enum: [one_click, link]
+          description: |
+            `one_click` for a one-click unsubscribe from the recipient's email
+            client (a POST with the body `List-Unsubscribe=One-Click`, RFC
+            8058), and `link` for any other unsubscribe.
+
+    WebhookComplaint:
+      type: object
+      required:
+        - feedback_type
+        - reporter
+      properties:
+        feedback_type:
+          type: string
+          description: |
+            The feedback type of the report (the ARF `Feedback-Type`), in lower
+            case: `abuse` or `fraud`.
+        reporter:
+          type: string
+          description: |
+            The feedback loop that sent the report. Known values: `yahoo`,
+            `microsoft`, and `comcast`.
+
+            This is **not** a closed set: AhaSend can add feedback loops at any
+            time. Keep a fallback branch for an unfamiliar value, and never
+            reject a delivery because of it.
+          x-known-values:
+            - yahoo
+            - microsoft
+            - comcast
+
+    WebhookOrigin:
+      type: string
+      description: |
+        Who made the change: `recipient` for the contact or recipient, through
+        an unsubscribe link, a one-click unsubscribe, or a spam complaint;
+        `api` for you, through the AhaSend API; `dashboard` for you, through
+        the AhaSend dashboard; `system` for AhaSend, for example after a
+        bounce, an expired message or an email validation, or when AhaSend
+        support makes the change.
+
+        This is **not** a closed set: AhaSend can add an origin, and a webhook
+        whose origin filter is `null` gets its events. Keep a fallback branch
+        for an unfamiliar value, and never reject a delivery because of it.
+      x-known-values:
+        - recipient
+        - api
+        - dashboard
+        - system
+
+    ContactWebhookPayload:
+      type: object
+      required:
+        - type
+        - webhook_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum: [contact.created, contact.deleted]
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the change happened (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/ContactWebhookData'
+
+    ContactCreatedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.created
+    ContactDeletedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.deleted
+
+    ContactUpdatedWebhookPayload:
+      type: object
+      required:
+        - type
+        - webhook_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum: [contact.updated]
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the change happened (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/ContactUpdatedWebhookData'
+
+    ContactListWebhookPayload:
+      type: object
+      required:
+        - type
+        - webhook_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum:
+            - contact.added_to_list
+            - contact.removed_from_list
+            - contact.subscribed
+            - contact.unsubscribed
+            - contact.complained
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the change happened (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/ContactListWebhookData'
+
+    ContactAddedToListWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactListWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.added_to_list
+    ContactRemovedFromListWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactListWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.removed_from_list
+    ContactSubscribedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactListWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.subscribed
+    ContactUnsubscribedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactListWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.unsubscribed
+    ContactComplainedWebhookPayload:
+      allOf:
+        - $ref: '#/components/schemas/ContactListWebhookPayload'
+        - type: object
+          properties:
+            type:
+              enum:
+                - contact.complained
+
+    ContactWebhookData:
+      type: object
+      required:
+        - account_id
+        - origin
+        - contact
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID
+        origin:
+          $ref: '#/components/schemas/WebhookOrigin'
+        campaign_id:
+          type: string
+          format: uuid
+          description: |
+            The campaign whose email caused the change, when a recipient
+            unsubscribed from a campaign email or reported it as spam.
+            Absent otherwise.
+        segment_id:
+          type: string
+          format: uuid
+          description: |
+            The segment through which that campaign reached the recipient,
+            when the campaign was sent to a segment. Absent otherwise.
+        contact:
+          description: |
+            The contact as it was right after the change, in the shape that the
+            Contacts API returns. For `contact.deleted`, the contact as it was
+            right before the delete.
+          $ref: '#/components/schemas/Contact'
+
+    ContactUpdatedWebhookData:
+      allOf:
+        - $ref: '#/components/schemas/ContactWebhookData'
+        - type: object
+          required:
+            - changed_fields
+          properties:
+            changed_fields:
+              type: array
+              items:
+                type: string
+              description: |
+                The `contact` fields whose values changed. A change to any key
+                of `attributes` lists `attributes`. It never lists
+                `unsubscribed` or `unsubscribed_at`: the unsubscribe from all
+                lists sends `contact.unsubscribed` and `contact.subscribed`.
+
+                Known values: `email`, `first_name`, `last_name`, `status`,
+                `status_reason`, and `attributes`. This is **not** a closed
+                set: a new contact field can appear here.
+              x-known-values:
+                - email
+                - first_name
+                - last_name
+                - status
+                - status_reason
+                - attributes
+
+    ContactListWebhookData:
+      allOf:
+        - $ref: '#/components/schemas/ContactWebhookData'
+        - type: object
+          required:
+            - list
+            - list_contact
+          properties:
+            list:
+              oneOf:
+                - $ref: '#/components/schemas/WebhookList'
+                - type: 'null'
+              description: |
+                The list of the membership. `null` when the event is about the
+                contact's unsubscribe from all lists: `contact.unsubscribed`
+                when it is set, `contact.subscribed` when it is cleared, and
+                `contact.complained` for a complaint about a campaign sent to a
+                segment.
+            list_contact:
+              oneOf:
+                - $ref: '#/components/schemas/WebhookListContact'
+                - type: 'null'
+              description: |
+                The membership (list contact) as it was right after the change,
+                in the shape that the Lists API returns, without the embedded
+                `contact` and `list`. For `contact.removed_from_list`, the
+                membership as it was right before the removal. `null` when
+                `list` is `null`.
+            previous_subscription_status:
+              type: string
+              enum: [unconfirmed, confirmed, unsubscribed, complained]
+              description: |
+                The membership's subscription status before the change. Present
+                only on `contact.subscribed`, `contact.unsubscribed`, and
+                `contact.complained`, when `list` is not `null`.
+            complaint:
+              description: The spam complaint report. Present only on `contact.complained`.
+              $ref: '#/components/schemas/WebhookComplaint'
+
+    WebhookList:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The list ID
+        name:
+          type: string
+          description: The list name
+
+    # Contact schemas, copied from the AhaSend API specification (openapi.yaml),
+    # but open: a later delivery can carry a field that this version does not
+    # list, so a receiver must not reject one.
+    JSONValue:
+      description: Any recursively nested JSON value stored in a contact attribute
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items:
+            $ref: '#/components/schemas/JSONValue'
+        - type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JSONValue'
+
+    Contact:
+      type: object
+      description: |
+        Public contact projection. Attribute reads are legacy-safe: values can
+        contain null, booleans, numbers, strings, arrays, or nested objects even
+        though new writes accept only canonical dashboard-defined values.
+      required:
+        - object
+        - id
+        - created_at
+        - updated_at
+        - email
+        - first_name
+        - last_name
+        - status
+        - status_reason
+        - unsubscribed
+        - unsubscribed_at
+        - attributes
+        - validation_status
+        - last_validated_at
+      properties:
+        object:
+          type: string
+          enum: [contact]
+          description: Object type identifier
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the contact
+        created_at:
+          type: string
+          format: date-time
+          description: When the contact was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the contact was last updated
+        email:
+          type: string
+          format: email
+          description: Normalized contact email address
+        first_name:
+          type: string
+        last_name:
+          type: string
+        status:
+          type: string
+          enum: [enabled, disabled, blocked]
+        status_reason:
+          type: string
+        unsubscribed:
+          type: boolean
+        unsubscribed_at:
+          type: [string, 'null']
+          format: date-time
+        attributes:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/JSONValue'
+        validation_status:
+          type: string
+          enum: [unvalidated, valid, invalid, risky, unknown]
+        last_validated_at:
+          type: [string, 'null']
+          format: date-time
+
+    # The API's ListContact without its `contact` and `list` properties.
+    WebhookListContact:
+      type: object
+      description: |
+        One contact's membership of one list. It carries no id of its own: a
+        membership is addressed by the `(list_id, contact_id)` pair.
+      required:
+        - object
+        - list_id
+        - contact_id
+        - email
+        - subscription_status
+        - subscribed_at
+        - unsubscribed_at
+        - created_at
+        - updated_at
+      properties:
+        object:
+          type: string
+          enum: [list_contact]
+          description: Object type identifier
+        list_id:
+          type: string
+          format: uuid
+          description: The list this membership is on
+        contact_id:
+          type: string
+          format: uuid
+          description: The contact this membership belongs to
+        email:
+          type: string
+          format: email
+          description: The contact's normalized email address
+        subscription_status:
+          type: string
+          enum: [unconfirmed, confirmed, unsubscribed, complained]
+          description: |
+            Per-list consent, independent of the contact's account-wide
+            `unsubscribed` flag. `complained` is the mailbox provider's verdict
+            and is never writable.
+        subscribed_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When consent was given. Set when the membership becomes
+            `confirmed` and left alone afterwards, so it records when consent
+            was given rather than when it was last re-asserted.
+        unsubscribed_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the membership became `unsubscribed`, or when the complaint
+            landed for a `complained` membership. Cleared when the membership
+            becomes `confirmed` again.
+        created_at:
+          type: string
+          format: date-time
+          description: When the membership was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the membership was last updated
 
     RouteWebhookPayload:
       type: object
@@ -1284,12 +2572,17 @@ tags:
     description: |
       Webhooks for email suppression list changes.
 
-      These events notify you when email addresses are automatically added to your suppression list due to delivery issues.
+      These events notify you when a suppression is created, gets a new reason, or is deleted: after delivery issues, when a recipient unsubscribes or reports spam, and when you or AhaSend support change your suppression list. Each event carries its `origin`.
   - name: Domain Events
     description: |
       Webhooks for domain configuration issues.
 
       These events alert you to DNS configuration problems that could prevent email delivery.
+  - name: Contact Events
+    description: |
+      Webhooks for changes to your contacts and their list memberships.
+
+      These events notify you when contacts are created, changed, or deleted, when they join or leave lists, and when they subscribe, unsubscribe, or report a campaign email as spam. They are available to accounts with the marketing features.
   - name: Route Events
     description: |
       Webhooks for inbound email processing.

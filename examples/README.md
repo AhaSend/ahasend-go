@@ -81,7 +81,8 @@ This is the standard Go pattern for executable example files that should be runn
 The `webhook_processing.go` example is a complete webhook receiver server that:
 
 - Verifies webhook signatures using HMAC-SHA256
-- Handles all AhaSend webhook event types 
+- Handles every webhook event type this SDK version parses: message, suppression, domain, contact and route events
+- Answers 2xx to a signed event type that this SDK version does not know yet
 - Includes proper error handling and security measures
 - Can be run as a standalone server
 

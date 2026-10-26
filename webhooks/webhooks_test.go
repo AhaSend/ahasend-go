@@ -731,13 +731,38 @@ func TestWebhookHelperFunctions(t *testing.T) {
 		assert.True(t, IsMessageEvent(&MessageDeliveredEvent{}))
 		assert.True(t, IsMessageEvent(&MessageOpenedEvent{}))
 		assert.True(t, IsMessageEvent(&MessageClickedEvent{}))
+		assert.True(t, IsMessageEvent(&MessageUnsubscribedEvent{}))
+		assert.True(t, IsMessageEvent(&MessageComplainedEvent{}))
 		assert.False(t, IsMessageEvent(&SuppressionCreatedEvent{}))
 		assert.False(t, IsMessageEvent(&DomainDNSErrorEvent{}))
+		assert.False(t, IsMessageEvent(&ContactUnsubscribedEvent{}))
+		assert.False(t, IsMessageEvent(&ContactComplainedEvent{}))
 	})
 
 	t.Run("IsSuppressionEvent", func(t *testing.T) {
 		assert.True(t, IsSuppressionEvent(&SuppressionCreatedEvent{}))
+		assert.True(t, IsSuppressionEvent(&SuppressionDeletedEvent{}))
 		assert.False(t, IsSuppressionEvent(&MessageDeliveredEvent{}))
+		assert.False(t, IsSuppressionEvent(&ContactDeletedEvent{}))
+	})
+
+	t.Run("IsContactEvent", func(t *testing.T) {
+		for _, event := range []WebhookEvent{
+			&ContactCreatedEvent{},
+			&ContactUpdatedEvent{},
+			&ContactDeletedEvent{},
+			&ContactAddedToListEvent{},
+			&ContactRemovedFromListEvent{},
+			&ContactSubscribedEvent{},
+			&ContactUnsubscribedEvent{},
+			&ContactComplainedEvent{},
+		} {
+			assert.True(t, IsContactEvent(event), "%T", event)
+		}
+		assert.False(t, IsContactEvent(&MessageUnsubscribedEvent{}))
+		assert.False(t, IsContactEvent(&MessageComplainedEvent{}))
+		assert.False(t, IsContactEvent(&SuppressionDeletedEvent{}))
+		assert.False(t, IsContactEvent(&RouteMessageEvent{}))
 	})
 
 	t.Run("IsDomainEvent", func(t *testing.T) {
@@ -763,6 +788,15 @@ func TestWebhookHelperFunctions(t *testing.T) {
 		require.NotNil(t, data)
 		assert.Equal(t, "test-account", data.AccountID)
 		assert.Equal(t, "test@example.com", data.From)
+
+		for _, event := range []WebhookEvent{
+			&MessageUnsubscribedEvent{Data: messageData},
+			&MessageComplainedEvent{Data: messageData},
+		} {
+			data = GetMessageEventData(event)
+			require.NotNil(t, data, "%T", event)
+			assert.Equal(t, "test-account", data.AccountID)
+		}
 
 		// Test with non-message event
 		suppressionEvent := &SuppressionCreatedEvent{}

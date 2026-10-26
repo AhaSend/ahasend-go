@@ -254,83 +254,71 @@ Create a file 'webhook_receiver.go' with this content:
 package main
 
 import (
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/hex"
-    "encoding/json"
+    "errors"
     "fmt"
-    "io"
     "log"
     "net/http"
+
+    "github.com/AhaSend/ahasend-go/webhooks"
 )
 
-type WebhookEvent struct {
-    Event     string                 ` + "`json:\"event\"`" + `
-    Timestamp string                 ` + "`json:\"timestamp\"`" + `
-    Data      map[string]interface{} ` + "`json:\"data\"`" + `
-}
-
-func webhookHandler(w http.ResponseWriter, r *http.Request) {
-    // Read the request body
-    body, err := io.ReadAll(r.Body)
-    if err != nil {
-        http.Error(w, "Failed to read body", http.StatusBadRequest)
-        return
-    }
-    defer r.Body.Close()
-
-    // Verify webhook signature (if using webhook secret)
-    signature := r.Header.Get("X-AhaSend-Signature")
-    webhookSecret := "your-webhook-secret" // Store this securely
-
-    if signature != "" {
-        expectedSig := computeSignature(body, webhookSecret)
-        if signature != expectedSig {
-            http.Error(w, "Invalid signature", http.StatusUnauthorized)
+func webhookHandler(verifier *webhooks.WebhookVerifier) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // Verify the signature and parse the event in one step
+        event, err := verifier.ParseRequest(r)
+        switch {
+        case errors.Is(err, webhooks.ErrUnknownEventType):
+            // Signed, but this SDK version does not know the event type.
+            // Answer 2xx so that the webhook is not disabled.
+            log.Printf("ignoring webhook: %v", err)
+            w.WriteHeader(http.StatusOK)
+            return
+        case errors.Is(err, webhooks.ErrMissingHeaders),
+            errors.Is(err, webhooks.ErrInvalidSignature),
+            errors.Is(err, webhooks.ErrExpiredTimestamp),
+            errors.Is(err, webhooks.ErrInvalidTimestamp):
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        case err != nil:
+            http.Error(w, "invalid webhook", http.StatusBadRequest)
             return
         }
+
+        // Process the event based on its type
+        switch e := event.(type) {
+        case *webhooks.MessageDeliveredEvent:
+            fmt.Printf("Email delivered: %s to %s\n", e.Data.ID, e.Data.Recipient)
+        case *webhooks.MessageBouncedEvent:
+            fmt.Printf("Email bounced: %s to %s\n", e.Data.ID, e.Data.Recipient)
+        case *webhooks.MessageComplainedEvent:
+            fmt.Printf("Spam complaint: %s from %s\n", e.Data.ID, e.Data.Recipient)
+        case *webhooks.MessageUnsubscribedEvent:
+            fmt.Printf("Unsubscribed: %s from message %s\n", e.Data.Recipient, e.Data.ID)
+        case *webhooks.MessageOpenedEvent:
+            fmt.Printf("Email opened: %s\n", e.Data.ID)
+        case *webhooks.MessageClickedEvent:
+            fmt.Printf("Link clicked: %s, URL: %s\n", e.Data.ID, e.Data.URL)
+        case *webhooks.SuppressionCreatedEvent:
+            fmt.Printf("Suppressed: %s, Reason: %s\n", e.Data.Recipient, e.Data.Reason)
+        case *webhooks.ContactUnsubscribedEvent:
+            fmt.Printf("Contact unsubscribed: %s, origin: %s\n", e.Data.Contact.Email, e.Data.Origin)
+        default:
+            fmt.Printf("Unhandled event: %s\n", event.GetType())
+        }
+
+        // Send success response
+        w.WriteHeader(http.StatusOK)
     }
-
-    // Parse the webhook event
-    var event WebhookEvent
-    if err := json.Unmarshal(body, &event); err != nil {
-        http.Error(w, "Invalid JSON", http.StatusBadRequest)
-        return
-    }
-
-    // Process the event based on type
-    switch event.Event {
-    case "message.sent":
-        fmt.Printf("Email sent: %v\n", event.Data["message_id"])
-    case "message.delivered":
-        fmt.Printf("Email delivered: %v\n", event.Data["message_id"])
-    case "message.bounced":
-        fmt.Printf("Email bounced: %v, Reason: %v\n",
-            event.Data["message_id"], event.Data["reason"])
-    case "message.complained":
-        fmt.Printf("Spam complaint: %v\n", event.Data["message_id"])
-    case "message.opened":
-        fmt.Printf("Email opened: %v\n", event.Data["message_id"])
-    case "message.clicked":
-        fmt.Printf("Link clicked: %v, URL: %v\n",
-            event.Data["message_id"], event.Data["url"])
-    default:
-        fmt.Printf("Unknown event: %s\n", event.Event)
-    }
-
-    // Send success response
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("OK"))
-}
-
-func computeSignature(payload []byte, secret string) string {
-    h := hmac.New(sha256.New, []byte(secret))
-    h.Write(payload)
-    return hex.EncodeToString(h.Sum(nil))
 }
 
 func main() {
-    http.HandleFunc("/webhooks/ahasend", webhookHandler)
+    // Use the secret returned when the webhook was created. Store it securely.
+    verifier, err := webhooks.NewWebhookVerifier("your-webhook-secret")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    http.HandleFunc("/webhooks/ahasend", webhookHandler(verifier))
 
     fmt.Println("Webhook receiver listening on :8080...")
     fmt.Println("Configure your webhook URL as: http://your-domain.com:8080/webhooks/ahasend")

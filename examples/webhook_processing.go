@@ -123,11 +123,44 @@ func processWebhookEvent(event webhooks.WebhookEvent) error {
 	case *webhooks.MessageClickedEvent:
 		return handleMessageClicked(e)
 
+	case *webhooks.MessageUnsubscribedEvent:
+		return handleMessageUnsubscribed(e)
+
+	case *webhooks.MessageComplainedEvent:
+		return handleMessageComplained(e)
+
 	case *webhooks.SuppressionCreatedEvent:
 		return handleSuppressionCreated(e)
 
+	case *webhooks.SuppressionDeletedEvent:
+		return handleSuppressionDeleted(e)
+
 	case *webhooks.DomainDNSErrorEvent:
 		return handleDomainDNSError(e)
+
+	case *webhooks.ContactCreatedEvent:
+		return handleContactCreated(e)
+
+	case *webhooks.ContactUpdatedEvent:
+		return handleContactUpdated(e)
+
+	case *webhooks.ContactDeletedEvent:
+		return handleContactDeleted(e)
+
+	case *webhooks.ContactAddedToListEvent:
+		return handleContactMembership("Contact added to list", e.Data)
+
+	case *webhooks.ContactRemovedFromListEvent:
+		return handleContactMembership("Contact removed from list", e.Data)
+
+	case *webhooks.ContactSubscribedEvent:
+		return handleContactMembership("Contact subscribed", e.Data)
+
+	case *webhooks.ContactUnsubscribedEvent:
+		return handleContactMembership("Contact unsubscribed", e.Data)
+
+	case *webhooks.ContactComplainedEvent:
+		return handleContactComplained(e)
 
 	case *webhooks.RouteMessageEvent:
 		return handleRouteMessage(e)
@@ -275,7 +308,59 @@ func handleMessageClicked(event *webhooks.MessageClickedEvent) error {
 	return nil
 }
 
-// Suppression event handler
+func handleMessageUnsubscribed(event *webhooks.MessageUnsubscribedEvent) error {
+	log.Printf("👋 Recipient unsubscribed from a campaign email:")
+	log.Printf("  Email: %s", event.Data.Recipient)
+	if event.Data.Unsubscribe != nil {
+		log.Printf("  Method: %s", event.Data.Unsubscribe.Method)
+	}
+	if event.Data.CampaignID != nil {
+		log.Printf("  Campaign: %s", *event.Data.CampaignID)
+	}
+	// ListID and SegmentID are nil when the campaign did not reach the
+	// recipient through a list or a segment.
+	if event.Data.ListID != nil {
+		log.Printf("  List: %s", *event.Data.ListID)
+	}
+	if event.Data.SegmentID != nil {
+		log.Printf("  Segment: %s", *event.Data.SegmentID)
+	}
+
+	// The event repeats for every unsubscribe request AhaSend accepts, so
+	// drop repeats by event type and message ID.
+
+	// TODO: Add your business logic here
+
+	return nil
+}
+
+func handleMessageComplained(event *webhooks.MessageComplainedEvent) error {
+	log.Printf("🚩 Campaign email reported as spam:")
+	log.Printf("  Email: %s", event.Data.Recipient)
+	logComplaint(event.Data.Complaint)
+
+	// TODO: Add your business logic here
+	// For example, review the campaign's content and audience
+
+	return nil
+}
+
+// logComplaint logs a spam complaint report. The set of reporters is open,
+// so keep a fallback for feedback loops this SDK predates.
+func logComplaint(complaint *webhooks.WebhookComplaint) {
+	if complaint == nil {
+		return
+	}
+	log.Printf("  Feedback type: %s", complaint.FeedbackType)
+	switch complaint.Reporter {
+	case webhooks.ComplaintReporterYahoo, webhooks.ComplaintReporterMicrosoft, webhooks.ComplaintReporterComcast:
+		log.Printf("  Reporter: %s", complaint.Reporter)
+	default:
+		log.Printf("  Reporter (not known to this SDK version): %s", complaint.Reporter)
+	}
+}
+
+// Suppression event handlers
 
 func handleSuppressionCreated(event *webhooks.SuppressionCreatedEvent) error {
 	log.Printf("⛔ Email address suppressed:")
@@ -286,6 +371,18 @@ func handleSuppressionCreated(event *webhooks.SuppressionCreatedEvent) error {
 
 	// TODO: Add your business logic here
 	// For example, update your email list to avoid sending to this address
+
+	return nil
+}
+
+func handleSuppressionDeleted(event *webhooks.SuppressionDeletedEvent) error {
+	log.Printf("♻️ Suppression deleted:")
+	log.Printf("  Email: %s", event.Data.Recipient)
+	log.Printf("  Domain: %s", event.Data.SendingDomain)
+	log.Printf("  Deleted by: %s", event.Data.Origin)
+
+	// TODO: Add your business logic here
+	// For example, allow sending to this address again
 
 	return nil
 }
@@ -302,6 +399,102 @@ func handleDomainDNSError(event *webhooks.DomainDNSErrorEvent) error {
 
 	// TODO: Add your business logic here
 	// For example, alert your operations team
+
+	return nil
+}
+
+// Contact event handlers
+
+func handleContactCreated(event *webhooks.ContactCreatedEvent) error {
+	log.Printf("👤 Contact created:")
+	log.Printf("  Email: %s", event.Data.Contact.Email)
+	log.Printf("  Origin: %s", event.Data.Origin)
+
+	// Attribute values can be any JSON value, so check their type.
+	if plan, ok := event.Data.Contact.Attributes["plan"].(string); ok {
+		log.Printf("  Plan: %s", plan)
+	}
+
+	// TODO: Add your business logic here
+
+	return nil
+}
+
+func handleContactUpdated(event *webhooks.ContactUpdatedEvent) error {
+	log.Printf("✏️ Contact updated:")
+	log.Printf("  Email: %s", event.Data.Contact.Email)
+	log.Printf("  Origin: %s", event.Data.Origin)
+
+	// The set of changed fields is open, so keep a fallback.
+	for _, field := range event.Data.ChangedFields {
+		switch field {
+		case webhooks.ChangedFieldEmail:
+			log.Printf("  New email: %s", event.Data.Contact.Email)
+		case webhooks.ChangedFieldAttributes:
+			log.Printf("  Attributes changed")
+		default:
+			log.Printf("  Changed: %s", field)
+		}
+	}
+
+	// A handler that writes the contact back through the API receives its
+	// own write as a new contact.updated with origin "api". Skip the write
+	// when the contact already has the values you want.
+	if event.Data.Origin == webhooks.OriginAPI {
+		log.Printf("  Changed through the API")
+	}
+
+	// TODO: Add your business logic here
+
+	return nil
+}
+
+func handleContactDeleted(event *webhooks.ContactDeletedEvent) error {
+	log.Printf("🗑️ Contact deleted:")
+	log.Printf("  Email: %s", event.Data.Contact.Email)
+	log.Printf("  Origin: %s", event.Data.Origin)
+
+	// TODO: Add your business logic here
+	// The contact's list memberships are deleted with it
+
+	return nil
+}
+
+// handleContactMembership handles the contact events that can be about a list
+// membership.
+func handleContactMembership(title string, data webhooks.ContactListEventData) error {
+	log.Printf("📋 %s:", title)
+	log.Printf("  Email: %s", data.Contact.Email)
+	log.Printf("  Origin: %s", data.Origin)
+
+	// List is nil when the event is about the contact's unsubscribe from all
+	// lists, rather than about one list.
+	if data.List == nil {
+		log.Printf("  All lists (unsubscribed from all: %v)", data.Contact.Unsubscribed)
+	} else {
+		log.Printf("  List: %s (%s)", data.List.Name, data.List.ID)
+		if data.ListContact != nil {
+			log.Printf("  Status: %s", data.ListContact.SubscriptionStatus)
+		}
+		if data.PreviousSubscriptionStatus != nil {
+			log.Printf("  Previous status: %s", *data.PreviousSubscriptionStatus)
+		}
+	}
+	if data.CampaignID != nil {
+		log.Printf("  Campaign: %s", *data.CampaignID)
+	}
+
+	// TODO: Add your business logic here
+	// For example, sync the membership to your CRM
+
+	return nil
+}
+
+func handleContactComplained(event *webhooks.ContactComplainedEvent) error {
+	if err := handleContactMembership("Contact reported a campaign email as spam", event.Data); err != nil {
+		return err
+	}
+	logComplaint(event.Data.Complaint)
 
 	return nil
 }
@@ -349,6 +542,11 @@ func exampleEventTypeChecks(event webhooks.WebhookEvent) {
 		}
 	}
 
+	// Keep your contact records in sync
+	if webhooks.IsContactEvent(event) {
+		fmt.Printf("Would sync contact after %s\n", event.GetType())
+	}
+
 	// Handle suppression events specially
 	if webhooks.IsSuppressionEvent(event) {
 		if suppEvent, ok := event.(*webhooks.SuppressionCreatedEvent); ok {
@@ -375,21 +573,27 @@ func exampleAdvancedWebhookHandler(verifier *webhooks.WebhookVerifier) http.Hand
 		if err != nil {
 			log.Printf("[%s] Webhook verification failed: %v", requestID, err)
 
-			// Return appropriate status codes
-			switch err {
-			case webhooks.ErrExpiredTimestamp:
-				// Still process but log the drift. A timestamp outside tolerance
-				// is usually clock skew on either side, but it can also be a
-				// replay probe - this check runs before signature verification.
-				log.Printf("[%s] WARNING: Processing webhook with an out-of-tolerance timestamp", requestID)
-				// You might still want to process it depending on your use case
-			case webhooks.ErrInvalidSignature, webhooks.ErrMissingHeaders:
+			// Return appropriate status codes. The SDK wraps these errors, so
+			// match them with errors.Is.
+			switch {
+			case errors.Is(err, webhooks.ErrUnknownEventType):
+				// Signed, but unknown to this SDK version: acknowledge it.
+				w.WriteHeader(http.StatusOK)
+			case errors.Is(err, webhooks.ErrExpiredTimestamp):
+				// A timestamp outside tolerance is usually clock skew on either
+				// side, but it can also be a replay probe - this check runs
+				// before signature verification, so there is no event to
+				// process. Widen the tolerance with SetTolerance if your clock
+				// drifts.
+				log.Printf("[%s] WARNING: webhook timestamp outside tolerance", requestID)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
+			case errors.Is(err, webhooks.ErrInvalidSignature), errors.Is(err, webhooks.ErrMissingHeaders),
+				errors.Is(err, webhooks.ErrInvalidTimestamp):
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			default:
 				http.Error(w, "Bad Request", http.StatusBadRequest)
-				return
 			}
+			return
 		}
 
 		// Log successful verification
