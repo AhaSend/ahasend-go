@@ -4862,6 +4862,17 @@ components:
           $ref: '#/components/schemas/PaginationInfo'
 
     # Webhook Schemas
+    WebhookOrigin:
+      type: string
+      enum: [recipient, api, dashboard, system]
+      description: |
+        Who made a change that a contact or suppression event reports:
+        `recipient` for the contact or recipient, through an unsubscribe link,
+        a one-click unsubscribe, or a spam complaint; `api` for you, through
+        the AhaSend API; `dashboard` for you, through the AhaSend dashboard;
+        `system` for AhaSend, for example after a bounce, an expired message or
+        an email validation, or when AhaSend support makes the change.
+
     Webhook:
       type: object
       properties:
@@ -4915,12 +4926,53 @@ components:
         on_clicked:
           type: boolean
           description: Trigger on clicks
+        on_unsubscribed:
+          type: boolean
+          description: Trigger on unsubscribes
+        on_complained:
+          type: boolean
+          description: Trigger on spam complaints
         on_suppression_created:
           type: boolean
           description: Trigger on suppression creation
+        on_suppression_deleted:
+          type: boolean
+          description: Trigger on suppression deletion
         on_dns_error:
           type: boolean
           description: Trigger on DNS errors
+        on_contact_created:
+          type: boolean
+          description: Trigger on contact creation
+        on_contact_updated:
+          type: boolean
+          description: Trigger on contact updates
+        on_contact_deleted:
+          type: boolean
+          description: Trigger on contact deletion
+        on_contact_added_to_list:
+          type: boolean
+          description: Trigger when a contact is added to a list
+        on_contact_removed_from_list:
+          type: boolean
+          description: Trigger when a contact is removed from a list
+        on_contact_subscribed:
+          type: boolean
+          description: Trigger when a contact subscribes
+        on_contact_unsubscribed:
+          type: boolean
+          description: Trigger when a contact unsubscribes
+        on_contact_complained:
+          type: boolean
+          description: Trigger when a contact reports spam
+        origins:
+          type: [array, 'null']
+          items:
+            $ref: '#/components/schemas/WebhookOrigin'
+          description: |
+            The origins of the contact and suppression events that the webhook
+            gets, or `null` for every origin. Message events and
+            `domain.dns_error` have no origin, and the webhook always gets them.
         scope:
           type: string
           enum: [global, scoped]
@@ -4964,8 +5016,20 @@ components:
         - on_suppressed
         - on_opened
         - on_clicked
+        - on_unsubscribed
+        - on_complained
         - on_suppression_created
+        - on_suppression_deleted
         - on_dns_error
+        - on_contact_created
+        - on_contact_updated
+        - on_contact_deleted
+        - on_contact_added_to_list
+        - on_contact_removed_from_list
+        - on_contact_subscribed
+        - on_contact_unsubscribed
+        - on_contact_complained
+        - origins
         - scope
         - domains
         - success_count
@@ -5035,14 +5099,72 @@ components:
           type: boolean
           description: Trigger on clicks
           default: false
+        on_unsubscribed:
+          type: boolean
+          description: Trigger on unsubscribes
+          default: false
+        on_complained:
+          type: boolean
+          description: Trigger on spam complaints
+          default: false
         on_suppression_created:
           type: boolean
           description: Trigger on suppression creation
+          default: false
+        on_suppression_deleted:
+          type: boolean
+          description: Trigger on suppression deletion
           default: false
         on_dns_error:
           type: boolean
           description: Trigger on DNS errors
           default: false
+        on_contact_created:
+          type: boolean
+          description: Trigger on contact creation
+          default: false
+        on_contact_updated:
+          type: boolean
+          description: Trigger on contact updates
+          default: false
+        on_contact_deleted:
+          type: boolean
+          description: Trigger on contact deletion
+          default: false
+        on_contact_added_to_list:
+          type: boolean
+          description: Trigger when a contact is added to a list
+          default: false
+        on_contact_removed_from_list:
+          type: boolean
+          description: Trigger when a contact is removed from a list
+          default: false
+        on_contact_subscribed:
+          type: boolean
+          description: Trigger when a contact subscribes
+          default: false
+        on_contact_unsubscribed:
+          type: boolean
+          description: Trigger when a contact unsubscribes
+          default: false
+        on_contact_complained:
+          type: boolean
+          description: Trigger when a contact reports spam
+          default: false
+        origins:
+          type: [array, 'null']
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WebhookOrigin'
+          description: |
+            The origins of the contact and suppression events that the webhook
+            gets. Omit it or send `null` for every origin. An empty array is
+            refused with HTTP 400: to stop contact or suppression events, turn
+            them off. An array that holds all four origins is saved as `null`,
+            so that an origin added later reaches the webhook too. Message
+            events and `domain.dns_error` have no origin, and the webhook always
+            gets them.
+          default: null
         scope:
           type: string
           enum: [global, scoped]
@@ -5118,12 +5240,56 @@ components:
         on_clicked:
           type: [boolean, 'null']
           description: Trigger on clicks
+        on_unsubscribed:
+          type: [boolean, 'null']
+          description: Trigger on unsubscribes
+        on_complained:
+          type: [boolean, 'null']
+          description: Trigger on spam complaints
         on_suppression_created:
           type: [boolean, 'null']
           description: Trigger on suppression creation
+        on_suppression_deleted:
+          type: [boolean, 'null']
+          description: Trigger on suppression deletion
         on_dns_error:
           type: [boolean, 'null']
           description: Trigger on DNS errors
+        on_contact_created:
+          type: [boolean, 'null']
+          description: Trigger on contact creation
+        on_contact_updated:
+          type: [boolean, 'null']
+          description: Trigger on contact updates
+        on_contact_deleted:
+          type: [boolean, 'null']
+          description: Trigger on contact deletion
+        on_contact_added_to_list:
+          type: [boolean, 'null']
+          description: Trigger when a contact is added to a list
+        on_contact_removed_from_list:
+          type: [boolean, 'null']
+          description: Trigger when a contact is removed from a list
+        on_contact_subscribed:
+          type: [boolean, 'null']
+          description: Trigger when a contact subscribes
+        on_contact_unsubscribed:
+          type: [boolean, 'null']
+          description: Trigger when a contact unsubscribes
+        on_contact_complained:
+          type: [boolean, 'null']
+          description: Trigger when a contact reports spam
+        origins:
+          type: [array, 'null']
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WebhookOrigin'
+          description: |
+            The origins of the contact and suppression events that the webhook
+            gets. Omit it or send `null` to keep the stored value; send all
+            four origins to get every origin again. An empty array is refused
+            with HTTP 400. An array that holds all four origins is saved as
+            `null`, so that an origin added later reaches the webhook too.
         scope:
           type: [string, 'null']
           enum: [global, scoped, null]
@@ -15815,6 +15981,15 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const page = await client.segments.list({ limit: 20 });
+            console.log("Segments listed.", { count: page.data.length });
+
     post:
       summary: Create Segment
       description: |
@@ -15975,6 +16150,42 @@ paths:
               fmt.Printf("Created segment %s (%s)\n", response.ID, response.State)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
+            // A group holds conditions only, so groups nest one level deep.
+            const segment = await client.segments.create({
+              name: "Engaged customers in Germany",
+              timezone: "Europe/Berlin",
+              definition: {
+                schema_version: 1,
+                match: "all",
+                conditions: [
+                  { field: "attributes.country", op: "equal", value: "DE" },
+                  { field: "created_at", op: "after", value: "30 days ago" },
+                  { field: "list", op: "in", value: "00000000-0000-4000-8000-000000000010" },
+                  {
+                    match: "any",
+                    conditions: [
+                      { field: "campaign", op: "opened", value: "00000000-0000-4000-8000-000000000014" },
+                      { field: "any_campaign", op: "clicked", value: "14 days ago" },
+                      {
+                        field: "campaign_count",
+                        op: "opened_at_least",
+                        value: { count: 3, since: "90 days ago" },
+                      },
+                    ],
+                  },
+                ],
+              },
+            });
+            // A new segment is building until its members are found.
+            console.log("Segment created.", { id: segment.id, state: segment.state });
+
   /v2/accounts/{account_id}/segments/preview:
     post:
       summary: Preview Segment
@@ -16097,6 +16308,22 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            // Nothing is saved. count is null when the contacts cannot be counted within 10 seconds.
+            const preview = await client.segments.preview({
+              definition: {
+                schema_version: 1,
+                match: "all",
+                conditions: [{ field: "created_at", op: "after", value: "30 days ago" }],
+              },
+            });
+            console.log("Segment previewed.", { count: preview.count, shown: preview.contacts.length });
+
   /v2/accounts/{account_id}/segments/{segment_id}:
     get:
       summary: Get Segment
@@ -16201,6 +16428,21 @@ paths:
                 fmt.Printf("%s: %d members (%s)\n", response.Name, response.MemberCount, response.State)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const segmentId = "00000000-0000-4000-8000-000000000015";
+            const segment = await client.segments.get(segmentId);
+            // marketable_count is null while the segment is not ready.
+            console.log("Segment found.", {
+              id: segment.id,
+              state: segment.state,
+              marketableCount: segment.marketable_count,
+            });
 
     put:
       summary: Update Segment
@@ -16331,6 +16573,17 @@ paths:
               fmt.Printf("Updated segment %s (%s)\n", response.Name, response.State)
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const segmentId = "00000000-0000-4000-8000-000000000015";
+            // A changed definition or time zone builds the members again; a new name does not.
+            const segment = await client.segments.update(segmentId, { name: "Engaged German customers" });
+            console.log("Segment updated.", { id: segment.id, name: segment.name });
+
     delete:
       summary: Delete Segment
       description: |
@@ -16442,6 +16695,16 @@ paths:
               }
               fmt.Println(response.Message)
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const segmentId = "00000000-0000-4000-8000-000000000015";
+            const result = await client.segments.delete(segmentId);
+            console.log("Segment deleted.", { message: result.message });
 
   /v2/accounts/{account_id}/segments/{segment_id}/contacts:
     get:
@@ -16566,6 +16829,16 @@ paths:
                 fmt.Printf("%s since %s\n", member.Email, member.EnteredAt)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const segmentId = "00000000-0000-4000-8000-000000000015";
+            const page = await client.segments.contacts.list(segmentId, { limit: 20 });
+            console.log("Segment members listed.", { count: page.data.length });
 
   /v2/accounts/{account_id}/contacts/{id_or_email}/segments:
     get:
@@ -16694,6 +16967,16 @@ paths:
                 fmt.Println(segment.Name)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const idOrEmail = "User+Tag@Example.COM";
+            const page = await client.contacts.segments.list(idOrEmail, { limit: 20 });
+            console.log("Contact segments listed.", { count: page.data.length });
 
   # Suppressions endpoints
   /v2/accounts/{account_id}/suppressions:
@@ -17778,7 +18061,7 @@ paths:
 
         **Query Parameters:**
         - `enabled`: Filter by enabled status
-        - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_suppression_created`, `on_dns_error`
+        - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
         - `limit`: Maximum number of items to return (1-100, default: 100)
         - `after`: Pagination cursor for the next page
         - `before`: Pagination cursor for the previous page
@@ -17838,14 +18121,69 @@ paths:
           description: Filter by click event trigger
           schema:
             type: boolean
+        - name: on_unsubscribed
+          in: query
+          description: Filter by unsubscribe event trigger
+          schema:
+            type: boolean
+        - name: on_complained
+          in: query
+          description: Filter by spam complaint event trigger
+          schema:
+            type: boolean
         - name: on_suppression_created
           in: query
           description: Filter by suppression creation event trigger
           schema:
             type: boolean
+        - name: on_suppression_deleted
+          in: query
+          description: Filter by suppression deletion event trigger
+          schema:
+            type: boolean
         - name: on_dns_error
           in: query
           description: Filter by DNS error event trigger
+          schema:
+            type: boolean
+        - name: on_contact_created
+          in: query
+          description: Filter by contact creation event trigger
+          schema:
+            type: boolean
+        - name: on_contact_updated
+          in: query
+          description: Filter by contact update event trigger
+          schema:
+            type: boolean
+        - name: on_contact_deleted
+          in: query
+          description: Filter by contact deletion event trigger
+          schema:
+            type: boolean
+        - name: on_contact_added_to_list
+          in: query
+          description: Filter by contact added to list event trigger
+          schema:
+            type: boolean
+        - name: on_contact_removed_from_list
+          in: query
+          description: Filter by contact removed from list event trigger
+          schema:
+            type: boolean
+        - name: on_contact_subscribed
+          in: query
+          description: Filter by contact subscribed event trigger
+          schema:
+            type: boolean
+        - name: on_contact_unsubscribed
+          in: query
+          description: Filter by contact unsubscribed event trigger
+          schema:
+            type: boolean
+        - name: on_contact_complained
+          in: query
+          description: Filter by contact spam complaint event trigger
           schema:
             type: boolean
         - name: limit
@@ -17952,6 +18290,15 @@ paths:
         every supplied domain. A `global` webhook requires
         `webhooks:write:all`; supplied domains are accepted but ignored, and
         the response contains `domains: []`.
+
+        Contact events (the `on_contact_*` fields) are available only to
+        accounts with the marketing features: turning one on for another
+        account returns HTTP 400. A webhook with any contact event on needs an
+        API key with `contacts:read`, and with `lists:read` as well for
+        `on_contact_added_to_list`, `on_contact_removed_from_list`,
+        `on_contact_subscribed`, `on_contact_unsubscribed`, and
+        `on_contact_complained`; without them the request returns HTTP 403.
+        The marketing check runs first.
       operationId: createWebhook
       tags:
         - Webhooks
@@ -18040,7 +18387,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CreatedWebhook'
         '400':
-          description: Bad request
+          description: |
+            Bad request, or a contact event for an account without the
+            marketing features
           content:
             application/json:
               schema:
@@ -18052,7 +18401,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden, or a contact event on with an API key that lacks the
+            `contacts:read` or `lists:read` scope it needs
           content:
             application/json:
               schema:
@@ -18186,6 +18537,20 @@ paths:
         every newly supplied domain; changing to global requires
         `webhooks:write:all`.
 
+        Turning on a contact event (the `on_contact_*` fields) for an account
+        without the marketing features returns HTTP 400. A webhook with any
+        contact event on needs an API key with `contacts:read`, and with
+        `lists:read` as well for `on_contact_added_to_list`,
+        `on_contact_removed_from_list`, `on_contact_subscribed`,
+        `on_contact_unsubscribed`, and `on_contact_complained`. This check runs
+        against the webhook as it will be after the update, so every update of
+        an enabled webhook that keeps a contact event on needs these scopes,
+        also an update of only `name`, `url`, `scope`, `domains`, or
+        `origins`, and
+        returns HTTP 403 without them. A key without them can only turn those
+        events off or disable the webhook (`enabled: false`); turning it on
+        again needs the scopes. The marketing check runs first.
+
         **Note:** The webhook secret is not updatable
       operationId: updateWebhook
       tags:
@@ -18271,7 +18636,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Webhook'
         '400':
-          description: Bad request
+          description: |
+            Bad request, or a contact event for an account without the
+            marketing features
           content:
             application/json:
               schema:
@@ -18283,7 +18650,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden
+          description: |
+            Forbidden, or a contact event on with an API key that lacks the
+            `contacts:read` or `lists:read` scope it needs
           content:
             application/json:
               schema:

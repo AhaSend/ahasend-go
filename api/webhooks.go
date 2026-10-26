@@ -129,17 +129,28 @@ func (a *WebhooksAPIService) GetWebhook(
 }
 
 type GetWebhooksParams struct {
-	Enabled              *bool
-	OnReception          *bool
-	OnDelivered          *bool
-	OnTransientError     *bool
-	OnFailed             *bool
-	OnBounced            *bool
-	OnSuppressed         *bool
-	OnOpened             *bool
-	OnClicked            *bool
-	OnSuppressionCreated *bool
-	OnDnsError           *bool
+	Enabled                  *bool
+	OnReception              *bool
+	OnDelivered              *bool
+	OnTransientError         *bool
+	OnFailed                 *bool
+	OnBounced                *bool
+	OnSuppressed             *bool
+	OnOpened                 *bool
+	OnClicked                *bool
+	OnUnsubscribed           *bool
+	OnComplained             *bool
+	OnSuppressionCreated     *bool
+	OnSuppressionDeleted     *bool
+	OnDnsError               *bool
+	OnContactCreated         *bool
+	OnContactUpdated         *bool
+	OnContactDeleted         *bool
+	OnContactAddedToList     *bool
+	OnContactRemovedFromList *bool
+	OnContactSubscribed      *bool
+	OnContactUnsubscribed    *bool
+	OnContactComplained      *bool
 	common.PaginationParams
 }
 
@@ -150,7 +161,7 @@ GetWebhooks Get Webhooks
 
 **Query Parameters:**
 - `enabled`: Filter by enabled status
-- Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_suppression_created`, `on_dns_error`
+- Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
 - `limit`: Maximum number of items to return (1-100, default: 100)
 - `cursor`: Pagination cursor for the next page (backward compatibility)
 - `after`: Get items after this cursor (forward pagination)
@@ -198,11 +209,44 @@ func (a *WebhooksAPIService) GetWebhooks(
 	if params.OnClicked != nil {
 		queryParams.Set("on_clicked", fmt.Sprintf("%t", *params.OnClicked))
 	}
+	if params.OnUnsubscribed != nil {
+		queryParams.Set("on_unsubscribed", fmt.Sprintf("%t", *params.OnUnsubscribed))
+	}
+	if params.OnComplained != nil {
+		queryParams.Set("on_complained", fmt.Sprintf("%t", *params.OnComplained))
+	}
 	if params.OnSuppressionCreated != nil {
 		queryParams.Set("on_suppression_created", fmt.Sprintf("%t", *params.OnSuppressionCreated))
 	}
+	if params.OnSuppressionDeleted != nil {
+		queryParams.Set("on_suppression_deleted", fmt.Sprintf("%t", *params.OnSuppressionDeleted))
+	}
 	if params.OnDnsError != nil {
 		queryParams.Set("on_dns_error", fmt.Sprintf("%t", *params.OnDnsError))
+	}
+	if params.OnContactCreated != nil {
+		queryParams.Set("on_contact_created", fmt.Sprintf("%t", *params.OnContactCreated))
+	}
+	if params.OnContactUpdated != nil {
+		queryParams.Set("on_contact_updated", fmt.Sprintf("%t", *params.OnContactUpdated))
+	}
+	if params.OnContactDeleted != nil {
+		queryParams.Set("on_contact_deleted", fmt.Sprintf("%t", *params.OnContactDeleted))
+	}
+	if params.OnContactAddedToList != nil {
+		queryParams.Set("on_contact_added_to_list", fmt.Sprintf("%t", *params.OnContactAddedToList))
+	}
+	if params.OnContactRemovedFromList != nil {
+		queryParams.Set("on_contact_removed_from_list", fmt.Sprintf("%t", *params.OnContactRemovedFromList))
+	}
+	if params.OnContactSubscribed != nil {
+		queryParams.Set("on_contact_subscribed", fmt.Sprintf("%t", *params.OnContactSubscribed))
+	}
+	if params.OnContactUnsubscribed != nil {
+		queryParams.Set("on_contact_unsubscribed", fmt.Sprintf("%t", *params.OnContactUnsubscribed))
+	}
+	if params.OnContactComplained != nil {
+		queryParams.Set("on_contact_complained", fmt.Sprintf("%t", *params.OnContactComplained))
 	}
 	// Handle pagination parameters
 	if params.Limit != nil {
