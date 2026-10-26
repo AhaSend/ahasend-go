@@ -2236,7 +2236,9 @@ components:
           type: string
           description: The list name
 
-    # Contact schemas, copied from the AhaSend API specification (openapi.yaml)
+    # Contact schemas, copied from the AhaSend API specification (openapi.yaml),
+    # but open: a later delivery can carry a field that this version does not
+    # list, so a receiver must not reject one.
     JSONValue:
       description: Any recursively nested JSON value stored in a contact attribute
       oneOf:
@@ -2253,7 +2255,6 @@ components:
 
     Contact:
       type: object
-      additionalProperties: false
       description: |
         Public contact projection. Attribute reads are legacy-safe: values can
         contain null, booleans, numbers, strings, arrays, or nested objects even
@@ -2322,7 +2323,6 @@ components:
     # The API's ListContact without its `contact` and `list` properties.
     WebhookListContact:
       type: object
-      additionalProperties: false
       description: |
         One contact's membership of one list. It carries no id of its own: a
         membership is addressed by the `(list_id, contact_id)` pair.
