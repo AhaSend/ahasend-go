@@ -1163,6 +1163,67 @@ func TestOpenAPITemplateSchemaMatchesModel(t *testing.T) {
 	assert.Equal(t, openAPISchemaProperties(t, "Template"), modelJSONFields(responses.Template{}))
 }
 
+// TestOpenAPIWebhookSchemasMatchModels fails when the bundled specification
+// gives a webhook or a webhook request a property its model cannot carry.
+// responses.Webhook also decodes the secret that only CreatedWebhook adds.
+func TestOpenAPIWebhookSchemasMatchModels(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "CreatedWebhook", "Webhook"), modelJSONFields(responses.Webhook{}))
+	assert.Equal(t, openAPISchemaProperties(t, "CreateWebhookRequest"), modelJSONFields(requests.CreateWebhookRequest{}))
+	assert.Equal(t, openAPISchemaProperties(t, "UpdateWebhookRequest"), modelJSONFields(requests.UpdateWebhookRequest{}))
+}
+
+// TestWebhooksAPIGetWebhooksSendsEveryEventFilter sets every event filter and
+// checks that the request carries each event filter the specification lists.
+func TestWebhooksAPIGetWebhooksSendsEveryEventFilter(t *testing.T) {
+	contents, err := os.ReadFile("../openapi/openapi.yaml")
+	require.NoError(t, err)
+	var spec struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name string `yaml:"name"`
+				In   string `yaml:"in"`
+			} `yaml:"parameters"`
+		} `yaml:"paths"`
+	}
+	require.NoError(t, yaml.Unmarshal(contents, &spec))
+	var filters []string
+	for _, parameter := range spec.Paths["/v2/accounts/{account_id}/webhooks"]["get"].Parameters {
+		if parameter.In == "query" && strings.HasPrefix(parameter.Name, "on_") {
+			filters = append(filters, parameter.Name)
+		}
+	}
+	require.NotEmpty(t, filters)
+
+	var lastRequest *http.Request
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		lastRequest = r
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"object":"list","data":[],"pagination":{"has_more":false}}`))
+	})
+	defer cleanup()
+
+	params := GetWebhooksParams{}
+	value := reflect.ValueOf(&params).Elem()
+	for i := 0; i < value.NumField(); i++ {
+		if field := value.Field(i); strings.HasPrefix(value.Type().Field(i).Name, "On") {
+			field.Set(reflect.ValueOf(ahasend.Bool(true)))
+		}
+	}
+	_, _, err = client.WebhooksAPI.GetWebhooks(context.Background(), uuid.New(), params)
+	require.NoError(t, err)
+	require.NotNil(t, lastRequest)
+
+	var sent []string
+	for name := range lastRequest.URL.Query() {
+		if strings.HasPrefix(name, "on_") {
+			assert.Equal(t, "true", lastRequest.URL.Query().Get(name), name)
+			sent = append(sent, name)
+		}
+	}
+	assert.ElementsMatch(t, filters, sent)
+}
+
 func TestRoutesAPIGetRoutesWithParamsSerializesDomain(t *testing.T) {
 	var lastRequest *http.Request
 	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
