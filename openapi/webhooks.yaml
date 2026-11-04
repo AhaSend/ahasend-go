@@ -656,11 +656,13 @@ webhooks:
         Triggered when a suppression is created for an email address, or when an existing suppression gets a new reason.
 
         **Why suppressions are created**:
-        - Multiple hard bounces from the same email address (`origin: system`)
-        - Repeated soft bounces over time (`origin: system`)
+        - A hard bounce from the email address (`origin: system`)
+        - A message to the address that fails with temporary errors on several delivery attempts until it expires (`origin: system`)
         - The recipient reports a transactional email as spam (reason `FBL Complaint Report`, `origin: recipient`)
         - The recipient unsubscribes through the unsubscribe link of a transactional email (reason `Unsubscribed`, `origin: recipient`)
         - You create a suppression through the API (`origin: api`). A request without a domain creates a suppression on each domain of your account, and sends one event for each.
+
+        A bounce or an expired message does not suppress the address when the receiving server rejected the message for policy reasons (for example a blocklist or a spam filter), when the failure was on AhaSend's side, or, for transactional email, when a later message to the address was delivered.
 
         **Expiration**: A suppression after delivery errors expires after at most 30 days, depending on the error, to allow for temporary issues to be resolved. A suppression after an unsubscribe or a spam complaint lasts 10 years.
 
@@ -689,7 +691,7 @@ webhooks:
                 recipient: "bounced@example.com"
                 created_at: "2024-05-06T12:57:06.451529617Z"
                 expires_at: "2024-06-05T12:57:06.451529617Z"
-                reason: "Too many hard bounces"
+                reason: "Invalid Recipient"
                 sending_domain: "your-domain.com"
       responses:
         '200':
@@ -739,7 +741,7 @@ webhooks:
                 recipient: "user@example.org"
                 created_at: "2026-10-01T08:00:00Z"
                 expires_at: "2026-10-31T08:00:00Z"
-                reason: "Too many hard bounces"
+                reason: "Invalid Recipient"
                 sending_domain: "example.com"
       responses:
         '200':
@@ -1882,7 +1884,7 @@ components:
           description: When the suppression expires. Delivery errors suppress the address for up to 30 days, and an unsubscribe or a spam complaint for 10 years. A suppression made through the API expires when its request says.
         reason:
           type: string
-          description: Reason for suppression (e.g., "Too many hard bounces")
+          description: Reason for suppression (e.g., "Invalid Recipient")
         sending_domain:
           type: string
           description: The sending domain that the suppression applies to
