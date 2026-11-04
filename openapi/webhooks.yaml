@@ -211,7 +211,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
       responses:
         '200':
           description: Webhook received successfully
@@ -252,7 +252,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
                 delivery_attempt:
                   smtp_code: 250
                   enhanced_status_code: "2.0.0"
@@ -301,7 +301,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
                 delivery_attempt:
                   classification: "QuotaIssues"
                   smtp_code: 452
@@ -348,7 +348,7 @@ webhooks:
                 recipient: "invalid@nonexistent-domain.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
       responses:
         '200':
           description: Webhook received successfully
@@ -389,7 +389,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
                 delivery_attempt:
                   classification: "InvalidRecipient"
                   smtp_code: 550
@@ -436,7 +436,7 @@ webhooks:
                 recipient: "bounced@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
       responses:
         '200':
           description: Webhook received successfully
@@ -484,7 +484,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
                 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 ip: "192.168.1.100"
                 is_bot: false
@@ -532,7 +532,7 @@ webhooks:
                 recipient: "recipient@example.com"
                 subject: "Welcome to our service"
                 message_id_header: "<message-id-12345@localhost>"
-                id: "407926766d2711f09b30960002cafe7c"
+                id: "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
                 url: "https://example.com/landing-page"
                 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 ip: "192.168.1.100"
@@ -1365,7 +1365,7 @@ webhooks:
               route_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
               timestamp: "2024-05-06T13:15:46.404433272Z"
               data:
-                id: "route-msg-12345"
+                id: "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c"
                 from: "customer@gmail.com"
                 reply_to: "customer@gmail.com"
                 to: "support@yourdomain.com"
@@ -1579,7 +1579,7 @@ components:
           description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned."
         id:
           type: string
-          description: Internal AhaSend message ID
+          description: "The message's ID, which [Get Message](https://ahasend.com/docs/api-reference/messages/get-message) takes. For a message sent through the API, it is the `id` that the send returned. For a campaign message it only identifies that message's events, because the API does not return campaign messages."
         user_agent:
           type: string
           description: User agent (only for opened/clicked events)
@@ -1706,7 +1706,7 @@ components:
           description: IP address of the client that clicked the link
         id:
           type: string
-          description: Internal AhaSend message ID
+          description: "The message's ID, which [Get Message](https://ahasend.com/docs/api-reference/messages/get-message) takes. For a message sent through the API, it is the `id` that the send returned. For a campaign message it only identifies that message's events, because the API does not return campaign messages."
         is_bot:
           type: boolean
           description: |
@@ -2442,7 +2442,7 @@ components:
       properties:
         id:
           type: string
-          description: Unique route message ID
+          description: "The message's ID, the `id` that [Get Message](https://ahasend.com/docs/api-reference/messages/get-message) takes."
         from:
           type: string
           description: Sender mailbox text
