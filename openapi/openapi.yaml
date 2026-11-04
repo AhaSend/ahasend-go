@@ -1438,7 +1438,7 @@ components:
           example: 0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b
         message_id_header:
           type: [string, 'null']
-          description: The Message-ID header of this recipient's email. Null if the message was not sent.
+          description: The Message-ID header of this recipient's email. All copies of a conversation send share it. Null if the message was not sent.
           example: <0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>
         recipient:
           allOf:
@@ -7176,7 +7176,7 @@ paths:
             type: string
         - name: message_id_header
           in: query
-          description: Filter by the Message-ID header, with its angle brackets. The send response gives it as `message_id_header`.
+          description: Filter by the Message-ID header, with its angle brackets. The send response gives it as `message_id_header`. All copies of a conversation send share it, so it finds every copy.
           schema:
             type: string
         - name: tags
@@ -7688,6 +7688,8 @@ paths:
       summary: Create Conversational Message
       description: |
         Creates and sends a conversational message (with support for CC and BCC) to one or more recipients. This API does not support template substitutions, use [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) instead if you need substitutions.
+
+        Every To, Cc and Bcc recipient gets its own copy of the message. Each copy has its own `id`, which Get Message and Cancel Message take. All copies share one Message-ID header, given as `message_id_header`, so replies from every recipient refer to the same email.
 
         **Validation Requirements:**
         - Either `text_content` or `html_content` is required
