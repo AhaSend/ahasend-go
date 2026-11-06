@@ -296,7 +296,7 @@ func getRecentMessages(ctx context.Context, client *api.APIClient, accountID uui
 
 	if httpResp.StatusCode >= 200 && httpResp.StatusCode < 300 && response.Data != nil && len(response.Data) > 0 {
 		for i, msg := range response.Data {
-			fmt.Printf("  %d. Message API ID: %s\n", i+1, msg.ID.String())
+			fmt.Printf("  %d. Message ID: %s\n", i+1, msg.ID.String())
 			fmt.Printf("     Message-ID header: %s\n", msg.MessageID)
 			fmt.Printf("     Direction: %s\n", msg.Direction)
 			fmt.Printf("     Subject: %s\n", msg.Subject)

@@ -7,11 +7,14 @@ import (
 // MessageEventData contains the common data for message webhook events.
 // For a campaign message, From includes the sender's name, as "Name <address>".
 type MessageEventData struct {
-	AccountID       string  `json:"account_id"`
-	Event           string  `json:"event"`
-	From            string  `json:"from"`
-	Recipient       string  `json:"recipient"`
-	Subject         string  `json:"subject"`
+	AccountID string `json:"account_id"`
+	Event     string `json:"event"`
+	From      string `json:"from"`
+	Recipient string `json:"recipient"`
+	Subject   string `json:"subject"`
+	// MessageIDHeader is the email's Message-ID header. For a message sent
+	// through CreateMessage, CreateTemplateMessage or CreateConversationMessage,
+	// it is the MessageIDHeader that the send returned.
 	MessageIDHeader string  `json:"message_id_header"`
 	ID              string  `json:"id"`
 	UserAgent       *string `json:"user_agent,omitempty"`
@@ -51,8 +54,8 @@ type MessageEventData struct {
 
 // MessageClickedEventData contains data specific to message clicked events.
 // For a campaign message, From includes the sender's name, as "Name <address>".
-// CampaignID, ListID, and SegmentID follow the same rules as on
-// MessageEventData.
+// MessageIDHeader, CampaignID, ListID, and SegmentID follow the same rules as
+// on MessageEventData.
 type MessageClickedEventData struct {
 	AccountID       string  `json:"account_id"`
 	Event           string  `json:"event"`

@@ -348,7 +348,9 @@ func cancelScheduledEmail(ctx context.Context, client *api.APIClient, accountID 
 	fmt.Println("3. Emails can only be cancelled before they're sent")
 
 	// Example of how you might cancel (adjust based on actual API)
-	messageID := "example-message-id" // You would get this from the schedule response
+	// The id that the scheduled send returned for the recipient
+	// (response.Data[0].ID).
+	messageID := "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b"
 
 	fmt.Printf("Attempting to cancel message: %s\n", messageID)
 

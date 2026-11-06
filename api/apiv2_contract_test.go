@@ -1159,6 +1159,10 @@ func TestOpenAPIMessageSchemaMatchesModel(t *testing.T) {
 	assert.Equal(t, openAPISchemaProperties(t, "Message", "MessageSummary"), modelJSONFields(responses.Message{}))
 }
 
+func TestOpenAPICreateSingleMessageResponseSchemaMatchesModel(t *testing.T) {
+	assert.Equal(t, openAPISchemaProperties(t, "CreateSingleMessageResponse"), modelJSONFields(responses.CreateSingleMessageResponse{}))
+}
+
 func TestOpenAPITemplateSchemaMatchesModel(t *testing.T) {
 	assert.Equal(t, openAPISchemaProperties(t, "Template"), modelJSONFields(responses.Template{}))
 }
@@ -1290,6 +1294,131 @@ func TestMessagesAPICreateConversationMessageUsesToField(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, body, "to")
 	assert.NotContains(t, body, "recipients")
+}
+
+// messageIDForms are the forms of a message's ID that a caller can hold: the
+// bare UUID a send returns, the <uuid@domain> Message-ID that older send
+// responses held, and a 32-hex-character legacy ID.
+var messageIDForms = []struct {
+	name string
+	id   string
+}{
+	{name: "bare UUID", id: "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b"},
+	{name: "Message-ID form", id: "<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>"},
+	{name: "32-hex legacy ID", id: "407926766d2711f09b30960002cafe7c"},
+}
+
+const messageResponseFixture = `{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b","message_id":"<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>"}`
+
+func TestMessagesAPIGetMessageByAPIIDSendsTheIDIntact(t *testing.T) {
+	for _, tt := range messageIDForms {
+		t.Run(tt.name, func(t *testing.T) {
+			accountID := uuid.New()
+			var gotMethod, gotPath, gotRawPath string
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotPath = r.URL.Path
+				gotRawPath = r.URL.RawPath
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(messageResponseFixture))
+			})
+			defer cleanup()
+
+			_, _, err := client.MessagesAPI.GetMessageByAPIID(context.Background(), accountID, tt.id)
+
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodGet, gotMethod)
+			assert.Equal(t, "/v2/accounts/"+accountID.String()+"/messages/"+tt.id, gotPath)
+			// An empty RawPath means the client used Go's default escaping
+			// (`<` and `>` escaped, `@` not), which the server decodes back to
+			// the value.
+			assert.Empty(t, gotRawPath)
+		})
+	}
+}
+
+func TestMessagesAPICancelMessageSendsTheIDIntact(t *testing.T) {
+	for _, tt := range messageIDForms {
+		t.Run(tt.name, func(t *testing.T) {
+			accountID := uuid.New()
+			var gotMethod, gotPath, gotRawPath string
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotPath = r.URL.Path
+				gotRawPath = r.URL.RawPath
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"message":"Message cancelled"}`))
+			})
+			defer cleanup()
+
+			_, _, err := client.MessagesAPI.CancelMessage(context.Background(), accountID, tt.id)
+
+			require.NoError(t, err)
+			assert.Equal(t, http.MethodDelete, gotMethod)
+			assert.Equal(t, "/v2/accounts/"+accountID.String()+"/messages/"+tt.id+"/cancel", gotPath)
+			assert.Empty(t, gotRawPath)
+		})
+	}
+}
+
+func TestMessagesAPIGetMessageSendsTheHyphenatedUUID(t *testing.T) {
+	accountID := uuid.New()
+	messageID := uuid.MustParse("0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b")
+	var gotPath string
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(messageResponseFixture))
+	})
+	defer cleanup()
+
+	message, _, err := client.MessagesAPI.GetMessage(context.Background(), accountID, messageID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v2/accounts/"+accountID.String()+"/messages/0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b", gotPath)
+	assert.Equal(t, messageID, message.ID)
+}
+
+// The id a send returns is the one Get Message takes.
+func TestMessagesAPISendIDGetsTheMessage(t *testing.T) {
+	accountID := uuid.New()
+	messagesPath := "/v2/accounts/" + accountID.String() + "/messages"
+	var gotGetPath string
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == messagesPath:
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"object":"list","data":[{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b","message_id_header":"<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>","recipient":{"email":"john@example.com"},"status":"queued"}]}`))
+		case r.Method == http.MethodGet:
+			gotGetPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(messageResponseFixture))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	defer cleanup()
+
+	sent, _, err := client.MessagesAPI.CreateMessage(context.Background(), accountID, requests.CreateMessageRequest{
+		From:        common.SenderAddress{Email: "info@example.com"},
+		Recipients:  []common.Recipient{{Email: "john@example.com"}},
+		Subject:     "Hello",
+		TextContent: ahasend.String("Hello world!"),
+	})
+	require.NoError(t, err)
+	require.Len(t, sent.Data, 1)
+	require.NotNil(t, sent.Data[0].ID)
+	require.NotNil(t, sent.Data[0].MessageIDHeader)
+	assert.Equal(t, "<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>", *sent.Data[0].MessageIDHeader)
+
+	_, _, err = client.MessagesAPI.GetMessageByAPIID(context.Background(), accountID, *sent.Data[0].ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, messagesPath+"/0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b", gotGetPath)
 }
 
 func TestMessagesAPICreateTemplateMessage(t *testing.T) {

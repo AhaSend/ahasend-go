@@ -1576,7 +1576,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
+          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned."
         id:
           type: string
           description: Internal AhaSend message ID
@@ -1694,7 +1694,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: Message ID header (same as returned by [Create Message](https://ahasend.com/docs/api-reference/messages/create-message) or [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message))
+          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned."
         url:
           type: string
           description: The URL that was clicked
