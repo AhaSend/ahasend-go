@@ -7906,8 +7906,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
-              // The Message-ID returned by Create Message, or its bare UUID.
-              response, _, err := client.MessagesAPI.GetMessageByAPIID(ctx, accountID, "<8b1f2e8c-5d6a-4c3b-9e7f-1a2b3c4d5e6f@example.com>")
+              // The id that Create Message returned for the recipient.
+              response, _, err := client.MessagesAPI.GetMessageByAPIID(ctx, accountID, "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b")
               if err != nil {
                 log.Fatalf("Error getting message: %v", err)
               }
@@ -8012,8 +8012,8 @@ paths:
               accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
               ctx := context.Background()
 
-              // The Message-ID returned by Create Message, or its bare UUID.
-              response, _, err := client.MessagesAPI.CancelMessage(ctx, accountID, "<8b1f2e8c-5d6a-4c3b-9e7f-1a2b3c4d5e6f@example.com>")
+              // The id that Create Message returned for the recipient.
+              response, _, err := client.MessagesAPI.CancelMessage(ctx, accountID, "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b")
               if err != nil {
                 log.Fatalf("Error canceling message: %v", err)
               }

@@ -27,8 +27,10 @@ type ContentAttachment struct {
 
 // Message represents an AhaSend message
 type Message struct {
-	Object               string          `json:"object"`
-	ID                   uuid.UUID       `json:"id"`
+	Object string `json:"object"`
+	// ID is the message's ID.
+	ID uuid.UUID `json:"id"`
+	// MessageID is the message's Message-ID header.
 	MessageID            string          `json:"message_id"`
 	CreatedAt            time.Time       `json:"created_at"`
 	UpdatedAt            time.Time       `json:"updated_at"`
@@ -83,10 +85,17 @@ type CreateMessageResponse struct {
 
 // CreateSingleMessageResponse represents the result of creating a single message
 type CreateSingleMessageResponse struct {
-	Object    string           `json:"object"`
-	ID        *string          `json:"id,omitempty"`
-	Recipient common.Recipient `json:"recipient"`
-	Status    string           `json:"status"`
-	Error     *string          `json:"error,omitempty"`
-	Schedule  *MessageSchedule `json:"schedule,omitempty"`
+	Object string `json:"object"`
+	// ID is the ID of this recipient's message. GetMessageByAPIID and
+	// CancelMessage take it, and GetMessage takes it parsed with uuid.Parse.
+	// It is nil when the message was not sent.
+	ID *string `json:"id,omitempty"`
+	// MessageIDHeader is the Message-ID header of this recipient's email, such
+	// as <0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>. It is nil when the
+	// message was not sent.
+	MessageIDHeader *string          `json:"message_id_header,omitempty"`
+	Recipient       common.Recipient `json:"recipient"`
+	Status          string           `json:"status"`
+	Error           *string          `json:"error,omitempty"`
+	Schedule        *MessageSchedule `json:"schedule,omitempty"`
 }
