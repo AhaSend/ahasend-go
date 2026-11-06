@@ -536,7 +536,10 @@ func exampleEventTypeChecks(event webhooks.WebhookEvent) {
 	if webhooks.IsMessageEvent(event) {
 		// Extract common message data
 		if messageData := webhooks.GetMessageEventData(event); messageData != nil {
-			// Update your database
+			// Update your database. messageData.ID is the message's ID, which
+			// GetMessageByAPIID takes. For a message sent through the API it
+			// is the ID that the send returned; for a campaign message it
+			// only identifies that message's events.
 			// db.UpdateMessageStatus(messageData.ID, event.GetType(), event.GetTimestamp())
 			fmt.Printf("Would update message %s with status %s\n", messageData.ID, event.GetType())
 		}

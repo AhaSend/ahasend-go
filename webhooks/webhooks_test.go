@@ -37,7 +37,7 @@ func TestWebhookVerification(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("valid webhook", func(t *testing.T) {
-		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{"account_id":"4cdd7bdd-294e-4762-892f-83d40abf5a87","event":"on_delivered","from":"sender@example.com","recipient":"recipient@example.com","subject":"Test Email","message_id_header":"<message-id-12345@localhost>","id":"407926766d2711f09b30960002cafe7c"}}`
+		payload := `{"type":"message.delivered","timestamp":"2024-05-06T09:50:16.687031577Z","data":{"account_id":"4cdd7bdd-294e-4762-892f-83d40abf5a87","event":"on_delivered","from":"sender@example.com","recipient":"recipient@example.com","subject":"Test Email","message_id_header":"<message-id-12345@localhost>","id":"019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"}}`
 
 		headers := http.Header{}
 		headers.Set("webhook-id", "msg_2Ej8Gx5VCOPKUhbMr9Zw7qvxPtt")
@@ -288,7 +288,7 @@ func TestWebhookParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Welcome to our service",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c"
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
 			}
 		}`
 
@@ -316,7 +316,7 @@ func TestWebhookParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Welcome to our service",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 				"ip": "192.168.1.100",
 				"is_bot": true
@@ -378,7 +378,7 @@ func TestWebhookParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Welcome to our service",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"url": "https://example.com/link",
 				"user_agent": "Mozilla/5.0",
 				"ip": "192.168.1.100",
@@ -412,7 +412,7 @@ func TestWebhookParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Welcome to our service",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"url": "https://example.com/link",
 				"user_agent": "Mozilla/5.0",
 				"ip": "192.168.1.100",
@@ -491,7 +491,7 @@ func TestWebhookParsing(t *testing.T) {
 			"route_id": "550e8400-e29b-41d4-a716-446655440000",
 			"timestamp": "2024-05-06T13:15:46.404433272Z",
 			"data": {
-				"id": "route-msg-12345",
+				"id": "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c",
 				"from": "customer@gmail.com",
 				"reply_to": "customer@gmail.com",
 				"to": "support@yourdomain.com",
@@ -538,7 +538,7 @@ func TestWebhookParsing(t *testing.T) {
 		routeEvent, ok := event.(*RouteMessageEvent)
 		require.True(t, ok)
 		assert.Equal(t, "message.routing", routeEvent.Type)
-		assert.Equal(t, "route-msg-12345", routeEvent.Data.ID)
+		assert.Equal(t, "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c", routeEvent.Data.ID)
 		assert.Equal(t, "customer@gmail.com", routeEvent.Data.From)
 		assert.Equal(t, "support@yourdomain.com", routeEvent.Data.To)
 		assert.Equal(t, "Help with my account", routeEvent.Data.Subject)
@@ -557,7 +557,7 @@ func TestWebhookParsing(t *testing.T) {
 			"type": "route.message",
 			"timestamp": "2024-05-06T13:15:46.404433272Z",
 			"data": {
-				"id": "route-msg-legacy",
+				"id": "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c",
 				"from": "customer@gmail.com",
 				"to": "support@yourdomain.com",
 				"subject": "Legacy event",
@@ -587,7 +587,7 @@ func TestWebhookParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "October news",
 				"message_id_header": "<campaign-1@example.com>",
-				"id": "407926766d2711f09b30960002cafe7c"
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"
 			}
 		}`
 
@@ -612,7 +612,7 @@ func TestWebhookParsing(t *testing.T) {
 				"url": "https://example.com/offer",
 				"user_agent": "Mozilla/5.0",
 				"ip": "203.0.113.7",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"is_bot": false
 			}
 		}`
@@ -630,7 +630,7 @@ func TestWebhookParsing(t *testing.T) {
 			"route_id": "550e8400-e29b-41d4-a716-446655440000",
 			"timestamp": "2026-10-01T13:15:46.404433272Z",
 			"data": {
-				"id": "route-msg-grouped",
+				"id": "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c",
 				"from": "Jane Doe <jane@example.org>",
 				"reply_to": "\"Doe, Jane\" <jane@example.org>, team@example.org",
 				"to": "Support <support@yourdomain.com>, sales@yourdomain.com",
@@ -663,7 +663,7 @@ func TestWebhookParsing(t *testing.T) {
 					"type": "message.routing",
 					"timestamp": "2026-10-01T13:15:46.404433272Z",
 					"data": {
-						"id": "route-msg-score",
+						"id": "019a0c3f-1d2e-7f3a-8b4c-5d6e7f8a9b0c",
 						"from": "jane@example.org",
 						"to": "support@yourdomain.com",
 						"subject": "Score",
@@ -825,7 +825,7 @@ func messageEventPayload(eventType, eventName, fragment string) string {
 			"recipient": "recipient@example.com",
 			"subject": "Welcome to our service",
 			"message_id_header": "<message-id-12345@localhost>",
-			"id": "407926766d2711f09b30960002cafe7c"%s
+			"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e"%s
 		}
 	}`, eventType, eventName, fragment)
 }
