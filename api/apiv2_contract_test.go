@@ -18,6 +18,7 @@ import (
 	"github.com/AhaSend/ahasend-go/models/common"
 	"github.com/AhaSend/ahasend-go/models/requests"
 	"github.com/AhaSend/ahasend-go/models/responses"
+	"github.com/AhaSend/ahasend-go/webhooks"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1419,6 +1420,51 @@ func TestMessagesAPISendIDGetsTheMessage(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, messagesPath+"/0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b", gotGetPath)
+}
+
+// The id of a message event and of a route event goes to GetMessageByAPIID
+// unchanged, in the hyphenated form and in the form of older events.
+func TestMessagesAPIWebhookEventDataIDGetsTheMessage(t *testing.T) {
+	// deliveredEventID and routingEventID decode a webhook carrying id and
+	// return the Data.ID the SDK gives the caller.
+	deliveredEventID := func(t *testing.T, id string) string {
+		var event webhooks.MessageDeliveredEvent
+		require.NoError(t, json.Unmarshal([]byte(`{"type":"message.delivered","timestamp":"2026-11-04T10:00:00Z","data":{"account_id":"4cdd7bdd-294e-4762-892f-83d40abf5a87","event":"on_delivered","from":"info@example.com","recipient":"john@example.com","subject":"Hello","message_id_header":"<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>","id":"`+id+`"}}`), &event))
+		return event.Data.ID
+	}
+	routingEventID := func(t *testing.T, id string) string {
+		var event webhooks.RouteMessageEvent
+		require.NoError(t, json.Unmarshal([]byte(`{"type":"message.routing","route_id":"abe11757-2886-4b55-96f1-0e0afc95795a","timestamp":"2026-11-04T10:00:00Z","data":{"id":"`+id+`","from":"customer@example.org","to":"support@example.com","subject":"Help","message_id":"<abc@example.org>","size":1024,"bounce":false,"html_body":"","plain_body":"Hi"}}`), &event))
+		return event.Data.ID
+	}
+	tests := []struct {
+		name    string
+		eventID func(*testing.T, string) string
+		id      string
+	}{
+		{name: "message event", eventID: deliveredEventID, id: "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b"},
+		{name: "route event", eventID: routingEventID, id: "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b"},
+		{name: "older message event", eventID: deliveredEventID, id: "407926766d2711f09b30960002cafe7c"},
+		{name: "older route event", eventID: routingEventID, id: "407926766d2711f09b30960002cafe7c"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			accountID := uuid.New()
+			var gotPath string
+			client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(messageResponseFixture))
+			})
+			defer cleanup()
+
+			_, _, err := client.MessagesAPI.GetMessageByAPIID(context.Background(), accountID, tt.eventID(t, tt.id))
+
+			require.NoError(t, err)
+			assert.Equal(t, "/v2/accounts/"+accountID.String()+"/messages/"+tt.id, gotPath)
+		})
+	}
 }
 
 func TestMessagesAPICreateTemplateMessage(t *testing.T) {

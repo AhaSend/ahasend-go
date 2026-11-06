@@ -339,7 +339,7 @@ func TestDeliveryAttemptParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Welcome to our service",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"url": "https://example.com/link",
 				"user_agent": "Mozilla/5.0",
 				"ip": "192.168.1.100",
