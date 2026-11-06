@@ -81,11 +81,13 @@ type CreateConversationMessageRequest struct {
 }
 
 type GetMessagesParams struct {
-	Status          *string
-	Tags            []string
-	Sender          *string
-	Recipient       *string
-	Subject         *string
+	Status    *string
+	Tags      []string
+	Sender    *string
+	Recipient *string
+	Subject   *string
+	// MessageIDHeader filters by the Message-ID header, with its angle
+	// brackets. The send response gives it as MessageIDHeader.
 	MessageIDHeader *string
 	FromTime        *time.Time
 	ToTime          *time.Time
