@@ -1422,6 +1422,58 @@ func TestMessagesAPISendIDGetsTheMessage(t *testing.T) {
 	assert.Equal(t, messagesPath+"/0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b", gotGetPath)
 }
 
+// Every To, Cc and Bcc recipient of a conversation send gets its own copy with
+// its own id, and all copies share one Message-ID header. Cancelling one copy
+// by its id targets that copy alone.
+func TestMessagesAPIConversationSendCopiesShareTheMessageIDHeader(t *testing.T) {
+	accountID := uuid.New()
+	messagesPath := "/v2/accounts/" + accountID.String() + "/messages"
+	const sharedHeader = "<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a70@example.com>"
+	var cancelPaths []string
+	client, cleanup := newContractTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == messagesPath+"/conversation":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"object":"list","data":[` +
+				`{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b","message_id_header":"` + sharedHeader + `","recipient":{"email":"to@example.com"},"status":"queued"},` +
+				`{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7c","message_id_header":"` + sharedHeader + `","recipient":{"email":"cc@example.com"},"status":"queued"},` +
+				`{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7d","message_id_header":"` + sharedHeader + `","recipient":{"email":"bcc@example.com"},"status":"queued"}]}`))
+		case r.Method == http.MethodDelete:
+			cancelPaths = append(cancelPaths, r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":"Message cancelled"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	defer cleanup()
+
+	sent, _, err := client.MessagesAPI.CreateConversationMessage(context.Background(), accountID, requests.CreateConversationMessageRequest{
+		From:        common.SenderAddress{Email: "info@example.com"},
+		To:          []common.SenderAddress{{Email: "to@example.com"}},
+		CC:          []common.SenderAddress{{Email: "cc@example.com"}},
+		BCC:         []common.SenderAddress{{Email: "bcc@example.com"}},
+		Subject:     "Hello",
+		TextContent: ahasend.String("Hello world!"),
+	})
+	require.NoError(t, err)
+	require.Len(t, sent.Data, 3)
+	ids := map[string]bool{}
+	for _, message := range sent.Data {
+		require.NotNil(t, message.ID)
+		require.NotNil(t, message.MessageIDHeader)
+		assert.Equal(t, sharedHeader, *message.MessageIDHeader)
+		ids[*message.ID] = true
+	}
+	assert.Len(t, ids, 3, "every copy has its own id")
+
+	_, _, err = client.MessagesAPI.CancelMessage(context.Background(), accountID, *sent.Data[1].ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{messagesPath + "/0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7c/cancel"}, cancelPaths)
+}
+
 // The id of a message event and of a route event goes to GetMessageByAPIID
 // unchanged, in the hyphenated form and in the form of older events.
 func TestMessagesAPIWebhookEventDataIDGetsTheMessage(t *testing.T) {
