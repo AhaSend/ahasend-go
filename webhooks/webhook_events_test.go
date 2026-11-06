@@ -1,12 +1,14 @@
 package webhooks
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -353,7 +355,7 @@ func TestMessageCampaignEventParsing(t *testing.T) {
 				"recipient": "recipient@example.com",
 				"subject": "Our October news",
 				"message_id_header": "<message-id-12345@localhost>",
-				"id": "407926766d2711f09b30960002cafe7c",
+				"id": "019a0c3e-7c3e-7b2a-9d4e-5f6a7b8c9d0e",
 				"url": "https://example.com/landing-page",
 				"user_agent": "Mozilla/5.0",
 				"ip": "192.168.1.100",
@@ -610,4 +612,86 @@ func TestContactEventParsing(t *testing.T) {
 		assert.ErrorIs(t, err, ErrUnknownEventType)
 		assert.Nil(t, event)
 	})
+}
+
+// eventsAwaitingUUIDExamples are the events whose examples with a hyphenated
+// UUID data.id come later from the server.
+var eventsAwaitingUUIDExamples = map[string]bool{
+	"message.unsubscribed": true,
+	"message.complained":   true,
+}
+
+// eventMessageID returns Data.ID of a message or route event, and false for
+// every other event.
+func eventMessageID(event WebhookEvent) (string, bool) {
+	switch e := event.(type) {
+	case *MessageClickedEvent:
+		return e.Data.ID, true
+	case *RouteMessageEvent:
+		return e.Data.ID, true
+	}
+	if data := GetMessageEventData(event); data != nil {
+		return data.ID, true
+	}
+	return "", false
+}
+
+// isHyphenatedUUID reports whether id is a UUID in its canonical 8-4-4-4-12
+// form. uuid.Parse alone also accepts 32 hex characters, braces and a
+// urn:uuid: prefix; comparing with String keeps only the canonical form.
+func isHyphenatedUUID(id string) bool {
+	parsed, err := uuid.Parse(id)
+	return err == nil && len(id) == 36 && parsed.String() == id
+}
+
+// TestSpecExampleMessageIDsAreUUIDs pins that every message and route event
+// example in the specification, apart from eventsAwaitingUUIDExamples, decodes
+// to a Data.ID that is a hyphenated UUID, the message's ID that
+// GetMessageByAPIID takes unchanged.
+func TestSpecExampleMessageIDsAreUUIDs(t *testing.T) {
+	spec := loadWebhookSpec(t)
+	require.NotEmpty(t, spec.Webhooks, "no webhooks section found in the specification")
+
+	verifier, err := NewWebhookVerifier(testWebhookSecret)
+	require.NoError(t, err)
+
+	examined := map[string]bool{}
+	for eventType, operation := range spec.Webhooks {
+		example := operation.Post.RequestBody.Content["application/json"].Example
+		if example == nil {
+			continue
+		}
+
+		t.Run(eventType, func(t *testing.T) {
+			data, _ := example["data"].(map[string]interface{})
+			exampleID, hasID := data["id"].(string)
+
+			payload, err := json.Marshal(example)
+			require.NoError(t, err)
+			event, err := verifier.Parse(payload, signedHeaders(t, verifier, string(payload)))
+			require.NoError(t, err)
+
+			id, isMessageEvent := eventMessageID(event)
+			require.Equal(t, isMessageEvent, hasID,
+				"data.id is in the example of every message and route event and of no other event")
+			if !hasID {
+				return
+			}
+			examined[eventType] = true
+			assert.Equal(t, exampleID, id)
+
+			if eventsAwaitingUUIDExamples[eventType] {
+				assert.False(t, isHyphenatedUUID(id),
+					"the example now has a hyphenated UUID: remove %s from eventsAwaitingUUIDExamples", eventType)
+				return
+			}
+			assert.True(t, isHyphenatedUUID(id), "data.id %q is not a hyphenated UUID", id)
+		})
+	}
+
+	assert.True(t, examined["message.delivered"], "no message event example was examined")
+	assert.True(t, examined["message.routing"], "no route event example was examined")
+	for eventType := range eventsAwaitingUUIDExamples {
+		assert.True(t, examined[eventType], "%s in eventsAwaitingUUIDExamples has no example with data.id", eventType)
+	}
 }
