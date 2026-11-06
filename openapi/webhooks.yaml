@@ -1576,7 +1576,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned."
+          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned. All copies of a conversation send share it; `id` tells them apart."
         id:
           type: string
           description: "The message's ID, which [Get Message](https://ahasend.com/docs/api-reference/messages/get-message) takes. For a message sent through the API, it is the `id` that the send returned. For a campaign message it only identifies that message's events, because the API does not return campaign messages."
@@ -1694,7 +1694,7 @@ components:
           description: Email subject line
         message_id_header:
           type: string
-          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned."
+          description: "The email's Message-ID header. For a message sent through [Create Message](https://ahasend.com/docs/api-reference/messages/create-message), [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message) or [Create Conversation Message](https://ahasend.com/docs/api-reference/messages/create-conversation), it is the `message_id_header` that the send returned. All copies of a conversation send share it; `id` tells them apart."
         url:
           type: string
           description: The URL that was clicked

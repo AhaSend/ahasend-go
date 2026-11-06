@@ -175,6 +175,11 @@ CreateConversationMessage Create Conversational Message
 
 Creates and sends a conversational message with support for To, CC, and BCC recipients.
 
+Every To, CC and BCC recipient gets its own copy of the message. Each copy has
+its own ID, which GetMessageByAPIID and CancelMessage take. All copies share
+one Message-ID header, given as MessageIDHeader, so replies from every
+recipient refer to the same email.
+
 **Validation Requirements:**
 - Either `text_content` or `html_content` is required
 - `from.email` must be from a domain you own with valid DNS records
@@ -238,7 +243,7 @@ Returns a list of messages for the account. Can be filtered by various parameter
 - `sender`: Filter by sender email (must be from domain in API key scopes)
 - `recipient`: Filter by recipient email
 - `subject`: Filter by subject text
-- `message_id_header`: Filter by the Message-ID header, with its angle brackets. The send response gives it as `message_id_header`.
+- `message_id_header`: Filter by the Message-ID header, with its angle brackets. The send response gives it as `message_id_header`. All copies of a conversation send share it, so it finds every copy.
 - `from_time`: Filter messages created after this time (RFC3339 format)
 - `to_time`: Filter messages created before this time (RFC3339 format)
 - `limit`: Maximum number of items to return (1-100, default: 100)

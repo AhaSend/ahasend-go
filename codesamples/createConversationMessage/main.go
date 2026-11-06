@@ -48,6 +48,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error sending conversational message: %v", err)
 	}
+	// Every To, CC and BCC recipient gets its own copy with its own ID,
+	// which GetMessageByAPIID and CancelMessage take. All copies share one
+	// MessageIDHeader, so replies from every recipient refer to one email.
 	for _, message := range response.Data {
 		if message.ID != nil {
 			fmt.Printf("%s: %s\n", message.Recipient.Email, *message.ID)

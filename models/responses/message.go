@@ -91,8 +91,8 @@ type CreateSingleMessageResponse struct {
 	// was not sent.
 	ID *string `json:"id,omitempty"`
 	// MessageIDHeader is the Message-ID header of this recipient's email, such
-	// as <0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>. It is nil when the
-	// message was not sent.
+	// as <0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>. All copies of a
+	// conversation send share it. It is nil when the message was not sent.
 	MessageIDHeader *string          `json:"message_id_header,omitempty"`
 	Recipient       common.Recipient `json:"recipient"`
 	Status          string           `json:"status"`
