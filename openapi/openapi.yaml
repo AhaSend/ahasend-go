@@ -436,10 +436,11 @@ components:
         The write could not be finished now, for one of two reasons. Nothing
         was written.
 
-        - The template changed in the dashboard or through another request
-          while this one was writing it, more often than the request retries
-          by itself. Only a write of a transactional template that already
-          exists can get this.
+        - The template or campaign changed in the dashboard or through
+          another request while this one was writing it. Only a write of a
+          transactional template that already exists, after it retried by
+          itself, and an update of a campaign whose body changed, can get
+          this.
         - AhaSend Markup (AhaML) in `content.markup` could not be read now:
           the service that reads it is down, failed or busy.
 
@@ -959,6 +960,10 @@ components:
 
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen.
 
+            On managed DNS domains, DKIM uses two selectors and switches between them at each key rotation: this selector, and a second selector that is this selector followed by `2`. When the selector ends in a `1` that does not follow another digit, that `1` becomes `2` instead: `os` → `os2`, `os1` → `os2`, but `s11` → `s112`.
+
+            DNS records that already exist at the hosts of a selector sent in this field do not block it. On a managed DNS domain, DKIM passes once the `host` of the DKIM record marked `required` in the domain's `dns_records` (DKIM hosts contain `._domainkey.`) points to that record's `content`, directly or through other CNAME records; point the other DKIM record's `host` to its `content` too, so DKIM rotation can run.
+
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
         sending_type:
           type: string
@@ -996,6 +1001,10 @@ components:
             Optional custom DKIM selector for the domain. Omit or send null to leave the current value unchanged; send an empty or whitespace-only string to clear the override and revert to the default selector. The value is trimmed before it is interpreted, so whitespace-only input clears the override just like an empty string.
 
             When provided, it is normalized to lowercase and must be a single DNS label: 1-62 characters using lowercase letters, numbers, and hyphens only, without a leading or trailing hyphen. It cannot be changed once the selector locks after DNS verification or while a DKIM key rotation is in progress.
+
+            On managed DNS domains, DKIM uses two selectors and switches between them at each key rotation: this selector, and a second selector that is this selector followed by `2`. When the selector ends in a `1` that does not follow another digit, that `1` becomes `2` instead: `os` → `os2`, `os1` → `os2`, but `s11` → `s112`.
+
+            DNS records that already exist at the hosts of a selector sent in this field do not block it. On a managed DNS domain, DKIM passes once the `host` of the DKIM record marked `required` in the domain's `dns_records` (DKIM hosts contain `._domainkey.`) points to that record's `content`, directly or through other CNAME records; point the other DKIM record's `host` to its `content` too, so DKIM rotation can run.
 
             **Note:** This parameter is only supported on [Platform Partner](https://ahasend.com/partners) accounts.
         sending_type:
@@ -1128,7 +1137,8 @@ components:
           maximum: 30
         data:
           type: [integer, 'null']
-          description: Number of days to retain data
+          description: |
+            Number of days to retain data. 0 keeps no copy of the message content. It applies only to accounts that may turn off message data retention; for other accounts the message keeps the account's default message data retention.
           minimum: 0
           maximum: 30
       example:
@@ -2044,10 +2054,10 @@ components:
         replaces the design that save stored.
 
         A `simple` design is written as AhaSend Markup (AhaML) in `markup`.
-        Its `html` is made from the design: beside `markup` it is ignored,
-        and without `markup` it is ignored when it equals the working copy's
-        stored HTML, and refused otherwise; an empty `html` is refused, as for
-        every editor. The `content` read from a
+        Its `html` is made from the design: beside `markup` it is ignored
+        without any check, and without `markup` it is ignored when it equals
+        the working copy's stored HTML, and refused otherwise, an empty `html`
+        included. The `content` read from a
         `simple` design can so be sent back as it is, `markup_error`
         included: AhaML that prints the same as the stored design keeps that
         design and its HTML, and AhaML that prints the same as the published
@@ -2376,7 +2386,7 @@ components:
         deleted.
 
         - `draft`: being prepared.
-        - `validating`: scheduled, and its lists are being checked.
+        - `validating`: scheduled, and its lists and segments are being checked.
         - `waiting_for_review`: held for a review before it sends.
         - `scheduled`: accepted, waiting for its send time.
         - `sending`: sending now.
@@ -3313,7 +3323,9 @@ components:
           type: number
           format: double
           minimum: 0
-          description: Proportional allocated cost for this usage bucket
+          description: >-
+            Proportional allocated cost for this usage bucket. A value of 0 can
+            also mean that no cost estimate is available.
       example:
         account_id: "2f3c5d2a-9ef8-4c91-a5f4-79990c8c1d3a"
         name: "Acme Subsidiary"
@@ -4917,7 +4929,10 @@ components:
         url:
           type: string
           format: uri
-          description: Webhook URL for the route
+          description: |
+            Webhook URL for the route. It must be an `http` or `https` URL whose
+            host is a public address. A host that is, or resolves to, a private,
+            local or internal network address gives a 400 error.
         recipient:
           type: string
           maxLength: 255
@@ -4958,7 +4973,10 @@ components:
         url:
           type: [string, 'null']
           format: uri
-          description: Webhook URL for the route
+          description: |
+            Webhook URL for the route. It must be an `http` or `https` URL whose
+            host is a public address. A host that is, or resolves to, a private,
+            local or internal network address gives a 400 error.
         recipient:
           type: [string, 'null']
           maxLength: 255
@@ -5202,7 +5220,10 @@ components:
         url:
           type: string
           format: uri
-          description: Webhook URL
+          description: |
+            Webhook URL. It must be an `http` or `https` URL whose host is a
+            public address. A host that is, or resolves to, a private, local or
+            internal network address gives a 400 error.
         enabled:
           type: boolean
           description: Whether the webhook is enabled
@@ -5352,7 +5373,10 @@ components:
         url:
           type: [string, 'null']
           format: uri
-          description: Webhook URL
+          description: |
+            Webhook URL. It must be an `http` or `https` URL whose host is a
+            public address. A host that is, or resolves to, a private, local or
+            internal network address gives a 400 error.
         enabled:
           type: [boolean, 'null']
           description: Whether the webhook is enabled
@@ -8596,9 +8620,16 @@ paths:
             // The SDK sends a fresh Idempotency-Key automatically and reuses it on its own retries.
             const templateId = "00000000-0000-4000-8000-000000000009";
             // Fields go to the template's draft; publish: true also publishes it.
+            // A simple design is written as AhaSend Markup (AhaML) in content.markup.
             const template = await client.templates.update(templateId, {
               subject: "Welcome to the team, {{ first_name }}",
-              preheader: null,
+              content: {
+                markup: `<Email version="1">
+              <Heading level="3">Welcome to the team</Heading>
+              <Paragraph>Hi <Var name="first_name" fallback="there"/>, thanks for signing up.</Paragraph>
+            </Email>
+            `,
+              },
               publish: true,
             });
             console.log("Template updated.", { id: template.id, hasDraft: template.has_draft });
@@ -8819,6 +8850,21 @@ paths:
                 fmt.Printf("%s required=%t kind=%s\n", variable.Name, variable.Required, variable.Kind)
               }
             }
+
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const templateId = "00000000-0000-4000-8000-000000000009";
+            // The published copy is the one a send uses; get() returns the draft while one exists.
+            const template = await client.templates.getPublished(templateId);
+            console.log("Published template found.", {
+              subject: template.subject,
+              hasDraft: template.has_draft,
+              variables: template.variables.length,
+            });
 
   /v2/accounts/{account_id}/templates/{template_id}/draft:
     delete:
@@ -10858,12 +10904,13 @@ paths:
         Sends a draft campaign now, or at `send_at`. A campaign with any
         issue is refused with the issues. The send then checks what would
         stop the campaign at its send time: its sender domain must still be
-        verified and not paused, the account must be able to send, and its
-        lists must have subscribed contacts. For a send at a later time, a
+        verified and not paused, the account must be able to send, each of
+        its segments, included or excluded, must be ready, and its lists and
+        segments must have subscribed contacts. For a send at a later time, a
         block that a payment or the next billing period can clear is a
         warning instead of a refusal.
 
-        The campaign moves to `validating` and goes through the same list
+        The campaign moves to `validating` and goes through the same contact
         validation and review as a send from the dashboard, which move it on
         from there. Read `status` and `status_reason` with Get Campaign. To
         change the send time, unschedule the campaign and send it again.
@@ -11674,7 +11721,7 @@ paths:
         - `name` must be maximum 255 characters
         - `website` must be a domain such as `acme.com`, or an http(s) URL such as `https://acme.com`; it is stored as the host, so `https://acme.com/team` is read back as `acme.com`. Maximum 255 characters
         - `message_metadata_retention` must be between 1 and 30 days
-        - `message_data_retention` must be between 0 and 30 days
+        - `message_data_retention` must be between 0 and 30 days. 0 turns off message data retention, which only some accounts may do; contact support to enable it
       operationId: updateAccount
       tags:
         - Accounts
