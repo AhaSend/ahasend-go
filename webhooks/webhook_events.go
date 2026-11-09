@@ -14,7 +14,8 @@ type MessageEventData struct {
 	Subject   string `json:"subject"`
 	// MessageIDHeader is the email's Message-ID header. For a message sent
 	// through CreateMessage, CreateTemplateMessage or CreateConversationMessage,
-	// it is the MessageIDHeader that the send returned.
+	// it is the MessageIDHeader that the send returned. All copies of a
+	// conversation send share it; ID tells them apart.
 	MessageIDHeader string `json:"message_id_header"`
 	// ID is the message's ID, which GetMessageByAPIID takes. For a message sent
 	// through the API, it is the ID that the send returned. For a campaign

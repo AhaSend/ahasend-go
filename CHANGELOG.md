@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- All copies of a conversation send (`CreateConversationMessage`, To, CC and BCC) share one
+  Message-ID header, so replies thread for every recipient. Each copy has its own `ID`, which
+  `GetMessageByAPIID` and `CancelMessage` take. The shared `MessageIDHeader` names no single copy:
+  the `MessageIDHeader` filter of `GetMessages` finds every copy. The API makes this change; the
+  doc comments of `CreateConversationMessage`, `GetMessages` and the `MessageIDHeader` fields of the
+  send result and webhook data, the bundled specs and the sample say so.
+
 ### Fixed
 
 - The doc comments of `CreateCampaign`, `UpdateCampaign` and `DuplicateCampaign`, and the bundled

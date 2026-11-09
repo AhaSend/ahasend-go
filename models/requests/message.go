@@ -87,7 +87,8 @@ type GetMessagesParams struct {
 	Recipient *string
 	Subject   *string
 	// MessageIDHeader filters by the Message-ID header, with its angle
-	// brackets. The send response gives it as MessageIDHeader.
+	// brackets. The send response gives it as MessageIDHeader. All copies of a
+	// conversation send share it, so it finds every copy.
 	MessageIDHeader *string
 	FromTime        *time.Time
 	ToTime          *time.Time
