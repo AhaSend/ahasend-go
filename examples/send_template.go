@@ -50,9 +50,10 @@ func main() {
 	// Create authentication context
 	ctx := context.WithValue(context.Background(), api.ContextAccessToken, apiKey)
 
-	// Read the template to see which variables a send has to supply.
-	// This needs the templates:read scope; the send itself does not.
-	template, _, err := client.TemplatesAPI.GetTemplate(ctx, accountID, templateID)
+	// Read the published copy to see which variables a send has to supply.
+	// A send uses the published copy; GetTemplate answers the draft while
+	// one exists. This needs the templates:read scope; the send itself does not.
+	template, _, err := client.TemplatesAPI.GetPublishedTemplate(ctx, accountID, templateID)
 	if err != nil {
 		log.Fatalf("Error reading template: %v", err)
 	}
