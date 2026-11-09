@@ -331,15 +331,16 @@ components:
         again in a minute.` A new status conflict has neither header; a
         stored replay of one has `Idempotent-Replayed: true` (a test send's
         status conflict is not stored, so it is never replayed). The audience
-        refusal is stored for the `Idempotency-Key` like a status conflict,
-        so retry it with a new key. The message is not a stable
-        discriminator.
+        refusal has neither header and is not stored for the
+        `Idempotency-Key`: it releases the key, so a retry with the same key
+        runs again. Retry it after a minute, as the message says. The message
+        is not a stable discriminator.
       headers:
         Idempotent-Replayed:
           description: |
             `false` with a positive `Retry-After` means an execution is in
             progress. `true` means a stored status 409 was replayed. Absent
-            means a fresh status conflict.
+            means a fresh status conflict or an audience refusal.
           schema:
             type: string
             enum: ['true', 'false']
@@ -360,20 +361,18 @@ components:
         progress. The in-progress case is identified only by
         `Idempotent-Replayed: false` plus a positive integer `Retry-After`;
         retry it after that many seconds with the same key. The audience
-        refusal is stored for the `Idempotency-Key` like other client
-        errors: an identical request with the same key replays it with
-        `Idempotent-Replayed: true` for 24 hours, so retry it with a new
-        key. A fresh refusal has neither header. The message is not a
-        stable discriminator.
+        refusal has neither header and is not stored for the
+        `Idempotency-Key`: it releases the key, so a retry with the same key
+        runs again. Retry it after a minute, as the message says. The message
+        is not a stable discriminator.
       headers:
         Idempotent-Replayed:
           description: |
             `false` with a positive `Retry-After` means an execution is in
-            progress. `true` means a stored 409 was replayed. Absent means a
-            fresh refusal.
+            progress. Absent means an audience refusal.
           schema:
             type: string
-            enum: ['true', 'false']
+            enum: ['false']
         Retry-After:
           $ref: '#/components/headers/IdempotencyRetryAfter'
       content:

@@ -581,6 +581,7 @@ Releases are handled by maintainers but contributors can help:
 
 1. **Version Planning**: Semantic versioning (v1.x.x)
 2. **CHANGELOG.md**: Document all changes
+   - **Before tagging**: Move the `[Unreleased]` notes under a new `[X.Y.Z] — YYYY-MM-DD` heading
 3. **Testing**: Comprehensive testing before release
 4. **Documentation**: Ensure docs are up to date
 5. **GitHub Release**: Automated via GitHub Actions
