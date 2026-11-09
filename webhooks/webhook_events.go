@@ -15,10 +15,14 @@ type MessageEventData struct {
 	// MessageIDHeader is the email's Message-ID header. For a message sent
 	// through CreateMessage, CreateTemplateMessage or CreateConversationMessage,
 	// it is the MessageIDHeader that the send returned.
-	MessageIDHeader string  `json:"message_id_header"`
-	ID              string  `json:"id"`
-	UserAgent       *string `json:"user_agent,omitempty"`
-	IP              *string `json:"ip,omitempty"`
+	MessageIDHeader string `json:"message_id_header"`
+	// ID is the message's ID, which GetMessageByAPIID takes. For a message sent
+	// through the API, it is the ID that the send returned. For a campaign
+	// message it only identifies that message's events, because the API does
+	// not return campaign messages.
+	ID        string  `json:"id"`
+	UserAgent *string `json:"user_agent,omitempty"`
+	IP        *string `json:"ip,omitempty"`
 	// IsBot reports whether the open was attributed to an automated client.
 	// Bot detection runs on every open and always yields a definite true or
 	// false, so there is no unknown state; the field is only meaningful for
@@ -54,8 +58,8 @@ type MessageEventData struct {
 
 // MessageClickedEventData contains data specific to message clicked events.
 // For a campaign message, From includes the sender's name, as "Name <address>".
-// MessageIDHeader, CampaignID, ListID, and SegmentID follow the same rules as
-// on MessageEventData.
+// ID, MessageIDHeader, CampaignID, ListID, and SegmentID follow the same rules
+// as on MessageEventData.
 type MessageClickedEventData struct {
 	AccountID       string  `json:"account_id"`
 	Event           string  `json:"event"`
@@ -296,6 +300,7 @@ type RouteAttachment struct {
 // likely spam; it can be below 0 or above 10. It is 0 when the message was not
 // checked.
 type RouteEventData struct {
+	// ID is the message's ID, the ID that GetMessageByAPIID takes.
 	ID                 string   `json:"id"`
 	From               string   `json:"from"`
 	ReplyTo            *string  `json:"reply_to,omitempty"`

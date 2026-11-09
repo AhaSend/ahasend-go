@@ -178,7 +178,7 @@ func handleMessageReception(event *webhooks.MessageReceptionEvent) error {
 	log.Printf("  From: %s", event.Data.From)
 	log.Printf("  To: %s", event.Data.Recipient)
 	log.Printf("  Subject: %s", event.Data.Subject)
-	log.Printf("  Message ID: %s", event.Data.ID)
+	log.Printf("  ID: %s", event.Data.ID)
 
 	// TODO: Add your business logic here
 	// For example, update message status in database
@@ -190,7 +190,7 @@ func handleMessageDelivered(event *webhooks.MessageDeliveredEvent) error {
 	log.Printf("✅ Email delivered successfully:")
 	log.Printf("  To: %s", event.Data.Recipient)
 	log.Printf("  Subject: %s", event.Data.Subject)
-	log.Printf("  Message ID: %s", event.Data.ID)
+	log.Printf("  ID: %s", event.Data.ID)
 
 	// TODO: Add your business logic here
 	// For example, mark message as delivered in your system
@@ -213,7 +213,7 @@ func handleMessageFailed(event *webhooks.MessageFailedEvent) error {
 	log.Printf("❌ Email delivery failed permanently:")
 	log.Printf("  To: %s", event.Data.Recipient)
 	log.Printf("  Subject: %s", event.Data.Subject)
-	log.Printf("  Message ID: %s", event.Data.ID)
+	log.Printf("  ID: %s", event.Data.ID)
 
 	// TODO: Add your business logic here
 	// For example, notify the sender or update customer records
@@ -327,7 +327,7 @@ func handleMessageUnsubscribed(event *webhooks.MessageUnsubscribedEvent) error {
 	}
 
 	// The event repeats for every unsubscribe request AhaSend accepts, so
-	// drop repeats by event type and message ID.
+	// drop repeats by event type and Data.ID.
 
 	// TODO: Add your business logic here
 
@@ -536,7 +536,10 @@ func exampleEventTypeChecks(event webhooks.WebhookEvent) {
 	if webhooks.IsMessageEvent(event) {
 		// Extract common message data
 		if messageData := webhooks.GetMessageEventData(event); messageData != nil {
-			// Update your database
+			// Update your database. messageData.ID is the message's ID, which
+			// GetMessageByAPIID takes. For a message sent through the API it
+			// is the ID that the send returned; for a campaign message it
+			// only identifies that message's events.
 			// db.UpdateMessageStatus(messageData.ID, event.GetType(), event.GetTimestamp())
 			fmt.Printf("Would update message %s with status %s\n", messageData.ID, event.GetType())
 		}
