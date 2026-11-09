@@ -280,3 +280,40 @@ func TestDeliveryEventDecodesReportMessageID(t *testing.T) {
 		assert.Nil(t, event.ReportMessageID)
 	})
 }
+
+func TestCreateSingleMessageResponseDecodesIDAndMessageIDHeader(t *testing.T) {
+	t.Run("sent", func(t *testing.T) {
+		payload := `{"object":"message","id":"0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b","message_id_header":"<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>","recipient":{"email":"john@example.com"},"status":"queued"}`
+
+		var message CreateSingleMessageResponse
+		require.NoError(t, json.Unmarshal([]byte(payload), &message))
+
+		require.NotNil(t, message.ID)
+		assert.Equal(t, "0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b", *message.ID)
+		require.NotNil(t, message.MessageIDHeader)
+		assert.Equal(t, "<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>", *message.MessageIDHeader)
+	})
+
+	t.Run("not sent", func(t *testing.T) {
+		payload := `{"object":"message","id":null,"message_id_header":null,"recipient":{"email":"bad@example.com"},"status":"failed","error":"Invalid recipient"}`
+
+		var message CreateSingleMessageResponse
+		require.NoError(t, json.Unmarshal([]byte(payload), &message))
+
+		assert.Nil(t, message.ID)
+		assert.Nil(t, message.MessageIDHeader)
+		require.NotNil(t, message.Error)
+		assert.Equal(t, "Invalid recipient", *message.Error)
+	})
+
+	t.Run("server without message_id_header", func(t *testing.T) {
+		payload := `{"object":"message","id":"<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>","recipient":{"email":"john@example.com"},"status":"queued"}`
+
+		var message CreateSingleMessageResponse
+		require.NoError(t, json.Unmarshal([]byte(payload), &message))
+
+		require.NotNil(t, message.ID)
+		assert.Equal(t, "<0199f1c2-7d3a-7b4e-9a1f-2c3d4e5f6a7b@example.com>", *message.ID)
+		assert.Nil(t, message.MessageIDHeader)
+	})
+}

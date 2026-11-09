@@ -24,7 +24,7 @@ Cancels a scheduled message
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
-	@param messageId Message ID
+	@param messageId The message's ID: the id that CreateMessage, CreateTemplateMessage or CreateConversationMessage returned.
 	@param opts ...RequestOption - optional request options (timeout, retry, headers, etc.)
 	@return SuccessResponse, *http.Response, error
 */
@@ -238,7 +238,7 @@ Returns a list of messages for the account. Can be filtered by various parameter
 - `sender`: Filter by sender email (must be from domain in API key scopes)
 - `recipient`: Filter by recipient email
 - `subject`: Filter by subject text
-- `message_id_header`: Filter by message ID header (same ID returned by CreateMessage API)
+- `message_id_header`: Filter by the Message-ID header, with its angle brackets. The send response gives it as `message_id_header`.
 - `from_time`: Filter messages created after this time (RFC3339 format)
 - `to_time`: Filter messages created before this time (RFC3339 format)
 - `limit`: Maximum number of items to return (1-100, default: 100)
@@ -318,6 +318,8 @@ func (a *MessagesAPIService) GetMessages(
 	return &result, resp, err
 }
 
+// GetMessage returns a message by its ID: the id that CreateMessage,
+// CreateTemplateMessage or CreateConversationMessage returned.
 func (a *MessagesAPIService) GetMessage(
 	ctx context.Context,
 	accountId uuid.UUID,
@@ -327,7 +329,9 @@ func (a *MessagesAPIService) GetMessage(
 	return a.GetMessageByAPIID(ctx, accountId, messageId.String(), opts...)
 }
 
-// GetMessageByAPIID returns a message by its API ID. messageId can be a bare UUID or a generated Message-ID like <uuid@example.com>.
+// GetMessageByAPIID returns a message by its ID, given as a string. messageId
+// is the message's ID: the id that CreateMessage, CreateTemplateMessage or
+// CreateConversationMessage returned.
 func (a *MessagesAPIService) GetMessageByAPIID(
 	ctx context.Context,
 	accountId uuid.UUID,
