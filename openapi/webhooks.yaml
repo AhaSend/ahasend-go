@@ -1592,11 +1592,8 @@ components:
             Whether the action was performed by a bot.
 
             Bot detection runs on every open and click and always yields a definite
-            true or false. Current deliveries include the field on every message
-            event; it is meaningful for `message.opened` and always `false`
-            elsewhere. Older deliveries may omit it — absence carries no signal, so
-            do not infer `false` from a missing field and never reject a delivery
-            because of it.
+            true or false. Every message event includes the field; it is
+            meaningful for `message.opened` and always `false` elsewhere.
         delivery_attempt:
           description: |
             Diagnostics for the delivery attempt this event reports on: the
@@ -2266,9 +2263,9 @@ components:
     Contact:
       type: object
       description: |
-        Public contact projection. Attribute reads are legacy-safe: values can
-        contain null, booleans, numbers, strings, arrays, or nested objects even
-        though new writes accept only canonical dashboard-defined values.
+        Public contact projection. Attribute values can be null, booleans,
+        numbers, strings, arrays, or nested objects, even though writes accept
+        only canonical dashboard-defined values.
       required:
         - object
         - id

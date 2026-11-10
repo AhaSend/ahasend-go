@@ -39,7 +39,8 @@ func main() {
 		api.WithAPIKey(apiKey),
 	)
 
-	// Configure rate limiting for statistics endpoints (they have lower limits)
+	// Configure rate limiting for the transactional statistics endpoints (they
+	// have lower limits). GetEmailStatistics has the general rate limit.
 	client.SetStatisticsRateLimit(1, 5) // 1 req/s, burst of 5
 
 	// Create authentication context
@@ -70,15 +71,71 @@ func main() {
 	fmt.Println("─────────────────────────────")
 	getDeliveryTimeStats(ctx, client, accountID, startDate, endDate)
 
-	// 4. Get recent messages
-	fmt.Println("\n4. Recent Messages")
+	// 4. Get email statistics by domain
+	fmt.Println("\n4. Email Statistics by Domain")
+	fmt.Println("─────────────────────────────")
+	getEmailStatsByDomain(ctx, client, accountID)
+
+	// 5. Get recent messages
+	fmt.Println("\n5. Recent Messages")
 	fmt.Println("─────────────────────────────")
 	getRecentMessages(ctx, client, accountID)
 
-	// 5. Calculate email performance metrics
-	fmt.Println("\n5. Performance Summary")
+	// 6. Calculate email performance metrics
+	fmt.Println("\n6. Performance Summary")
 	fmt.Println("─────────────────────────────")
 	showPerformanceSummary()
+}
+
+func getEmailStatsByDomain(ctx context.Context, client *api.APIClient, accountID uuid.UUID) {
+	// Email statistics cover any time in the account's history, not only the
+	// message metadata retention period. Read the monthly counts of each
+	// domain over the last 12 months, one page of domains at a time.
+	toTime := time.Now()
+	fromTime := toTime.AddDate(-1, 0, 0)
+	params := requests.GetEmailStatisticsParams{
+		FromTime:  &fromTime,
+		ToTime:    &toTime,
+		GroupBy:   ahasend.String("month"), // Options: hour, day, week, month
+		Breakdown: ahasend.String("domain"),
+		Limit:     ahasend.Int32(10), // Domains per page (1-50)
+	}
+
+	for page := 1; ; page++ {
+		response, _, err := client.StatisticsAPI.GetEmailStatistics(ctx, accountID, params)
+		if err != nil {
+			handleError(err)
+			return
+		}
+
+		// Totals cover the whole request, so every page carries the same ones.
+		if page == 1 {
+			fmt.Printf("  Range:      %s to %s (UTC, end excluded)\n",
+				response.FromTime.Format("2006-01-02"),
+				response.ToTime.Format("2006-01-02"))
+			fmt.Printf("  Accepted:   %d\n", response.Totals.ReceptionCount)
+			fmt.Printf("  Delivered:  %d\n", response.Totals.DeliveredCount)
+			fmt.Printf("  Bounced:    %d\n", response.Totals.BouncedCount)
+			fmt.Printf("  Complaints: %d\n", response.Totals.ComplainedCount)
+			fmt.Println("\n  Monthly counts by domain:")
+		}
+
+		// A breakdown has a row only for a domain and month with counts.
+		for _, row := range response.Data {
+			fmt.Printf("    %s %s: accepted=%d, delivered=%d, opens=%d, clicks=%d\n",
+				*row.SenderDomain,
+				row.FromTimestamp.Format("2006-01"),
+				row.ReceptionCount,
+				row.DeliveredCount,
+				row.OpenedCount,
+				row.ClickedCount)
+		}
+
+		if !response.Pagination.HasMore {
+			return
+		}
+		params.After = response.Pagination.NextCursor
+	}
 }
 
 func getDeliverabilityStats(ctx context.Context, client *api.APIClient, accountID uuid.UUID, startDate, endDate time.Time) {

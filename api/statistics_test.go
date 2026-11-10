@@ -100,4 +100,19 @@ func Test_ahasend_StatisticsAPIService(t *testing.T) {
 
 	})
 
+	t.Run("Test StatisticsAPIService GetEmailStatistics", func(t *testing.T) {
+
+		// Skip test when not running against a real API
+		if testing.Short() {
+			t.Skip("skipping integration test in short mode")
+		}
+
+		accountId := uuid.New()
+
+		resp, httpRes, err := apiClient.StatisticsAPI.GetEmailStatistics(auth, accountId, requests.GetEmailStatisticsParams{})
+
+		validatePrismResponse(t, resp, httpRes, err)
+
+	})
+
 }
