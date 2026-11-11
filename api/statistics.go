@@ -248,7 +248,7 @@ transactional statistics, and the SDK applies its general rate limiter to it.
 - `from_time`: Start of the range, included (RFC3339 format). Defaults to 30 days before `to_time`
 - `to_time`: End of the range, excluded (RFC3339 format). Defaults to now
 - `group_by`: Length of each period (hour, day, week, month). Defaults to day
-- `sender_domain`: Comma-separated domain names of the account
+- `sender_domain`: Comma-separated domain names of the account (at most 50)
 - `breakdown`: `domain` returns the rows of each domain, paged by domain
 - `limit`: Maximum number of domains on a page of a breakdown (1-50, default: 25)
 - `after`: Cursor for the next page of a breakdown

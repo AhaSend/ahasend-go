@@ -20080,7 +20080,7 @@ paths:
             format: uuid
         - name: from_time
           in: query
-          description: Start of the range, included. It is rounded down to the start of its period. Defaults to 30 days before `to_time`.
+          description: Start of the range, included. It is rounded down to the start of its period. Defaults to 30 days before `to_time`. It cannot be before 2000-01-01.
           schema:
             type: string
             format: date-time
@@ -20099,7 +20099,7 @@ paths:
             default: day
         - name: sender_domain
           in: query
-          description: Comma-separated domain names of the account, deleted domains included; the key must be able to read every name. Defaults to every domain the key can read.
+          description: Comma-separated domain names of the account, at most 50, deleted domains included; the key must be able to read every name. Defaults to every domain the key can read.
           schema:
             type: string
           example: example.com,example.org
@@ -20163,7 +20163,7 @@ paths:
                   has_more: false
         '400':
           description: |
-            A parameter that is not valid; `limit` or `after` without `breakdown=domain`; `before`; a range that is empty or longer than the maximum of its `group_by`; or a `sender_domain` name that is empty or that the account has never had as a domain. The message names the valid values or advises how to change the request.
+            A parameter that is not valid; `limit` or `after` without `breakdown=domain`; `before`; a range that is empty, longer than the maximum of its `group_by`, or that starts before 2000-01-01; more than 50 names in `sender_domain`; or a `sender_domain` name that is empty or that the account has never had as a domain. The message names the valid values or advises how to change the request.
           content:
             application/json:
               schema:
