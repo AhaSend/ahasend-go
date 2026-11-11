@@ -87,9 +87,9 @@ info:
 
     Writable attribute keys and types come from the account's contact-attribute
     definitions managed in the dashboard; this API does not expose property
-    definition CRUD. Writes accept only canonical values for those definitions,
-    while reads remain legacy-safe and can return any recursively nested JSON
-    value previously stored.
+    definition CRUD. Writes accept only canonical values for those definitions.
+    Reads can return any JSON value, including nested arrays and objects, so a
+    value read back need not match its definition.
 
     An email used as `{id_or_email}` is a raw SDK argument and must be
     percent-encoded exactly once as a URL path segment by an HTTP client. For
@@ -146,8 +146,8 @@ info:
     - `smtp-credentials:delete:{domain}` - Delete SMTP credentials for a specific domain
 
     ### Statistics Scopes
-    - `statistics-transactional:read:all` - Read all transactional statistics
-    - `statistics-transactional:read:{domain}` - Read transactional statistics for a specific domain
+    - `statistics-transactional:read:all` - Read all transactional statistics, and the email statistics of every domain, which also count campaign and inbound mail
+    - `statistics-transactional:read:{domain}` - Read transactional statistics for a specific domain, and its email statistics, which also count campaign and inbound mail
 
     ### API Key Scopes
     - `api-keys:read` - Read API keys
@@ -166,7 +166,7 @@ info:
 
     ## Rate Limiting
     - General API endpoints: 100 requests per second, 200 burst
-    - Statistics endpoints: 1 request per second, 1 burst
+    - Transactional statistics endpoints (`/statistics/transactional/*`): 1 request per second, 1 burst
 
     A request over the limit gets HTTP 429 with a `Retry-After` header: the
     number of seconds to wait before retrying.
@@ -177,9 +177,7 @@ info:
     - `after`: Pass `pagination.next_cursor` to fetch the next page
     - `before`: Pass `pagination.previous_cursor` to fetch the previous page
 
-    `after` and `before` are mutually exclusive. A legacy `cursor` query may be
-    accepted by parts of the server for backwards compatibility, but it is not
-    part of the v2 public contract.
+    `after` and `before` are mutually exclusive.
 
     ## Time Formats
     All timestamps must be in RFC3339 format, e.g., `2023-12-25T10:30:00Z`
@@ -1653,7 +1651,7 @@ components:
         template_id:
           type: [string, 'null']
           format: uuid
-          description: The transactional template the message was sent from with [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message). Null for any other message, including SMTP mail, dashboard test sends and messages sent before this field was added. The template may have been deleted since.
+          description: The transactional template the message was sent from with [Create Template Message](https://ahasend.com/docs/api-reference/messages/create-template-message). Null for any other message, such as SMTP mail and dashboard test sends, or when the template is not recorded. The template may have been deleted since.
       required:
         - object
         - created_at
@@ -1993,7 +1991,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/TemplatePublisher'
             - type: 'null'
-          description: Who published the version. Null when this is not known, as for versions made before versions recorded it, or when the user or API key was deleted for good.
+          description: Who published the version. Null when the publisher is not recorded, or when the user or API key was deleted for good.
 
     TemplateVersionDetail:
       allOf:
@@ -2019,7 +2017,7 @@ components:
                 $ref: '#/components/schemas/TemplateVariable'
               description: |
                 Every variable the version uses, as saved when the version was
-                published. A version published before kinds were recorded shows
+                published. A version that does not record variable kinds shows
                 every variable as `value`, with no `item_fields`; save and
                 publish the template again to get a version that records them.
             from:
@@ -3718,9 +3716,9 @@ components:
       type: object
       additionalProperties: false
       description: |
-        Public contact projection. Attribute reads are legacy-safe: values can
-        contain null, booleans, numbers, strings, arrays, or nested objects even
-        though new writes accept only canonical dashboard-defined values.
+        Public contact projection. Attribute values can be null, booleans,
+        numbers, strings, arrays, or nested objects, even though writes accept
+        only canonical dashboard-defined values.
       required:
         - object
         - id
@@ -4744,9 +4742,7 @@ components:
             AhaSend recorded the recipient's own decision -- they unsubscribed, or they
             reported a message as spam. It is not derived from the `reason` you send:
             suppressions you create yourself are never protected, whatever reason they
-            carry, so your own wipe can always clear them. Suppressions predating this
-            field are also protected when they record a complaint under the earlier
-            `FBL Abuse Report` spelling, which nothing writes any more. It says nothing
+            carry, so your own wipe can always clear them. It says nothing
             about whether the address can be mailed, which `expires_at` alone answers,
             and it does not exempt the row from expiring.
         expires_at:
@@ -5794,6 +5790,126 @@ components:
           items:
             $ref: '#/components/schemas/DeliveryTimeStatistics'
           description: Array of delivery time statistics
+
+    EmailStatisticsTotals:
+      type: object
+      description: The email counts of one period, or of the whole request. Every counter is at least 0.
+      required:
+        - reception_count
+        - delivered_count
+        - bounced_count
+        - suppressed_count
+        - complained_count
+        - deferred_count
+        - opened_count
+        - clicked_count
+      properties:
+        reception_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Messages that AhaSend accepted, inbound mail included. Billing counts the same messages.
+        delivered_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Messages delivered
+        bounced_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Messages bounced
+        suppressed_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Messages not sent because the recipient was suppressed
+        complained_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Spam complaints
+        deferred_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Temporary delivery failures. This counts events, and one message can add more than one, so it differs from `deferred_count` of Get Deliverability Statistics, which counts messages.
+        opened_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Opens. This counts events, and one message can add more than one, so it differs from `opened_count` of Get Deliverability Statistics, which counts messages. Opens are not fully accurate; AhaSend makes a reasonable effort to filter out bots and scanners.
+        clicked_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Clicks. This counts events, and one message can add more than one, so it differs from `clicked_count` of Get Deliverability Statistics, which counts messages. Clicks are not fully accurate; AhaSend makes a reasonable effort to filter out bots and scanners.
+
+    EmailStatistics:
+      description: The email counts of one period, and of one domain in a breakdown.
+      allOf:
+        - type: object
+          required:
+            - from_timestamp
+            - to_timestamp
+            - sender_domain
+          properties:
+            from_timestamp:
+              type: string
+              format: date-time
+              description: Start of the period
+            to_timestamp:
+              type: string
+              format: date-time
+              description: End of the period, excluded, which is the start of the next period
+            sender_domain:
+              type: [string, 'null']
+              description: The domain name of the row in a breakdown. Null without a breakdown.
+        - $ref: '#/components/schemas/EmailStatisticsTotals'
+
+    EmailStatisticsResponse:
+      type: object
+      required:
+        - object
+        - from_time
+        - to_time
+        - group_by
+        - breakdown
+        - totals
+        - data
+        - pagination
+      properties:
+        object:
+          type: string
+          enum: [email_statistics]
+          description: Object type identifier
+        from_time:
+          type: string
+          format: date-time
+          description: Start of the rounded range, included
+        to_time:
+          type: string
+          format: date-time
+          description: End of the rounded range, excluded
+        group_by:
+          type: string
+          enum: [hour, day, week, month]
+          description: Length of each period
+        breakdown:
+          type: [string, 'null']
+          enum: [domain, null]
+          description: '`domain` for a breakdown by domain. Null without a breakdown.'
+        totals:
+          $ref: '#/components/schemas/EmailStatisticsTotals'
+          description: 'The counts of the whole request: the whole rounded range and every domain the request selects, on every page of a breakdown'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailStatistics'
+          description: Without a breakdown, one row for each period, in time order. With a breakdown, the rows of the domains of this page, by domain name, then by time.
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+          description: Pages the domains of a breakdown. `next_cursor` is present when `has_more` is true; `previous_cursor` is never present. Without a breakdown, `has_more` is false.
 
 paths:
   # Utility endpoints
@@ -13991,9 +14107,8 @@ paths:
       summary: List Contacts
       description: |
         Returns account-global contacts in newest-first `(created_at, id)` order.
-        `after` and `before` are mutually exclusive. Attribute values are
-        recursive legacy JSON; they are intentionally broader than canonical
-        values accepted by contact writes.
+        `after` and `before` are mutually exclusive. Attribute values can be any
+        JSON value, broader than the canonical values contact writes accept.
       operationId: getContacts
       tags:
         - Contacts
@@ -15015,9 +15130,9 @@ paths:
       description: |
         Partially updates one account-scoped list. An omitted or null property
         leaves the stored value unchanged; a present `tags` array replaces the
-        stored tags, and an empty one clears them. A stored value that breaks a
-        bound this API introduces reads back fine and fails only when it is
-        re-sent here.
+        stored tags, and an empty one clears them. A stored value that this
+        endpoint would refuse reads back fine and fails only when it is re-sent
+        here.
       operationId: updateList
       tags:
         - Lists
@@ -19448,6 +19563,10 @@ paths:
       description: |
         Returns transactional deliverability statistics grouped by status
 
+        These statistics cover only the account's message metadata retention
+        period. For the email counts of older periods, use Get Email Statistics
+        (`GET /v2/accounts/{account_id}/statistics/emails`).
+
         The global statistics role can query all sender domains. A
         domain-scoped key is limited to authorized domains and must authorize
         every comma-separated value supplied in `sender_domain`.
@@ -19601,6 +19720,10 @@ paths:
       summary: Get Bounce Statistics
       description: |
         Returns transactional bounce statistics grouped by classification
+
+        These statistics cover only the account's message metadata retention
+        period. For the email counts of older periods, use Get Email Statistics
+        (`GET /v2/accounts/{account_id}/statistics/emails`).
 
         The global statistics role can query all sender domains. A
         domain-scoped key is limited to authorized domains and must authorize
@@ -19756,6 +19879,10 @@ paths:
       description: |
         Returns transactional delivery time statistics grouped by recipient domain
 
+        These statistics cover only the account's message metadata retention
+        period. For the email counts of older periods, use Get Email Statistics
+        (`GET /v2/accounts/{account_id}/statistics/emails`).
+
         The global statistics role can query all sender domains. A
         domain-scoped key is limited to authorized domains and must authorize
         every comma-separated value supplied in `sender_domain`.
@@ -19904,6 +20031,215 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /v2/accounts/{account_id}/statistics/emails:
+    get:
+      summary: Get Email Statistics
+      description: |
+        Returns the email counts of the account, or of each of its domains, in hourly, daily, weekly or monthly periods, for any time in the account's history. It is not limited to the account's message metadata retention period, as the transactional statistics are.
+
+        **What is counted:**
+        The counts cover transactional, campaign and inbound mail. Inbound mail is counted under the domain that received it, so `sender_domain` names the account's domain in both directions. Sandbox mail is not counted. A counter is placed in the period in which its event happened.
+
+        `deferred_count`, `opened_count` and `clicked_count` count events, and one message can add more than one. The other counters count a message at most once. Get Deliverability Statistics counts each message once, by its current status, so the two endpoints do not return the same numbers for the same range.
+
+        Opens and clicks are not fully accurate. AhaSend makes a reasonable effort to filter out bots and scanners.
+
+        A bounce report can arrive after the message was counted as delivered. AhaSend then takes one delivery away and adds one bounce, both in the period in which a transactional message was accepted or a campaign message was delivered. That period can differ from the one in which the delivery was counted, so a period can lose more deliveries than it holds. Every counter in the response is at least 0: a counter of a row or of `totals` that comes out below 0 is returned as 0.
+
+        **Domains:**
+        A domain is identified by its name. Deleted domains are included. When a domain was deleted and added again with the same name, the counts of both are added together.
+
+        **Access:**
+        The API key needs `statistics-transactional:read:all` or at least one `statistics-transactional:read:{domain}` scope. A key with `statistics-transactional:read:all` reads every domain of the account. A key with domain scopes reads the domains named in its scopes, a deleted domain included. Without `sender_domain`, the request selects every domain the key can read. The key must be able to read each name in `sender_domain`, or the request gets a 403. The account must have, or have had, a domain with each name, or the request gets a 400. The scope is checked first, then the parameters and the range, then `sender_domain`.
+
+        **Range and periods:**
+        Periods are in UTC, and weeks start on Monday. A range includes `from_time` and excludes `to_time`. A missing `to_time`, or one after now, is now. A missing `from_time` is 30 days before `to_time`. `from_time` must be before `to_time`.
+
+        The range can be at most 31 days for `group_by=hour`, 366 days for `day` and `week`, and 5 calendar years for `month`. The range is checked before it is rounded. A longer range gets a 400 that advises a larger `group_by` or a shorter range, or, for `month`, more than one request.
+
+        Then `from_time` is rounded down to the start of its period, and `to_time` up to the start of the next period unless it is already at the start of a period. The response gives the rounded range. For example, a request with no parameters at 14:00 UTC returns 31 daily periods: today and the 30 days before it.
+
+        **Rows:**
+        Without a breakdown, `data` has one row for each period of the range, in time order. A period without counts has all counters at 0. With `breakdown=domain`, `data` has a row for a domain and a period only when AhaSend has counts for that domain in that period. The rows are ordered by domain name, then by time. `to_timestamp` of a row is the start of the next period.
+
+        **Paging of a breakdown:**
+        A page holds up to `limit` domains, each with all its periods in the range. Only domains with counts in the range are listed, ordered by name in byte order. When `pagination.has_more` is true, pass `pagination.next_cursor` as `after` to fetch the next page. Paging is forward only: `before` is not accepted, and `previous_cursor` is never returned. `limit` and `after` are accepted only with `breakdown=domain`.
+
+        **Totals:**
+        `totals` covers the whole request on every page: the whole rounded range and every domain the request selects. When the key reads every domain and the request has no `sender_domain`, `totals` and the rows without a breakdown are the counts of the account. Otherwise, and for the rows of a breakdown, they are the sums of the counts of the domains. AhaSend keeps the counts of the account and of its domains apart, and the two can differ by a few events, so the rows of a breakdown can add up to a few events more or less than `totals`. `totals` adds the counts before any counter is raised to 0, so it is not always the sum of the rows.
+      operationId: getEmailStatistics
+      tags:
+        - Statistics
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: Account ID
+          schema:
+            type: string
+            format: uuid
+        - name: from_time
+          in: query
+          description: Start of the range, included. It is rounded down to the start of its period. Defaults to 30 days before `to_time`. It cannot be before 2000-01-01.
+          schema:
+            type: string
+            format: date-time
+        - name: to_time
+          in: query
+          description: End of the range, excluded. It is rounded up to the start of the next period unless it is already at the start of a period. Defaults to now; a time after now is now.
+          schema:
+            type: string
+            format: date-time
+        - name: group_by
+          in: query
+          description: Length of each period, in UTC. Weeks start on Monday. The range can be at most 31 days for `hour`, 366 days for `day` and `week`, and 5 calendar years for `month`.
+          schema:
+            type: string
+            enum: [hour, day, week, month]
+            default: day
+        - name: sender_domain
+          in: query
+          description: Comma-separated domain names of the account, at most 50, deleted domains included; the key must be able to read every name. Defaults to every domain the key can read.
+          schema:
+            type: string
+          example: example.com,example.org
+        - name: breakdown
+          in: query
+          description: '`domain` returns the rows of each domain, paged by domain. Without it, each row covers all the domains the request selects.'
+          schema:
+            type: string
+            enum: [domain]
+        - name: limit
+          in: query
+          description: Maximum number of domains on a page of a breakdown (1-50). Only with `breakdown=domain`.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 25
+        - name: after
+          in: query
+          description: Pagination cursor for the next page of a breakdown. Provide the value from `next_cursor` in the response. Only with `breakdown=domain`.
+          schema:
+            type: string
+      security:
+        - BearerAuth: ["statistics-transactional:read:all"]
+        - BearerAuth: ["statistics-transactional:read:{domain}"]
+      responses:
+        '200':
+          description: Email statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailStatisticsResponse'
+              example:
+                object: email_statistics
+                from_time: "2026-08-01T00:00:00Z"
+                to_time: "2026-11-01T00:00:00Z"
+                group_by: month
+                breakdown: domain
+                totals:
+                  reception_count: 184200
+                  delivered_count: 181050
+                  bounced_count: 1900
+                  suppressed_count: 1250
+                  complained_count: 12
+                  deferred_count: 2310
+                  opened_count: 60210
+                  clicked_count: 8400
+                data:
+                  - from_timestamp: "2026-08-01T00:00:00Z"
+                    to_timestamp: "2026-09-01T00:00:00Z"
+                    sender_domain: example.com
+                    reception_count: 61000
+                    delivered_count: 60100
+                    bounced_count: 610
+                    suppressed_count: 290
+                    complained_count: 4
+                    deferred_count: 800
+                    opened_count: 20100
+                    clicked_count: 2800
+                pagination:
+                  has_more: false
+        '400':
+          description: |
+            A parameter that is not valid; `limit` or `after` without `breakdown=domain`; `before`; a range that is empty, longer than the maximum of its `group_by`, or that starts before 2000-01-01; more than 50 names in `sender_domain`; or a `sender_domain` name that is empty or that the account has never had as a domain. The message names the valid values or advises how to change the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                message: 'the range is longer than 31 days, the maximum for group_by=hour; use group_by=day or a shorter range'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The API key has neither `statistics-transactional:read:all` nor a `statistics-transactional:read:{domain}` scope, or it cannot read a domain in `sender_domain`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      x-code-samples:
+        - lang: go
+          label: AhaSend Go SDK
+          source: |
+            package main
+
+            import (
+              "context"
+              "fmt"
+              "log"
+              "os"
+              "time"
+
+              "github.com/AhaSend/ahasend-go"
+              "github.com/AhaSend/ahasend-go/api"
+              "github.com/AhaSend/ahasend-go/models/requests"
+              "github.com/google/uuid"
+            )
+
+            func main() {
+              client := api.NewAPIClient(api.WithAPIKey(os.Getenv("AHASEND_API_KEY")))
+              accountID := uuid.MustParse(os.Getenv("AHASEND_ACCOUNT_ID"))
+              ctx := context.Background()
+
+              fromTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+              toTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+              response, _, err := client.StatisticsAPI.GetEmailStatistics(ctx, accountID, requests.GetEmailStatisticsParams{
+                FromTime:  &fromTime,
+                ToTime:    &toTime,
+                GroupBy:   ahasend.String("month"),
+                Breakdown: ahasend.String("domain"),
+              })
+              if err != nil {
+                log.Fatalf("Error getting email statistics: %v", err)
+              }
+              fmt.Printf("Accepted %d messages in 2025\n", response.Totals.ReceptionCount)
+              for _, row := range response.Data {
+                fmt.Printf("%s %s: %d accepted, %d delivered\n", *row.SenderDomain, row.FromTimestamp.Format("2006-01"), row.ReceptionCount, row.DeliveredCount)
+              }
+              if response.Pagination.HasMore {
+                fmt.Printf("Next page of domains: After = %q\n", *response.Pagination.NextCursor)
+              }
+            }
+
 tags:
   - name: Utility
     description: Utility endpoints for health checks and diagnostics
@@ -19936,7 +20272,7 @@ tags:
   - name: SMTP Credentials
     description: Manage SMTP authentication credentials
   - name: Statistics
-    description: Access transactional email statistics
+    description: Access transactional email statistics, and email statistics that also count campaign and inbound mail
   - name: Message Events
     description: Webhooks for outbound message delivery events
   - name: Suppression Events

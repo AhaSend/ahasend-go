@@ -79,7 +79,7 @@ func demonstrateDefaultRateLimiting(client *api.APIClient) {
 	fmt.Println("The SDK includes intelligent rate limiting by default:")
 	fmt.Println("  • General API: 100 requests/second")
 	fmt.Println("  • Send Message: 100 requests/second")
-	fmt.Println("  • Statistics: 1 request/second")
+	fmt.Println("  • Transactional statistics: 1 request/second")
 	fmt.Println("")
 	fmt.Println("These limits protect you from 429 (Too Many Requests) errors.")
 	fmt.Println("The SDK automatically queues and throttles requests.")
@@ -93,9 +93,9 @@ func demonstrateCustomRateLimiting(client *api.APIClient) {
 	client.SetSendMessageRateLimit(500, 1000) // 500 req/s, burst of 1000
 	fmt.Println("  ✓ Send Message: 500 req/s (burst: 1000)")
 
-	// Statistics endpoints are usually more limited
+	// Transactional statistics endpoints are usually more limited
 	client.SetStatisticsRateLimit(5, 10) // 5 req/s, burst of 10
-	fmt.Println("  ✓ Statistics: 5 req/s (burst: 10)")
+	fmt.Println("  ✓ Transactional statistics: 5 req/s (burst: 10)")
 
 	// General API endpoints
 	client.SetGeneralRateLimit(200, 400) // 200 req/s, burst of 400

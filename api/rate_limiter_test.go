@@ -322,8 +322,10 @@ func TestEndpointDetection(t *testing.T) {
 	}{
 		{"POST", "/v2/accounts/123/messages", SendMessageAPI},
 		{"GET", "/v2/accounts/123/messages/456", GeneralAPI}, // Specific message, not send
-		{"GET", "/v2/accounts/123/statistics/bounce", StatisticsAPI},
-		{"GET", "/v2/accounts/123/statistics/deliverability", StatisticsAPI},
+		{"GET", "/v2/accounts/123/statistics/transactional/bounce", StatisticsAPI},
+		{"GET", "/v2/accounts/123/statistics/transactional/deliverability", StatisticsAPI},
+		{"GET", "/v2/accounts/123/statistics/transactional/delivery-time", StatisticsAPI},
+		{"GET", "/v2/accounts/123/statistics/emails", GeneralAPI},
 		{"GET", "/v2/accounts/123/domains", GeneralAPI},
 		{"POST", "/v2/accounts/123/domains", GeneralAPI},
 		{"GET", "/v2/accounts/123/api-keys", GeneralAPI},
@@ -335,6 +337,27 @@ func TestEndpointDetection(t *testing.T) {
 		t.Run(test.method+" "+test.path, func(t *testing.T) {
 			endpointType := rl.DetectEndpointType(test.method, test.path)
 			assert.Equal(t, test.expectedType, endpointType)
+		})
+	}
+}
+
+// TestClassifyEndpointGivesOnlyTransactionalStatisticsTheStatisticsLimit
+// covers the classifier that Execute uses.
+func TestClassifyEndpointGivesOnlyTransactionalStatisticsTheStatisticsLimit(t *testing.T) {
+	tests := []struct {
+		path         string
+		expectedType EndpointType
+	}{
+		{"/v2/accounts/123/statistics/transactional/bounce", StatisticsAPI},
+		{"/v2/accounts/123/statistics/transactional/deliverability", StatisticsAPI},
+		{"/v2/accounts/123/statistics/transactional/delivery-time", StatisticsAPI},
+		{"/v2/accounts/123/statistics/emails", GeneralAPI},
+		{"/v2/accounts/123/domains/statistics.example.com", GeneralAPI},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			assert.Equal(t, test.expectedType, classifyEndpoint(test.path, "GET"))
 		})
 	}
 }

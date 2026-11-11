@@ -20,9 +20,14 @@ type EndpointType int
 
 const (
 	GeneralAPI     EndpointType = iota // General API endpoints (default: 100 req/s, 200 burst)
-	StatisticsAPI                      // Statistics endpoints (default: 1 req/s, 1 burst)
+	StatisticsAPI                      // Transactional statistics endpoints, /statistics/transactional/* (default: 1 req/s, 1 burst)
 	SendMessageAPI                     // Send message endpoint (default: 100 req/s, 200 burst, often customized)
 )
+
+// transactionalStatisticsPath marks the paths of the endpoints that get the
+// StatisticsAPI limit. Get Email Statistics (/statistics/emails) has the
+// general limit.
+const transactionalStatisticsPath = "/statistics/transactional/"
 
 // String returns the string representation of EndpointType
 func (e EndpointType) String() string {
@@ -336,8 +341,8 @@ func (rl *RateLimiter) DetectEndpointType(method, path string) EndpointType {
 		return SendMessageAPI
 	}
 
-	// Statistics endpoints: /v2/accounts/{id}/statistics/*
-	if strings.Contains(path, "/statistics/") {
+	// Transactional statistics endpoints: /v2/accounts/{id}/statistics/transactional/*
+	if strings.Contains(path, transactionalStatisticsPath) {
 		return StatisticsAPI
 	}
 

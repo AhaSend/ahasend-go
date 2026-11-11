@@ -6,8 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `StatisticsAPI.GetEmailStatistics` returns the email counts of the account, or of each of its
+  domains, in hourly, daily, weekly or monthly periods, for any time in the account's history. It
+  counts transactional, campaign and inbound mail. It takes `requests.GetEmailStatisticsParams`,
+  whose nil fields are not sent, and returns `responses.EmailStatisticsResponse`: the rows
+  (`responses.EmailStatistics`) and the `Totals` (`responses.EmailStatisticsTotals`) of the whole
+  request. A breakdown by domain is paged with `Limit` and `After`. The SDK applies its general
+  rate limit to the operation; the statistics rate limit (`SetStatisticsRateLimit`) applies to the
+  transactional statistics only.
+
 ### Changed
 
+- The bundled `openapi/openapi.yaml` and `openapi/webhooks.yaml` follow the current API. Apart from
+  Get Email Statistics, only their descriptions change.
 - All copies of a conversation send (`CreateConversationMessage`, To, CC and BCC) share one
   Message-ID header, so replies thread for every recipient. Each copy has its own `ID`, which
   `GetMessageByAPIID` and `CancelMessage` take. The shared `MessageIDHeader` names no single copy:
@@ -17,6 +30,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The statistics rate limit applies only to the transactional statistics operations. It also
+  slowed every call whose domain name or contact email address started with `statistics`, such as
+  `GetDomain` for `statistics.example.com`; those calls have the general rate limit.
 - The doc comments of `CreateCampaign`, `UpdateCampaign` and `DuplicateCampaign`, and the bundled
   `openapi/openapi.yaml`, say that the 409 for a segment of the audience that is being rebuilt is
   not stored for the idempotency key, so a retry with the same key runs again; retry it after a

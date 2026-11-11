@@ -231,8 +231,8 @@ func validatePathParams(template string, params map[string]string) error {
 
 // classifyEndpoint determines the endpoint type for rate limiting
 func classifyEndpoint(path string, method string) EndpointType {
-	// Statistics endpoints
-	if strings.Contains(path, "/statistics") {
+	// Transactional statistics endpoints
+	if strings.Contains(path, transactionalStatisticsPath) {
 		return StatisticsAPI
 	}
 
@@ -363,7 +363,9 @@ func (c *APIClient) SetGeneralRateLimit(requestsPerSecond, burstCapacity int) {
 	c.rateLimiter.SetRateLimit(GeneralAPI, requestsPerSecond, burstCapacity)
 }
 
-// SetStatisticsRateLimit sets the rate limit for statistics API endpoints
+// SetStatisticsRateLimit sets the rate limit for the transactional statistics
+// endpoints (/statistics/transactional/*). GetEmailStatistics has the general
+// rate limit.
 func (c *APIClient) SetStatisticsRateLimit(requestsPerSecond, burstCapacity int) {
 	c.rateLimiter.SetRateLimit(StatisticsAPI, requestsPerSecond, burstCapacity)
 }

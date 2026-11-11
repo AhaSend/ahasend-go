@@ -419,6 +419,36 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 - A parent account can lift the pause on a sub account's domain with `client.SubAccountsAPI.UnpauseSubAccountDomain(ctx, accountID, subAccountID, "example.com")`. It needs the `sub-accounts:suspend` scope. The call is idempotent: on a domain that is not paused, it changes nothing and returns the domain. The change can take some minutes to apply to new email.
 - `DKIMSelector` on `CreateDomainRequest` and `UpdateDomainRequest` sets a per-domain DKIM selector (Platform Partner accounts only). On create, nil or an empty string uses the default selector. On update, nil leaves it as it is, and a pointer to `""` clears the override. `Domain.DKIMSelector` reports the override, not always the selector used for signing.
 
+## Statistics
+
+- Scopes: `statistics-transactional:read:all` for every domain, or `statistics-transactional:read:{domain}` for one domain.
+- `GetEmailStatistics` returns the email counts of the account, or of each of its domains, for any time in the account's history. It counts transactional, campaign and inbound mail. The transactional statistics (`GetDeliverabilityStatistics`, `GetBounceStatistics`, `GetDeliveryTimeStatistics`) cover only the account's message metadata retention period.
+- `DeferredCount`, `OpenedCount` and `ClickedCount` of `GetEmailStatistics` count events, and one message can add more than one. The same fields of `GetDeliverabilityStatistics` count messages.
+- A nil field of `GetEmailStatisticsParams` is not sent, so the API default applies. `Limit` and `After` are accepted only with `Breakdown` set to `domain`.
+- A breakdown is paged by domain, and `Totals` covers the whole request on every page. To read every page, pass `NextCursor` as `After`:
+
+  ```go
+  params := requests.GetEmailStatisticsParams{
+      GroupBy:   ahasend.String("month"),
+      Breakdown: ahasend.String("domain"),
+  }
+  for {
+      response, _, err := client.StatisticsAPI.GetEmailStatistics(ctx, accountID, params)
+      if err != nil {
+          return err
+      }
+      for _, row := range response.Data {
+          fmt.Println(*row.SenderDomain, row.FromTimestamp.Format("2006-01"), row.ReceptionCount)
+      }
+      if !response.Pagination.HasMore {
+          break
+      }
+      params.After = response.Pagination.NextCursor
+  }
+  ```
+
+- The statistics rate limit (`SetStatisticsRateLimit`) applies to the transactional statistics only. `GetEmailStatistics` has the general rate limit.
+
 ## Services
 
 | Service | Use it to | Main methods |
@@ -432,7 +462,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 | `SegmentsAPI` | Manage segments and read their members | `GetSegments`, `CreateSegment`, `PreviewSegment`, `GetSegment`, `UpdateSegment`, `DeleteSegment`, `GetSegmentContacts`, `GetContactSegments` |
 | `DomainsAPI` | Add and check sending domains | `CreateDomain`, `CheckDomainDNS`, `GetDomain`, `GetDomainsWithParams` |
 | `WebhooksAPI` | Manage webhooks | `CreateWebhook`, `UpdateWebhook`, `GetWebhooks` |
-| `StatisticsAPI` | Read sending statistics | `GetDeliverabilityStatistics`, `GetBounceStatistics` |
+| `StatisticsAPI` | Read sending statistics | `GetEmailStatistics`, `GetDeliverabilityStatistics`, `GetBounceStatistics` |
 | `SuppressionsAPI` | Manage addresses that must not be emailed | `CreateSuppression`, `DeleteSuppression`, `GetSuppressions` |
 | `RoutesAPI` | Handle incoming email | `CreateRoute`, `UpdateRoute` |
 | `AccountsAPI` | Manage the account and its members | `GetAccount`, `AddAccountMember` |
