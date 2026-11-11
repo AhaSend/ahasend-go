@@ -10,7 +10,7 @@ info:
 
     - **Message Events**: Email delivery status (sent, delivered, bounced, opened, unsubscribed, reported as spam, etc.)
     - **Suppression Events**: When a suppression is created or deleted, by a recipient, by AhaSend, or by you
-    - **Domain Events**: DNS configuration issues
+    - **Domain Events**: DNS configuration issues and changes of a domain's sending type
     - **Contact Events**: Changes to your contacts and their list memberships, such as a new contact, an unsubscribe, or a spam complaint
     - **Route Events**: Inbound email processing
 
@@ -65,9 +65,9 @@ info:
     Events are not delivered in the order in which they happened. Many workers
     send them, and each delivery is retried on its own, so a later event can
     arrive first. Order the events by their `timestamp`. For a contact or a
-    suppression event it is the time of the change; for `message.unsubscribed`
-    and `message.complained`, the time of the unsubscribe request or of the
-    spam complaint report.
+    suppression event and for `domain.sending_type_changed` it is the time of
+    the change; for `message.unsubscribed` and `message.complained`, the time
+    of the unsubscribe request or of the spam complaint report.
 
     ### Message Events
 
@@ -139,17 +139,18 @@ info:
     - `dashboard`: you, through the AhaSend dashboard
     - `system`: AhaSend, for example after a bounce, an expired message or an email validation, or when AhaSend support makes the change
 
-    Message events and `domain.dns_error` have no `origin`: a recipient, a mail
-    server, or a DNS check always causes them.
+    Message events and domain events have no `origin`. A recipient, a mail
+    server, or a DNS check always causes a message event or
+    `domain.dns_error`. `domain.sending_type_changed` says who made the change
+    in its `source`.
 
     **Origin filter**: Each webhook has an `origins` setting, the list of
     origins whose contact and suppression events it gets. The default is
     `null`, which means every origin. A list that holds all four origins is
     saved as `null`, so that an origin added later reaches the webhook too. An
     empty list is refused: to stop contact or suppression events, turn them
-    off. Events without an `origin` (message events and `domain.dns_error`)
-    always pass the filter. In the dashboard, the setting is "Send changes
-    made by".
+    off. Events without an `origin` (message events and domain events) always
+    pass the filter. In the dashboard, the setting is "Send changes made by".
 
     **Prevent loops**: A handler that writes to the AhaSend API every time it
     receives `contact.updated` receives its own write as a new
@@ -794,6 +795,54 @@ webhooks:
                 dkim_valid: false
                 dmarc_valid: false
                 dns_last_checked_at: "2024-05-06T12:59:46.404433312Z"
+      responses:
+        '200':
+          description: Webhook received successfully
+        '201':
+          description: Webhook received successfully
+        '202':
+          description: Webhook received successfully
+        '204':
+          description: Webhook received successfully
+
+  domain.sending_type_changed:
+    post:
+      summary: Domain Sending Type Changed Event
+      description: |
+        &nbsp;
+
+        Triggered when the sending type of a domain changes between `transactional` and `marketing`.
+
+        **Who changes it** (`data.source`):
+        - You, in the dashboard or through the API (`customer`)
+        - AhaSend support (`admin`)
+        - AhaSend, when a transactional domain sends marketing email: the domain becomes `marketing` (`automatic`)
+
+        **Impact**: The domain's email follows the rules of its new sending type.
+
+        `data` has the domain's sending type before and after the change, and `timestamp` is the time of the change.
+
+        **No event**: Adding a domain, whatever its sending type, or saving a domain without a change to its sending type.
+
+        **When it's sent**: When the sending type of a domain changes.
+      tags:
+        - Domain Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainSendingTypeChangedPayload'
+            example:
+              type: "domain.sending_type_changed"
+              webhook_id: "abe11757-2886-4b55-96f1-0e0afc95795a"
+              timestamp: "2026-11-09T10:15:00Z"
+              data:
+                account_id: "4cdd7bdd-294e-4762-892f-83d40abf5a87"
+                domain: "example.com"
+                previous_sending_type: "transactional"
+                sending_type: "marketing"
+                source: "customer"
       responses:
         '200':
           description: Webhook received successfully
@@ -1622,7 +1671,8 @@ components:
             presence on another event sharing this data shape as impossible.
             Events with their own data shape — `message.clicked`,
             `message.routing`, `suppression.created`, `suppression.deleted`,
-            `domain.dns_error`, and the `contact.*` events — never carry one.
+            `domain.dns_error`, `domain.sending_type_changed`, and the
+            `contact.*` events — never carry one.
 
             On test webhooks and sandbox deliveries the values are
             representative rather than observed. A sandbox simulation can
@@ -1939,6 +1989,68 @@ components:
           type: string
           format: date-time
           description: When DNS was last checked
+
+    DomainSendingTypeChangedPayload:
+      type: object
+      required:
+        - type
+        - webhook_id
+        - timestamp
+        - data
+      properties:
+        type:
+          type: string
+          enum: [domain.sending_type_changed]
+          description: The event type
+        webhook_id:
+          type: string
+          description: The webhook ID (the same ID as returned by the [Create Webhook API](https://ahasend.com/docs/api-reference/webhooks/create-webhook))
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: When the sending type changed (ISO 8601 format)
+        data:
+          $ref: '#/components/schemas/DomainSendingTypeChangedData'
+
+    DomainSendingTypeChangedData:
+      type: object
+      required:
+        - account_id
+        - domain
+        - previous_sending_type
+        - sending_type
+        - source
+      properties:
+        account_id:
+          type: string
+          format: uuid
+          description: Account ID
+        domain:
+          type: string
+          description: The domain whose sending type changed
+        previous_sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The sending type before the change
+        sending_type:
+          type: string
+          enum: [transactional, marketing]
+          description: The sending type after the change
+        source:
+          type: string
+          description: |
+            Who changed the sending type: `customer` for you, in the dashboard
+            or through the API; `admin` for AhaSend support; `automatic` for
+            AhaSend, when a transactional domain sends marketing email.
+
+            This is **not** a closed set: AhaSend can add a source. Keep a
+            fallback branch for an unfamiliar value, and never reject a
+            delivery because of it.
+          x-known-values:
+            - customer
+            - admin
+            - automatic
 
     WebhookUnsubscribe:
       type: object
@@ -2574,9 +2686,9 @@ tags:
       These events notify you when a suppression is created, gets a new reason, or is deleted: after delivery issues, when a recipient unsubscribes or reports spam, and when you or AhaSend support change your suppression list. Each event carries its `origin`.
   - name: Domain Events
     description: |
-      Webhooks for domain configuration issues.
+      Webhooks for domain configuration issues and sending type changes.
 
-      These events alert you to DNS configuration problems that could prevent email delivery.
+      These events alert you to DNS configuration problems that could prevent email delivery, and tell you when the sending type of a domain changes.
   - name: Contact Events
     description: |
       Webhooks for changes to your contacts and their list memberships.

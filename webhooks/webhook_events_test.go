@@ -93,21 +93,22 @@ func TestSpecSchemasMatchGoTypes(t *testing.T) {
 	schemas := loadSpecSchemas(t)
 
 	types := map[string]reflect.Type{
-		"MessageWebhookData":        reflect.TypeOf(MessageEventData{}),
-		"MessageClickedWebhookData": reflect.TypeOf(MessageClickedEventData{}),
-		"DeliveryAttempt":           reflect.TypeOf(DeliveryAttempt{}),
-		"SuppressionWebhookData":    reflect.TypeOf(SuppressionEventData{}),
-		"DomainWebhookData":         reflect.TypeOf(DomainEventData{}),
-		"RouteWebhookData":          reflect.TypeOf(RouteEventData{}),
-		"RouteAttachment":           reflect.TypeOf(RouteAttachment{}),
-		"WebhookUnsubscribe":        reflect.TypeOf(WebhookUnsubscribe{}),
-		"WebhookComplaint":          reflect.TypeOf(WebhookComplaint{}),
-		"WebhookList":               reflect.TypeOf(WebhookList{}),
-		"WebhookListContact":        reflect.TypeOf(WebhookListContact{}),
-		"Contact":                   reflect.TypeOf(Contact{}),
-		"ContactWebhookData":        reflect.TypeOf(ContactEventData{}),
-		"ContactUpdatedWebhookData": reflect.TypeOf(ContactUpdatedEventData{}),
-		"ContactListWebhookData":    reflect.TypeOf(ContactListEventData{}),
+		"MessageWebhookData":           reflect.TypeOf(MessageEventData{}),
+		"MessageClickedWebhookData":    reflect.TypeOf(MessageClickedEventData{}),
+		"DeliveryAttempt":              reflect.TypeOf(DeliveryAttempt{}),
+		"SuppressionWebhookData":       reflect.TypeOf(SuppressionEventData{}),
+		"DomainWebhookData":            reflect.TypeOf(DomainEventData{}),
+		"RouteWebhookData":             reflect.TypeOf(RouteEventData{}),
+		"RouteAttachment":              reflect.TypeOf(RouteAttachment{}),
+		"WebhookUnsubscribe":           reflect.TypeOf(WebhookUnsubscribe{}),
+		"WebhookComplaint":             reflect.TypeOf(WebhookComplaint{}),
+		"WebhookList":                  reflect.TypeOf(WebhookList{}),
+		"WebhookListContact":           reflect.TypeOf(WebhookListContact{}),
+		"Contact":                      reflect.TypeOf(Contact{}),
+		"ContactWebhookData":           reflect.TypeOf(ContactEventData{}),
+		"ContactUpdatedWebhookData":    reflect.TypeOf(ContactUpdatedEventData{}),
+		"ContactListWebhookData":       reflect.TypeOf(ContactListEventData{}),
+		"DomainSendingTypeChangedData": reflect.TypeOf(DomainSendingTypeChangedEventData{}),
 	}
 
 	for name, typ := range types {
@@ -132,6 +133,9 @@ func TestKnownValuesMatchSpec(t *testing.T) {
 		}
 	}
 	require.NotNil(t, changedFields.Items, "ContactUpdatedWebhookData has no changed_fields property")
+
+	sendingTypeChange := schemas["DomainSendingTypeChangedData"].Properties
+	require.NotEmpty(t, sendingTypeChange, "the specification has no DomainSendingTypeChangedData properties")
 
 	testCases := []struct {
 		name     string
@@ -177,6 +181,27 @@ func TestKnownValuesMatchSpec(t *testing.T) {
 				string(UnsubscribeMethodLink),
 			},
 		},
+		{
+			name: "domain sending type change source",
+			spec: sendingTypeChange["source"].KnownValues,
+			declared: []string{
+				string(DomainSendingTypeChangeSourceCustomer),
+				string(DomainSendingTypeChangeSourceAdmin),
+				string(DomainSendingTypeChangeSourceAutomatic),
+			},
+		},
+		{
+			// The sending types are a closed set with no constants in this
+			// package, so the test names the two values.
+			name:     "previous sending type",
+			spec:     sendingTypeChange["previous_sending_type"].Enum,
+			declared: []string{"transactional", "marketing"},
+		},
+		{
+			name:     "sending type",
+			spec:     sendingTypeChange["sending_type"].Enum,
+			declared: []string{"transactional", "marketing"},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -193,6 +218,7 @@ func TestKnownValuesMatchSpec(t *testing.T) {
 		assert.Empty(t, changedFields.Enum)
 		require.NotNil(t, changedFields.Items)
 		assert.Empty(t, changedFields.Items.Enum)
+		assert.Empty(t, sendingTypeChange["source"].Enum)
 	})
 }
 
@@ -402,6 +428,53 @@ func TestSuppressionDeletedParsing(t *testing.T) {
 	assert.Equal(t, "user@example.org", event.Data.Recipient)
 	assert.Equal(t, "example.com", event.Data.SendingDomain)
 	assert.Equal(t, time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC), event.Data.ExpiresAt.UTC())
+}
+
+func TestDomainSendingTypeChangedParsing(t *testing.T) {
+	verifier, err := NewWebhookVerifier(testWebhookSecret)
+	require.NoError(t, err)
+
+	t.Run("the specification's example", func(t *testing.T) {
+		example := loadWebhookSpec(t).Webhooks["domain.sending_type_changed"].Post.RequestBody.Content["application/json"].Example
+		require.NotNil(t, example, "the specification has no example of domain.sending_type_changed")
+		payload, err := json.Marshal(example)
+		require.NoError(t, err)
+
+		event, ok := parseSigned(t, verifier, string(payload)).(*DomainSendingTypeChangedEvent)
+		require.True(t, ok)
+		assert.Equal(t, "domain.sending_type_changed", event.GetType())
+		require.NotNil(t, event.WebhookID)
+		assert.Equal(t, "abe11757-2886-4b55-96f1-0e0afc95795a", *event.WebhookID)
+		assert.Equal(t, time.Date(2026, 11, 9, 10, 15, 0, 0, time.UTC), event.GetTimestamp().UTC())
+		assert.Equal(t, DomainSendingTypeChangedEventData{
+			AccountID:           "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+			Domain:              "example.com",
+			PreviousSendingType: "transactional",
+			SendingType:         "marketing",
+			Source:              DomainSendingTypeChangeSourceCustomer,
+		}, event.Data)
+	})
+
+	t.Run("an unknown source decodes", func(t *testing.T) {
+		payload := `{
+			"type": "domain.sending_type_changed",
+			"webhook_id": "abe11757-2886-4b55-96f1-0e0afc95795a",
+			"timestamp": "2026-11-09T10:15:00Z",
+			"data": {
+				"account_id": "4cdd7bdd-294e-4762-892f-83d40abf5a87",
+				"domain": "example.com",
+				"previous_sending_type": "marketing",
+				"sending_type": "transactional",
+				"source": "some_future_source"
+			}
+		}`
+
+		event, ok := parseSigned(t, verifier, payload).(*DomainSendingTypeChangedEvent)
+		require.True(t, ok)
+		assert.Equal(t, DomainSendingTypeChangeSource("some_future_source"), event.Data.Source)
+		assert.Equal(t, "marketing", event.Data.PreviousSendingType)
+		assert.Equal(t, "transactional", event.Data.SendingType)
+	})
 }
 
 func TestContactEventParsing(t *testing.T) {

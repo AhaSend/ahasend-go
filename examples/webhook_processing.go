@@ -138,6 +138,9 @@ func processWebhookEvent(event webhooks.WebhookEvent) error {
 	case *webhooks.DomainDNSErrorEvent:
 		return handleDomainDNSError(e)
 
+	case *webhooks.DomainSendingTypeChangedEvent:
+		return handleDomainSendingTypeChanged(e)
+
 	case *webhooks.ContactCreatedEvent:
 		return handleContactCreated(e)
 
@@ -387,7 +390,7 @@ func handleSuppressionDeleted(event *webhooks.SuppressionDeletedEvent) error {
 	return nil
 }
 
-// Domain event handler
+// Domain event handlers
 
 func handleDomainDNSError(event *webhooks.DomainDNSErrorEvent) error {
 	log.Printf("🔴 Domain DNS configuration error:")
@@ -399,6 +402,31 @@ func handleDomainDNSError(event *webhooks.DomainDNSErrorEvent) error {
 
 	// TODO: Add your business logic here
 	// For example, alert your operations team
+
+	return nil
+}
+
+func handleDomainSendingTypeChanged(event *webhooks.DomainSendingTypeChangedEvent) error {
+	log.Printf("🔀 Domain sending type changed:")
+	log.Printf("  Domain: %s", event.Data.Domain)
+	log.Printf("  Previous sending type: %s", event.Data.PreviousSendingType)
+	log.Printf("  Sending type: %s", event.Data.SendingType)
+
+	// The set of sources is open, so keep a fallback for sources this SDK
+	// predates.
+	switch event.Data.Source {
+	case webhooks.DomainSendingTypeChangeSourceCustomer:
+		log.Printf("  Changed by: you, in the dashboard or through the API")
+	case webhooks.DomainSendingTypeChangeSourceAdmin:
+		log.Printf("  Changed by: AhaSend support")
+	case webhooks.DomainSendingTypeChangeSourceAutomatic:
+		log.Printf("  Changed by: AhaSend, because the domain sent marketing email")
+	default:
+		log.Printf("  Source (not known to this SDK version): %s", event.Data.Source)
+	}
+
+	// TODO: Add your business logic here
+	// For example, record the new sending type of the domain
 
 	return nil
 }

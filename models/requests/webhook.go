@@ -18,6 +18,7 @@ type CreateWebhookRequest struct {
 	OnSuppressionCreated bool   `json:"on_suppression_created"`
 	OnSuppressionDeleted bool   `json:"on_suppression_deleted"`
 	OnDnsError           bool   `json:"on_dns_error"`
+	OnSendingTypeChanged bool   `json:"on_sending_type_changed"`
 	// The contact events need the contact read scopes on the API key that
 	// creates the webhook.
 	OnContactCreated         bool `json:"on_contact_created"`
@@ -56,6 +57,7 @@ type UpdateWebhookRequest struct {
 	OnSuppressionCreated *bool   `json:"on_suppression_created,omitempty"`
 	OnSuppressionDeleted *bool   `json:"on_suppression_deleted,omitempty"`
 	OnDnsError           *bool   `json:"on_dns_error,omitempty"`
+	OnSendingTypeChanged *bool   `json:"on_sending_type_changed,omitempty"`
 	// The contact events need the contact read scopes on the API key.
 	OnContactCreated         *bool `json:"on_contact_created,omitempty"`
 	OnContactUpdated         *bool `json:"on_contact_updated,omitempty"`

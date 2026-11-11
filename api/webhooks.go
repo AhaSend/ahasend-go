@@ -143,6 +143,7 @@ type GetWebhooksParams struct {
 	OnSuppressionCreated     *bool
 	OnSuppressionDeleted     *bool
 	OnDnsError               *bool
+	OnSendingTypeChanged     *bool
 	OnContactCreated         *bool
 	OnContactUpdated         *bool
 	OnContactDeleted         *bool
@@ -161,7 +162,7 @@ GetWebhooks Get Webhooks
 
 **Query Parameters:**
 - `enabled`: Filter by enabled status
-- Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
+- Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_sending_type_changed`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
 - `limit`: Maximum number of items to return (1-100, default: 100)
 - `cursor`: Pagination cursor for the next page (backward compatibility)
 - `after`: Get items after this cursor (forward pagination)
@@ -223,6 +224,9 @@ func (a *WebhooksAPIService) GetWebhooks(
 	}
 	if params.OnDnsError != nil {
 		queryParams.Set("on_dns_error", fmt.Sprintf("%t", *params.OnDnsError))
+	}
+	if params.OnSendingTypeChanged != nil {
+		queryParams.Set("on_sending_type_changed", fmt.Sprintf("%t", *params.OnSendingTypeChanged))
 	}
 	if params.OnContactCreated != nil {
 		queryParams.Set("on_contact_created", fmt.Sprintf("%t", *params.OnContactCreated))

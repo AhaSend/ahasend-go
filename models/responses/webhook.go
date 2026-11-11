@@ -29,6 +29,7 @@ type Webhook struct {
 	OnSuppressionCreated     bool      `json:"on_suppression_created"`
 	OnSuppressionDeleted     bool      `json:"on_suppression_deleted"`
 	OnDNSError               bool      `json:"on_dns_error"`
+	OnSendingTypeChanged     bool      `json:"on_sending_type_changed"`
 	OnContactCreated         bool      `json:"on_contact_created"`
 	OnContactUpdated         bool      `json:"on_contact_updated"`
 	OnContactDeleted         bool      `json:"on_contact_deleted"`

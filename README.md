@@ -566,12 +566,12 @@ For the same reason, answer 2xx when `ParseRequest` returns `webhooks.ErrUnknown
 
 For a campaign message, `from` in message events includes the sender's name, as `Name <address>`, and `CampaignID` is set. `ListID` is nil when the campaign did not reach the recipient through a list, and `SegmentID` is nil when it did not reach the recipient through a segment. In route events, `to` and `reply_to` can carry display names and several addresses, and `spam_score` (a `*float64`) can be below 0 or above 10.
 
-Contact and suppression events carry `Origin`, which says who made the change: `webhooks.OriginRecipient`, `OriginAPI`, `OriginDashboard` or `OriginSystem`. New values can appear in `Origin`, in `WebhookComplaint.Reporter` and in `ContactUpdatedEventData.ChangedFields`: handle them like classifications. On a contact event about the unsubscribe from all lists, and on `contact.complained` for a campaign sent to a segment, `List` and `ListContact` are `nil`.
+Contact and suppression events carry `Origin`, which says who made the change: `webhooks.OriginRecipient`, `OriginAPI`, `OriginDashboard` or `OriginSystem`. `domain.sending_type_changed` carries `Source`, which says who changed the domain's sending type: `webhooks.DomainSendingTypeChangeSourceCustomer`, `DomainSendingTypeChangeSourceAdmin` or `DomainSendingTypeChangeSourceAutomatic`. New values can appear in `Origin`, in `Source`, in `WebhookComplaint.Reporter` and in `ContactUpdatedEventData.ChangedFields`: handle them like classifications. On a contact event about the unsubscribe from all lists, and on `contact.complained` for a campaign sent to a segment, `List` and `ListContact` are `nil`.
 
 Events:
 - `message.reception`, `message.delivered`, `message.transient_error`, `message.failed`, `message.bounced`, `message.suppressed`, `message.opened`, `message.clicked`, `message.unsubscribed`, `message.complained`
 - `suppression.created`, `suppression.deleted`
-- `domain.dns_error`
+- `domain.dns_error`, `domain.sending_type_changed`
 - `contact.created`, `contact.updated`, `contact.deleted`, `contact.added_to_list`, `contact.removed_from_list`, `contact.subscribed`, `contact.unsubscribed`, `contact.complained`
 - `message.routing` (the SDK also reads the legacy name `route.message` as this event)
 

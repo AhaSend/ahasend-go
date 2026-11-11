@@ -735,6 +735,7 @@ func TestWebhookHelperFunctions(t *testing.T) {
 		assert.True(t, IsMessageEvent(&MessageComplainedEvent{}))
 		assert.False(t, IsMessageEvent(&SuppressionCreatedEvent{}))
 		assert.False(t, IsMessageEvent(&DomainDNSErrorEvent{}))
+		assert.False(t, IsMessageEvent(&DomainSendingTypeChangedEvent{}))
 		assert.False(t, IsMessageEvent(&ContactUnsubscribedEvent{}))
 		assert.False(t, IsMessageEvent(&ContactComplainedEvent{}))
 	})
@@ -767,6 +768,7 @@ func TestWebhookHelperFunctions(t *testing.T) {
 
 	t.Run("IsDomainEvent", func(t *testing.T) {
 		assert.True(t, IsDomainEvent(&DomainDNSErrorEvent{}))
+		assert.True(t, IsDomainEvent(&DomainSendingTypeChangedEvent{}))
 		assert.False(t, IsDomainEvent(&MessageDeliveredEvent{}))
 	})
 
