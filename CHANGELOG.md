@@ -24,6 +24,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `IsDomainEvent` matches `DomainSendingTypeChangedEvent` too. Code that takes every domain event
   as a `*DomainDNSErrorEvent` must check the type.
+- The statistics scopes are `statistics:read:all` and `statistics:read:{domain}`. The doc comment
+  of `GetEmailStatistics`, the README and the bundled `openapi/openapi.yaml` name them. Keys with
+  `statistics-transactional:read:all` or `statistics-transactional:read:{domain}` keep working: the
+  API accepts both names, gives them the same access, and returns a scope as it was saved.
 - The bundled `openapi/openapi.yaml` and `openapi/webhooks.yaml` follow the current API.
 
 ## [0.7.0] — 2026-11-11

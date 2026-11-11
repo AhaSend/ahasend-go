@@ -226,9 +226,8 @@ counted. The fields of responses.EmailStatisticsTotals say what each counter
 counts.
 
 A domain is identified by its name, and deleted domains are included. The API
-key needs statistics-transactional:read:all or at least one
-statistics-transactional:read:{domain} scope. Without SenderDomain, the
-request selects every domain the key can read.
+key needs statistics:read:all or at least one statistics:read:{domain} scope.
+Without SenderDomain, the request selects every domain the key can read.
 
 Periods are in UTC, and weeks start on Monday. The range includes FromTime
 and excludes ToTime. It can be at most 31 days for hour, 366 days for day and
