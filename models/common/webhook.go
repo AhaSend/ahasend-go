@@ -2,8 +2,8 @@ package common
 
 // Webhook origins: who made a change that a contact or suppression event
 // reports. A webhook's Origins lists the origins whose events it gets; nil
-// means every origin. Message events and domain.dns_error have no origin, and
-// a webhook always gets them.
+// means every origin. Message events and domain events have no origin, and a
+// webhook always gets them.
 //
 //   - WebhookOriginRecipient: the contact or recipient, through an unsubscribe
 //     link, a one-click unsubscribe, or a spam complaint.

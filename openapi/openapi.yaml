@@ -5098,6 +5098,9 @@ components:
         on_dns_error:
           type: boolean
           description: Trigger on DNS errors
+        on_sending_type_changed:
+          type: boolean
+          description: Trigger on domain sending type changes
         on_contact_created:
           type: boolean
           description: Trigger on contact creation
@@ -5128,8 +5131,8 @@ components:
             $ref: '#/components/schemas/WebhookOrigin'
           description: |
             The origins of the contact and suppression events that the webhook
-            gets, or `null` for every origin. Message events and
-            `domain.dns_error` have no origin, and the webhook always gets them.
+            gets, or `null` for every origin. Message events and domain events
+            have no origin, and the webhook always gets them.
         scope:
           type: string
           enum: [global, scoped]
@@ -5178,6 +5181,7 @@ components:
         - on_suppression_created
         - on_suppression_deleted
         - on_dns_error
+        - on_sending_type_changed
         - on_contact_created
         - on_contact_updated
         - on_contact_deleted
@@ -5279,6 +5283,10 @@ components:
           type: boolean
           description: Trigger on DNS errors
           default: false
+        on_sending_type_changed:
+          type: boolean
+          description: Trigger on domain sending type changes
+          default: false
         on_contact_created:
           type: boolean
           description: Trigger on contact creation
@@ -5322,7 +5330,7 @@ components:
             refused with HTTP 400: to stop contact or suppression events, turn
             them off. An array that holds all four origins is saved as `null`,
             so that an origin added later reaches the webhook too. Message
-            events and `domain.dns_error` have no origin, and the webhook always
+            events and domain events have no origin, and the webhook always
             gets them.
           default: null
         scope:
@@ -5418,6 +5426,9 @@ components:
         on_dns_error:
           type: [boolean, 'null']
           description: Trigger on DNS errors
+        on_sending_type_changed:
+          type: [boolean, 'null']
+          description: Trigger on domain sending type changes
         on_contact_created:
           type: [boolean, 'null']
           description: Trigger on contact creation
@@ -18404,7 +18415,7 @@ paths:
 
         **Query Parameters:**
         - `enabled`: Filter by enabled status
-        - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
+        - Event filters: `on_reception`, `on_delivered`, `on_transient_error`, `on_failed`, `on_bounced`, `on_suppressed`, `on_opened`, `on_clicked`, `on_unsubscribed`, `on_complained`, `on_suppression_created`, `on_suppression_deleted`, `on_dns_error`, `on_sending_type_changed`, `on_contact_created`, `on_contact_updated`, `on_contact_deleted`, `on_contact_added_to_list`, `on_contact_removed_from_list`, `on_contact_subscribed`, `on_contact_unsubscribed`, `on_contact_complained`
         - `limit`: Maximum number of items to return (1-100, default: 100)
         - `after`: Pagination cursor for the next page
         - `before`: Pagination cursor for the previous page
@@ -18487,6 +18498,11 @@ paths:
         - name: on_dns_error
           in: query
           description: Filter by DNS error event trigger
+          schema:
+            type: boolean
+        - name: on_sending_type_changed
+          in: query
+          description: Filter by domain sending type change event trigger
           schema:
             type: boolean
         - name: on_contact_created

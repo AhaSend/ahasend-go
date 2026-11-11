@@ -6,6 +6,26 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `responses.Webhook`, `requests.CreateWebhookRequest`, `requests.UpdateWebhookRequest` and
+  `api.GetWebhooksParams` gain `OnSendingTypeChanged`, the setting of the
+  `domain.sending_type_changed` event. It is off unless set, so an existing webhook gets nothing
+  new. Code that builds `CreateWebhookRequest` with an unkeyed struct literal must name the fields.
+- `WebhookVerifier.Parse` and `ParseRequest` return `DomainSendingTypeChangedEvent` for
+  `domain.sending_type_changed`, which they answered with `ErrUnknownEventType` before. Its data,
+  `DomainSendingTypeChangedEventData`, has the domain, its sending type before and after the change,
+  and `Source`: who changed it, as a `DomainSendingTypeChangeSource`. The constants
+  `DomainSendingTypeChangeSourceCustomer`, `DomainSendingTypeChangeSourceAdmin` and
+  `DomainSendingTypeChangeSourceAutomatic` name the sources known today; the set is open, so keep a
+  default branch for a value this release predates.
+
+### Changed
+
+- `IsDomainEvent` matches `DomainSendingTypeChangedEvent` too. Code that takes every domain event
+  as a `*DomainDNSErrorEvent` must check the type.
+- The bundled `openapi/openapi.yaml` and `openapi/webhooks.yaml` follow the current API.
+
 ## [0.7.0] — 2026-11-11
 
 ### Added

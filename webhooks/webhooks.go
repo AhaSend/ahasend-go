@@ -238,6 +238,13 @@ func (v *WebhookVerifier) Parse(payload []byte, headers http.Header) (WebhookEve
 		}
 		return &event, nil
 
+	case "domain.sending_type_changed":
+		var event DomainSendingTypeChangedEvent
+		if err := json.Unmarshal(payload, &event); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPayload, err)
+		}
+		return &event, nil
+
 	// Contact events
 	case "contact.created":
 		var event ContactCreatedEvent

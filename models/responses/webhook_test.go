@@ -162,4 +162,12 @@ func TestWebhookDecodesEventSettingsAndOrigins(t *testing.T) {
 
 		assert.Equal(t, []string{"recipient", "system"}, webhook.Origins)
 	})
+
+	t.Run("sending type changes", func(t *testing.T) {
+		var webhook Webhook
+		require.NoError(t, json.Unmarshal([]byte(`{"on_dns_error":false,"on_sending_type_changed":true}`), &webhook))
+
+		assert.True(t, webhook.OnSendingTypeChanged)
+		assert.False(t, webhook.OnDNSError)
+	})
 }

@@ -123,8 +123,7 @@ type WebhookComplaint struct {
 }
 
 // WebhookOrigin says who made the change that a contact or suppression event
-// reports. Message events, route events and domain.dns_error carry no
-// origin.
+// reports. Message events, route events and domain events carry no origin.
 //
 // The set is open: AhaSend can add an origin, and a webhook whose origin
 // filter is nil gets its events. The constants below describe the origins
@@ -260,7 +259,7 @@ type SuppressionEventData struct {
 	SendingDomain string        `json:"sending_domain"`
 }
 
-// DomainEventData contains data for domain webhook events
+// DomainEventData contains the data of domain.dns_error events.
 type DomainEventData struct {
 	Domain           string    `json:"domain"`
 	AccountID        string    `json:"account_id"`
@@ -268,6 +267,44 @@ type DomainEventData struct {
 	DKIMValid        bool      `json:"dkim_valid"`
 	DMARCValid       bool      `json:"dmarc_valid"`
 	DNSLastCheckedAt time.Time `json:"dns_last_checked_at"`
+}
+
+// DomainSendingTypeChangeSource says who changed the sending type of a domain
+// that domain.sending_type_changed reports.
+//
+// The set is open: AhaSend can add a source. The constants below describe the
+// sources that exist today. The underlying type is string so that an
+// unfamiliar value decodes without error: keep a fallback branch for it, and
+// never reject a delivery because of it.
+type DomainSendingTypeChangeSource string
+
+const (
+	// DomainSendingTypeChangeSourceCustomer is a change you made, in the
+	// dashboard or through the API.
+	DomainSendingTypeChangeSourceCustomer DomainSendingTypeChangeSource = "customer"
+	// DomainSendingTypeChangeSourceAdmin is a change AhaSend support made.
+	DomainSendingTypeChangeSourceAdmin DomainSendingTypeChangeSource = "admin"
+	// DomainSendingTypeChangeSourceAutomatic is a change AhaSend made when a
+	// transactional domain sent marketing email: the domain became marketing.
+	DomainSendingTypeChangeSourceAutomatic DomainSendingTypeChangeSource = "automatic"
+)
+
+// DomainSendingTypeChangedEventData contains the data of
+// domain.sending_type_changed events.
+type DomainSendingTypeChangedEventData struct {
+	// AccountID is the account of the domain.
+	AccountID string `json:"account_id"`
+	// Domain is the domain whose sending type changed.
+	Domain string `json:"domain"`
+	// PreviousSendingType is the sending type before the change:
+	// "transactional" or "marketing".
+	PreviousSendingType string `json:"previous_sending_type"`
+	// SendingType is the sending type after the change: "transactional" or
+	// "marketing".
+	SendingType string `json:"sending_type"`
+	// Source says who changed the sending type. The set of values is open —
+	// see DomainSendingTypeChangeSource.
+	Source DomainSendingTypeChangeSource `json:"source"`
 }
 
 // RouteAttachment represents a conventional, inline, or inferred email attachment in route events.
@@ -648,6 +685,20 @@ type DomainDNSErrorEvent struct {
 func (e *DomainDNSErrorEvent) GetType() string         { return e.Type }
 func (e *DomainDNSErrorEvent) GetTimestamp() time.Time { return e.Timestamp }
 
+// DomainSendingTypeChangedEvent is triggered when the sending type of a domain
+// changes between transactional and marketing. Data.Source says who changed
+// it, and Timestamp is the time of the change. Adding a domain, or saving a
+// domain without a change to its sending type, sends no event.
+type DomainSendingTypeChangedEvent struct {
+	Type      string                            `json:"type"`
+	WebhookID *string                           `json:"webhook_id,omitempty"`
+	Timestamp time.Time                         `json:"timestamp"`
+	Data      DomainSendingTypeChangedEventData `json:"data"`
+}
+
+func (e *DomainSendingTypeChangedEvent) GetType() string         { return e.Type }
+func (e *DomainSendingTypeChangedEvent) GetTimestamp() time.Time { return e.Timestamp }
+
 // Contact Events
 
 // ContactCreatedEvent is triggered when a contact is created through the API
@@ -808,8 +859,11 @@ func IsContactEvent(event WebhookEvent) bool {
 
 // IsDomainEvent checks if an event is a domain-related event
 func IsDomainEvent(event WebhookEvent) bool {
-	_, ok := event.(*DomainDNSErrorEvent)
-	return ok
+	switch event.(type) {
+	case *DomainDNSErrorEvent, *DomainSendingTypeChangedEvent:
+		return true
+	}
+	return false
 }
 
 // IsRouteEvent checks if an event is a route-related event
