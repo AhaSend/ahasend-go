@@ -20240,6 +20240,22 @@ paths:
               }
             }
 
+        - lang: javascript
+          label: Node.js 22+ (AhaSend SDK)
+          source: |
+            import { AhaSendClient } from "@ahasend/sdk";
+
+            const client = AhaSendClient.fromEnv();
+            const statistics = await client.statistics.emails({
+              from_time: "2026-01-01T00:00:00Z",
+              to_time: "2026-04-01T00:00:00Z",
+              group_by: "month",
+            });
+            console.log("Email statistics loaded.", {
+              periods: statistics.data.length,
+              delivered: statistics.totals.delivered_count,
+            });
+
 tags:
   - name: Utility
     description: Utility endpoints for health checks and diagnostics

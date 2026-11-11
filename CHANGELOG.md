@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-11
+
 ### Added
 
 - `StatisticsAPI.GetEmailStatistics` returns the email counts of the account, or of each of its
