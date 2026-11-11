@@ -226,8 +226,8 @@ func TestOpenAPIGetEmailStatisticsOperation(t *testing.T) {
 	assert.Equal(t, 1, goSamples)
 
 	assert.Equal(t, []map[string][]string{
-		{"BearerAuth": {"statistics-transactional:read:all"}},
-		{"BearerAuth": {"statistics-transactional:read:{domain}"}},
+		{"BearerAuth": {"statistics:read:all"}},
+		{"BearerAuth": {"statistics:read:{domain}"}},
 	}, operation.Security)
 
 	statuses := make([]string, 0, len(operation.Responses))

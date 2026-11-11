@@ -421,7 +421,7 @@ An API key can carry `IPAllowList`, the source IPs that can authenticate with th
 
 ## Statistics
 
-- Scopes: `statistics-transactional:read:all` for every domain, or `statistics-transactional:read:{domain}` for one domain.
+- Scopes: `statistics:read:all` for every domain, or `statistics:read:{domain}` for one domain.
 - `GetEmailStatistics` returns the email counts of the account, or of each of its domains, for any time in the account's history. It counts transactional, campaign and inbound mail. The transactional statistics (`GetDeliverabilityStatistics`, `GetBounceStatistics`, `GetDeliveryTimeStatistics`) cover only the account's message metadata retention period.
 - `DeferredCount`, `OpenedCount` and `ClickedCount` of `GetEmailStatistics` count events, and one message can add more than one. The same fields of `GetDeliverabilityStatistics` count messages.
 - A nil field of `GetEmailStatisticsParams` is not sent, so the API default applies. `Limit` and `After` are accepted only with `Breakdown` set to `domain`.

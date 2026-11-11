@@ -146,8 +146,10 @@ info:
     - `smtp-credentials:delete:{domain}` - Delete SMTP credentials for a specific domain
 
     ### Statistics Scopes
-    - `statistics-transactional:read:all` - Read all transactional statistics, and the email statistics of every domain, which also count campaign and inbound mail
-    - `statistics-transactional:read:{domain}` - Read transactional statistics for a specific domain, and its email statistics, which also count campaign and inbound mail
+    - `statistics:read:all` - Read all transactional statistics, and the email statistics of every domain, which also count campaign and inbound mail
+    - `statistics:read:{domain}` - Read transactional statistics for a specific domain, and its email statistics, which also count campaign and inbound mail
+
+    The API also accepts `statistics-transactional:read:all` and `statistics-transactional:read:{domain}`, which give the same access, and returns a scope as it was saved.
 
     ### API Key Scopes
     - `api-keys:read` - Read API keys
@@ -19641,8 +19643,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all"]
-        - BearerAuth: ["statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics:read:all"]
+        - BearerAuth: ["statistics:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -19799,8 +19801,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all"]
-        - BearerAuth: ["statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics:read:all"]
+        - BearerAuth: ["statistics:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -19957,8 +19959,8 @@ paths:
             enum: [hour, day, week, month]
             default: day
       security:
-        - BearerAuth: ["statistics-transactional:read:all"]
-        - BearerAuth: ["statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics:read:all"]
+        - BearerAuth: ["statistics:read:{domain}"]
       x-code-samples:
         - lang: go
           label: AhaSend Go SDK
@@ -20066,7 +20068,7 @@ paths:
         A domain is identified by its name. Deleted domains are included. When a domain was deleted and added again with the same name, the counts of both are added together.
 
         **Access:**
-        The API key needs `statistics-transactional:read:all` or at least one `statistics-transactional:read:{domain}` scope. A key with `statistics-transactional:read:all` reads every domain of the account. A key with domain scopes reads the domains named in its scopes, a deleted domain included. Without `sender_domain`, the request selects every domain the key can read. The key must be able to read each name in `sender_domain`, or the request gets a 403. The account must have, or have had, a domain with each name, or the request gets a 400. The scope is checked first, then the parameters and the range, then `sender_domain`.
+        The API key needs `statistics:read:all` or at least one `statistics:read:{domain}` scope. A key with `statistics:read:all` reads every domain of the account. A key with domain scopes reads the domains named in its scopes, a deleted domain included. Without `sender_domain`, the request selects every domain the key can read. The key must be able to read each name in `sender_domain`, or the request gets a 403. The account must have, or have had, a domain with each name, or the request gets a 400. The scope is checked first, then the parameters and the range, then `sender_domain`.
 
         **Range and periods:**
         Periods are in UTC, and weeks start on Monday. A range includes `from_time` and excludes `to_time`. A missing `to_time`, or one after now, is now. A missing `from_time` is 30 days before `to_time`. `from_time` must be before `to_time`.
@@ -20139,8 +20141,8 @@ paths:
           schema:
             type: string
       security:
-        - BearerAuth: ["statistics-transactional:read:all"]
-        - BearerAuth: ["statistics-transactional:read:{domain}"]
+        - BearerAuth: ["statistics:read:all"]
+        - BearerAuth: ["statistics:read:{domain}"]
       responses:
         '200':
           description: Email statistics
@@ -20193,7 +20195,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: The API key has neither `statistics-transactional:read:all` nor a `statistics-transactional:read:{domain}` scope, or it cannot read a domain in `sender_domain`
+          description: The API key has neither `statistics:read:all` nor a `statistics:read:{domain}` scope, or it cannot read a domain in `sender_domain`
           content:
             application/json:
               schema:
