@@ -6,6 +6,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-11
+
 ### Added
 
 - `responses.Webhook`, `requests.CreateWebhookRequest`, `requests.UpdateWebhookRequest` and
