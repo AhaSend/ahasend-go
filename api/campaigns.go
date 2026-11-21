@@ -379,7 +379,9 @@ an address the check cannot read. When the check cannot run, the API answers
 With an idempotency key, a 2xx answer is replayed, so a retry with the same
 key sends nothing again. A 4xx answer is not stored, so a retry with the same
 key is answered afresh. A 502 means nothing was sent: retry it with the same
-key.
+key. A request that follows an earlier request with the same key that did not
+finish sends nothing, counts nothing toward the daily limit, and returns
+ResultUnknown true: the earlier request may have sent the test.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID

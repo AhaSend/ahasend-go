@@ -302,13 +302,11 @@ if errors.As(err, &apiErr) && apiErr.Type == api.ErrorTypeIdempotencyConflict {
 }
 ```
 
-`RetryAfter` is what remains of the original request's execution lease, so a
-retry lands at the moment the lease expires. If the original finished, you get
-its stored result replayed. If it did not — the handler outran its lease, or
-crashed before its result was recorded — the retry takes the lease over and
-executes again, which for a side-effecting operation means the effect can happen
-twice. Retrying is safe to automate for reads; for sends, decide whether a
-possible duplicate is worse than a possible miss.
+`RetryAfter` is the number of seconds to wait before the retry. If the original
+finished, you get its stored result replayed. If it did not, the retry goes
+ahead, and the operation still happens at most one time for the key: a retry
+with the same key and the same request does not send a second message or
+create a second resource. Retrying with the same key is safe to automate.
 
 The SDK's transport retries no 4xx on its own other than 429 (unless
 `RetryClientErrors` is set), so this conflict is

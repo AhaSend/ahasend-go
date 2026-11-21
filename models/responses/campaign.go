@@ -154,9 +154,12 @@ type CampaignTest struct {
 	SentTo []string `json:"sent_to"`
 	// Failed are the addresses the mail server refused.
 	Failed []CampaignTestFailure `json:"failed"`
-	// ResultUnknown is true when the mail server took the request but its
-	// answer could not be read. The test may have gone out, and SentTo and
-	// Failed are empty. Check the inboxes before you send another.
+	// ResultUnknown is true when the result of the test is not known, in one
+	// of two cases. The mail server took the request but its answer could not
+	// be read. Or an earlier request with the same idempotency key did not
+	// finish, and this request sent nothing, because the earlier one may have
+	// sent the test. The test may have gone out, and SentTo and Failed are
+	// empty. Check the inboxes before you send another.
 	ResultUnknown bool `json:"result_unknown"`
 }
 
