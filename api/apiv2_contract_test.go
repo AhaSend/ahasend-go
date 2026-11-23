@@ -1726,21 +1726,24 @@ func TestOpenAPICreateTemplateMessageOperation(t *testing.T) {
 func TestOpenAPITemplateCheckBusyResponses(t *testing.T) {
 	spec := loadOpenAPIContract(t)
 
+	// A message send also answers 503 when the result of a request with an
+	// idempotency key is not known yet, so it has its own 503 response.
 	tests := []struct {
 		path        string
 		operationID string
+		busyRef     string
 	}{
-		{path: "/v2/accounts/{account_id}/messages", operationID: "createMessage"},
-		{path: "/v2/accounts/{account_id}/messages/template", operationID: "createTemplateMessage"},
-		{path: "/v2/accounts/{account_id}/messages/conversation", operationID: "createConversationMessage"},
-		{path: "/v2/accounts/{account_id}/campaigns/{campaign_id}/test", operationID: "testCampaign"},
+		{path: "/v2/accounts/{account_id}/messages", operationID: "createMessage", busyRef: "#/components/responses/SendRetryLater"},
+		{path: "/v2/accounts/{account_id}/messages/template", operationID: "createTemplateMessage", busyRef: "#/components/responses/SendRetryLater"},
+		{path: "/v2/accounts/{account_id}/messages/conversation", operationID: "createConversationMessage", busyRef: "#/components/responses/SendRetryLater"},
+		{path: "/v2/accounts/{account_id}/campaigns/{campaign_id}/test", operationID: "testCampaign", busyRef: "#/components/responses/TemplateCheckBusy"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.operationID, func(t *testing.T) {
 			operation, ok := spec.Paths[tt.path]["post"]
 			require.True(t, ok)
 			assert.Equal(t, tt.operationID, operation.OperationID)
-			assert.Equal(t, "#/components/responses/TemplateCheckBusy", operation.Responses["503"].Ref)
+			assert.Equal(t, tt.busyRef, operation.Responses["503"].Ref)
 		})
 	}
 
@@ -1753,6 +1756,7 @@ func TestOpenAPITemplateCheckBusyResponses(t *testing.T) {
 	}
 	require.NoError(t, yaml.Unmarshal(contents, &components))
 	assert.Contains(t, components.Components.Responses["TemplateCheckBusy"].Headers, "Retry-After")
+	assert.Contains(t, components.Components.Responses["SendRetryLater"].Headers, "Retry-After")
 }
 
 func TestOpenAPITemplateOperationsAndResponses(t *testing.T) {

@@ -187,7 +187,8 @@ info:
     ## Idempotency
     The operations that explicitly declare the optional `Idempotency-Key`
     header support idempotency. Other POST operations do not gain idempotency
-    implicitly. When the header is provided:
+    implicitly. A request with an `Idempotency-Key` does its operation at most
+    one time during the life of the key. When the header is provided:
     - A fresh execution does not return `Idempotent-Replayed`.
     - A completed stored response is replayed with its original status and body
       and `Idempotent-Replayed: true`.
@@ -207,11 +208,14 @@ info:
     - Create Segment and Test Campaign store and replay a 2xx only. A 4xx is
       not stored: it releases the key, so a retry with the same key runs
       again.
-    - Server errors (5xx), handler failures, and panics are not stored. The key
-      is released so retrying the same request with the same key re-executes it.
-      The v2 API does not use an HTTP 412 failed-key tombstone.
-    - Idempotency keys for non-secret responses expire after 24 hours.
-    - Encrypted API-key creation replay responses expire after 5 minutes.
+    - Server errors (5xx) are not stored. After a 5xx, a timeout or a lost
+      answer, retry the same request with the same key: the retry is safe and
+      does not repeat what the first request did. When the answer has a
+      `Retry-After` header, wait that many seconds first. The v2 API does not
+      use an HTTP 412 failed-key tombstone.
+    - A key lives 24 hours from the first request that uses it, and 5 minutes
+      on the two API-key create operations, whose replay responses are
+      encrypted. After that, a request with the same key is a new request.
 
     ## IP Allow Lists
     Each API key can carry an `ip_allow_list`: a set of source IPs that restrict where the key may authenticate from.
@@ -252,10 +256,12 @@ components:
       required: false
       description: |
         Optional idempotency key for safe request retries. Must be a unique string for each logical request.
-        An identical request with a completed stored outcome returns the original status and body. An in-progress
-        execution returns 409, a changed method/path/body returns 422, and a released 5xx execution may run again.
-        Keys for non-secret responses expire after 24 hours. API-key create responses include a one-time `secret_key`,
-        so successful encrypted replay responses for those operations expire after 5 minutes.
+        A request with a key does its operation at most one time during the life of the key, so a retry with the
+        same key and the same request is safe after a 5xx, a timeout or a lost answer. An identical request with a
+        completed stored outcome returns the original status and body. An in-progress execution returns 409, and a
+        changed method/path/body returns 422. A key lives 24 hours from the first request that uses it. API-key create
+        responses include a one-time `secret_key`, so on those operations a key and its encrypted replay response
+        live 5 minutes.
       schema:
         type: string
         maxLength: 255
@@ -484,6 +490,40 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             message: "the message could not be checked right now; try again in a moment"
+
+    SendRetryLater:
+      description: |
+        The API cannot answer the request now, for one of two reasons:
+
+        - Every message is checked with the template engine before it is
+          sent, and the check could not run right now: the service was busy,
+          or the engine failed. Nothing is known to be wrong with the
+          message.
+        - The request has an `Idempotency-Key`, and its result is not known
+          yet.
+
+        In both cases, send the same request again after `Retry-After`
+        seconds, with the same `Idempotency-Key` if the request has one. A
+        retry with the same key sends each message at most one time.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            check:
+              summary: The template check could not run
+              value:
+                message: "the message could not be checked right now; try again in a moment"
+            result_not_known:
+              summary: The result of the request is not known yet
+              value:
+                message: "The result of this request is not known yet. Send it again with the same Idempotency-Key."
 
   schemas:
     ErrorResponse:
@@ -2853,7 +2893,7 @@ components:
           description: The addresses the mail server refused
         result_unknown:
           type: boolean
-          description: True when the mail server took the request but its answer could not be read. The test may have gone out; `sent_to` and `failed` are empty. Check the inboxes before you send another.
+          description: True when the result of the test is not known, in one of two cases. The mail server took the request but its answer could not be read. Or an earlier request with the same `Idempotency-Key` did not finish, and this request sent nothing, because the earlier one may have sent the test. The test may have gone out; `sent_to` and `failed` are empty. Check the inboxes before you send another.
 
     CampaignStatsReport:
       type: object
@@ -7594,7 +7634,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          $ref: '#/components/responses/TemplateCheckBusy'
+          $ref: '#/components/responses/SendRetryLater'
 
   /v2/accounts/{account_id}/messages/template:
     post:
@@ -7738,7 +7778,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          $ref: '#/components/responses/TemplateCheckBusy'
+          $ref: '#/components/responses/SendRetryLater'
 
       x-code-samples:
         - lang: go
@@ -7989,7 +8029,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
-          $ref: '#/components/responses/TemplateCheckBusy'
+          $ref: '#/components/responses/SendRetryLater'
 
   /v2/accounts/{account_id}/messages/{message_id}:
     get:
@@ -11327,7 +11367,10 @@ paths:
         retry with the same key sends nothing again. Unlike other
         operations, a 4xx answer is not stored: it releases the key, so a
         retry with the same key, for example after the daily limit resets,
-        is answered afresh.
+        is answered afresh. A request that follows an earlier request with the
+        same key that did not finish sends nothing, counts nothing toward the
+        daily limit, and answers `200` with `result_unknown: true`: the
+        earlier request may have sent the test.
       operationId: testCampaign
       tags:
         - Campaigns

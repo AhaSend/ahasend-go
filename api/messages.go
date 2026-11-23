@@ -75,8 +75,9 @@ rendered with a recipient's values, calls random, randrange, lipsum or now,
 uses namespace, passes a work, output, memory or time limit, or has a
 recipient address the check cannot read is refused with 400, and nothing of
 the request is sent. The message reads "<email>: the message could not be
-rendered: <reason>". When the check cannot run, the API answers 503 with a
-Retry-After, and the client retries it with the same idempotency key.
+rendered: <reason>". When the check cannot run, or when a request with an
+idempotency key has a result that is not known yet, the API answers 503 with
+a Retry-After, and the client retries it with the same idempotency key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -136,8 +137,9 @@ rendered with a recipient's values, calls random, randrange, lipsum or now,
 uses namespace, passes a work, output, memory or time limit, or has a
 recipient address the check cannot read is refused with 400, and nothing of
 the request is sent. The message reads "<email>: the message could not be
-rendered: <reason>". When the check cannot run, the API answers 503 with a
-Retry-After, and the client retries it with the same idempotency key.
+rendered: <reason>". When the check cannot run, or when a request with an
+idempotency key has a result that is not known yet, the API answers 503 with
+a Retry-After, and the client retries it with the same idempotency key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
@@ -199,8 +201,9 @@ rendered with a recipient's values, calls random, randrange, lipsum or now,
 uses namespace, passes a work, output, memory or time limit, or has a
 recipient address the check cannot read is refused with 400, and nothing of
 the request is sent. The message reads "<email>: the message could not be
-rendered: <reason>". When the check cannot run, the API answers 503 with a
-Retry-After, and the client retries it with the same idempotency key.
+rendered: <reason>". When the check cannot run, or when a request with an
+idempotency key has a result that is not known yet, the API answers 503 with
+a Retry-After, and the client retries it with the same idempotency key.
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	@param accountId Account ID
